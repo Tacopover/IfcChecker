@@ -53,3 +53,32 @@ Users upload a batch of IFC files, pick a rule set (buildingSMART IDS format) an
 - No custom IDS rule authoring UI — rule files are authored externally and uploaded.
 - No auth/RBAC — trusted internal network only.
 - No multi-tenant/per-client rule isolation beyond selecting which IDS rule set a Run uses.
+- No in-browser 3D geometry viewer in v1 — the priority for this phase is fast, comparable parse/QA throughput across engines (the per-run engine picker + timing comparison). A 3D viewer to visually inspect a run's flagged elements is a likely v2 addition once the QA pipeline is proven; it is out of scope here and would need its own design pass (geometry extraction, WebGL rendering, streaming for 2GB files) since parsing today only produces `NormalizedElement` metadata, not geometry.
+
+## Feasibility Assessment (2026-07-17)
+
+No hard blockers. Corrections made to the stack described above, verified against npm/GitHub/context7 before any sub-plan was written:
+
+- **`web-ifc`** — real, npm `0.0.77`, with an explicit Node.js build (`web-ifc-api-node.js` / `web-ifc-node.wasm`) confirmed via the project's own README. Usable in the worker as designed.
+- **`ifc-lite`** — the spec's original package name is wrong. The real, current package is the scoped `@ifc-lite/parser` (npm `3.10.1`, GitHub `louistrue/ifc-lite`), which explicitly supports server-side use. Sub-plans reference the corrected name.
+- **`bsdd-ids-validator`** — not published to npm under that name or any scope; it exists only as a GitHub TypeScript repo (`BIM-Tools/bsdd-ids-validator`). Treated as a design reference only, not an installable dependency — `packages/ids-validator` is built from scratch against the real, verified buildingSMART IDS XML schema (cross-checked directly against buildingSMART's own official IDS implementer test corpus on GitHub).
+- Fastify, `@fastify/multipart`, BullMQ, Postgres, Drizzle ORM, Redis, `pdfkit`, `exceljs`, React, Vite, TanStack Query/Table — all real, current, and version-pinned in the sub-plans below.
+- The repository was empty (spec doc only) at planning time — genuinely greenfield, no existing code to reconcile.
+- Two small packages beyond the ones named in the Architecture section above were added during planning: `packages/storage` (the "small storage interface" the Architecture section calls for, shared identically by `apps/api` and `apps/worker` so neither duplicates it) and `packages/db` (the Drizzle schema + client, shared the same way). Both are minimal and follow directly from the spec's own architecture, not new scope.
+
+## Implementation Sub-Plans
+
+The build is broken into 8 sub-plans under `docs/superpowers/plans/`, each independently executable by a fresh agent. **00 must land first** — it defines every cross-cutting contract (domain types, DB schema, queue payloads, API DTOs, storage interface) the rest import verbatim. Once 00 is done, **01–06 are all parallelizable** (each was briefed with 00's exact contracts so they don't collide); **07 runs last**, after all of 01–06 land, to wire together the handful of seams that only become visible once the parallel pieces meet (it also resolves the one real cross-plan bug — a multipart field-ordering mismatch between the frontend and API — that self-review caught).
+
+**Execution priority within the parallel tier:** per product priority, fast/comparable parsing is the core value proposition of this tool (the per-run engine picker exists specifically to compare real throughput on the company's own files). **Sub-plan 01 (parser-adapters) should be built and proven first**, even though it has no technical dependency forcing that order — get both engines actually parsing a real fixture file end-to-end, with timing recorded, before investing in the surrounding UI/reporting/validation polish. 02–06 can follow in any order/parallel once 00 is done.
+
+| # | Sub-plan | Depends on | Builds |
+|---|----------|-----------|--------|
+| [00](../plans/2026-07-17-ifc-qa-00-foundation-and-contracts.md) | Foundation & Contracts | — | pnpm monorepo scaffold, `@ifc-qa/shared-types` (domain/queue/API contracts), `@ifc-qa/storage`, `@ifc-qa/db`, Docker Compose (Postgres/Redis) |
+| [01](../plans/2026-07-17-ifc-qa-01-parser-adapters.md) | Parser Adapters — **build first** | 00 | `WebIfcAdapter`, `IfcLiteAdapter` (`@ifc-qa/parser-adapters`), IFC fixture files |
+| [02](../plans/2026-07-17-ifc-qa-02-ids-validator.md) | IDS Validator | 00 | `validateElements` (`@ifc-qa/ids-validator`), IDS/element fixtures |
+| [03](../plans/2026-07-17-ifc-qa-03-report-generator.md) | Report Generator | 00 | `generatePdfReport`/`generateExcelReport` (`@ifc-qa/report-generator`) |
+| [04](../plans/2026-07-17-ifc-qa-04-api-service.md) | API Service | 00 (soft: 03 for its last task) | `apps/api` — Fastify routes, chunked upload, BullMQ producer |
+| [05](../plans/2026-07-17-ifc-qa-05-worker-service.md) | Worker Service | 00 (hard: 01+02 for its last task) | `apps/worker` — BullMQ consumer, parse → validate → persist |
+| [06](../plans/2026-07-17-ifc-qa-06-frontend.md) | Frontend | 00 | `apps/web` — upload, rule-set management, run history, filterable issue table |
+| [07](../plans/2026-07-17-ifc-qa-07-integration-and-wireup.md) | Integration & Wire-up | 00–06 all | `GET /runs` (closes a gap 06 flagged), executes 04/05's blocked final tasks, one real end-to-end test per engine, Docker Compose for the full stack, smoke test |
