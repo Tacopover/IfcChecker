@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { fixturePath } from "./fixture-path";
-import { assertWellFormedStepFile } from "./step-well-formed";
+import { fixturePath } from "./fixture-path.js";
+import { assertWellFormedStepFile } from "./step-well-formed.js";
 
 describe("IFC fixtures", () => {
   it("minimal-wall.ifc is a well-formed STEP file", async () => {
