@@ -15,7 +15,7 @@
 - Exact dependency versions: `web-ifc: ^0.0.77`, `@ifc-lite/parser: ^3.10.1` (both confirmed to exist on the npm registry during planning).
 - Node.js >= 20, pnpm >= 9 (already pinned by the root `package.json` from sub-plan 00).
 - No auth — every service assumes a trusted internal network (per spec); not directly relevant to this package but stated for consistency with every other sub-plan.
-- Relative imports inside `packages/parser-adapters/src` omit the `.js` extension (e.g. `from "./types"`, not `from "./types.js"`), matching the convention already established by every package sub-plan 00 created (`packages/shared-types`, `packages/storage`).
+- Relative imports inside `packages/parser-adapters/src` omit the `.js` extension (e.g. `from "./types.js"`, not `from "./types.js.js"`), matching the convention already established by every package sub-plan 00 created (`packages/shared-types`, `packages/storage`).
 - Both adapters must export a zero-argument-constructible class (`new WebIfcAdapter()`, `new IfcLiteAdapter()`) — sub-plan 05 (worker-service) already committed to exactly this contract in its `createParserAdapter(engine): IfcParserAdapter` factory (`apps/worker/src/adapter-factory.ts`), written against `import { WebIfcAdapter, IfcLiteAdapter } from "@ifc-qa/parser-adapters"`.
 - IFC fixture files live at repo root under `fixtures/ifc/`, not inside the package — both this plan's tests and later integration tests (sub-plan 07) read them from that shared location.
 - A corrupt/unparseable file must cause `adapter.parse()` to reject (throw/return a rejected Promise) rather than resolve with garbage data — callers (sub-plan 05) rely on catching this to fail only that one FileJob (spec, "Error Handling").
@@ -107,7 +107,7 @@ Expected: exits 0; `node_modules/.pnpm` now includes `web-ifc@0.0.77` and `@ifc-
 ```typescript
 // packages/parser-adapters/src/element-types.test.ts
 import { describe, expect, it } from "vitest";
-import { ELEMENT_TYPE_NAMES } from "./element-types";
+import { ELEMENT_TYPE_NAMES } from "./element-types.js";
 
 describe("ELEMENT_TYPE_NAMES", () => {
   it("includes the core physical building element types the fixtures exercise", () => {
@@ -171,7 +171,7 @@ Expected: PASS (2 tests) — `element-types.test.ts` only; other test files from
 ```typescript
 // packages/parser-adapters/src/normalize-property-value.test.ts
 import { describe, expect, it } from "vitest";
-import { normalizePropertyValue } from "./normalize-property-value";
+import { normalizePropertyValue } from "./normalize-property-value.js";
 
 describe("normalizePropertyValue", () => {
   it("passes primitives through unchanged", () => {
@@ -236,7 +236,7 @@ Expected: PASS (6 tests total)
 ```typescript
 // packages/parser-adapters/src/step-well-formed.test.ts
 import { describe, expect, it } from "vitest";
-import { assertWellFormedStepFile } from "./step-well-formed";
+import { assertWellFormedStepFile } from "./step-well-formed.js";
 
 describe("assertWellFormedStepFile", () => {
   it("accepts a file ending with the ISO-10303-21 terminator", () => {
@@ -364,8 +364,8 @@ DATA;
 // packages/parser-adapters/src/fixtures.test.ts
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { fixturePath } from "./fixture-path";
-import { assertWellFormedStepFile } from "./step-well-formed";
+import { fixturePath } from "./fixture-path.js";
+import { assertWellFormedStepFile } from "./step-well-formed.js";
 
 describe("IFC fixtures", () => {
   it("minimal-wall.ifc is a well-formed STEP file", async () => {
@@ -433,8 +433,8 @@ git commit -m "test(fixtures): add minimal-wall and corrupt-truncated IFC fixtur
 ```typescript
 // packages/parser-adapters/src/web-ifc-adapter.test.ts
 import { describe, expect, it } from "vitest";
-import { WebIfcAdapter } from "./web-ifc-adapter";
-import { fixturePath } from "./fixture-path";
+import { WebIfcAdapter } from "./web-ifc-adapter.js";
+import { fixturePath } from "./fixture-path.js";
 
 describe("WebIfcAdapter", () => {
   it("parses the minimal wall fixture into one normalized IFCWALL element", async () => {
@@ -475,10 +475,10 @@ Expected: FAIL — `Cannot find module './web-ifc-adapter'`
 import { readFile } from "node:fs/promises";
 import * as WebIFC from "web-ifc";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import type { IfcParseResult, IfcParserAdapter } from "./types";
-import { ELEMENT_TYPE_NAMES } from "./element-types";
-import { assertWellFormedStepFile } from "./step-well-formed";
-import { normalizePropertyValue } from "./normalize-property-value";
+import type { IfcParseResult, IfcParserAdapter } from "./types.js";
+import { ELEMENT_TYPE_NAMES } from "./element-types.js";
+import { assertWellFormedStepFile } from "./step-well-formed.js";
+import { normalizePropertyValue } from "./normalize-property-value.js";
 
 type WebIfcLine = Record<string, any>;
 
@@ -594,8 +594,8 @@ git commit -m "feat(parser-adapters): implement WebIfcAdapter"
 ```typescript
 // packages/parser-adapters/src/ifc-lite-adapter.test.ts
 import { describe, expect, it } from "vitest";
-import { IfcLiteAdapter } from "./ifc-lite-adapter";
-import { fixturePath } from "./fixture-path";
+import { IfcLiteAdapter } from "./ifc-lite-adapter.js";
+import { fixturePath } from "./fixture-path.js";
 
 describe("IfcLiteAdapter", () => {
   it("parses the minimal wall fixture into one normalized IFCWALL element", async () => {
@@ -636,10 +636,10 @@ Expected: FAIL — `Cannot find module './ifc-lite-adapter'`
 import { readFile } from "node:fs/promises";
 import { IfcParser, extractPropertiesOnDemand, extractAllEntityAttributes } from "@ifc-lite/parser";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import type { IfcParseResult, IfcParserAdapter } from "./types";
-import { ELEMENT_TYPE_NAMES } from "./element-types";
-import { assertWellFormedStepFile } from "./step-well-formed";
-import { normalizePropertyValue } from "./normalize-property-value";
+import type { IfcParseResult, IfcParserAdapter } from "./types.js";
+import { ELEMENT_TYPE_NAMES } from "./element-types.js";
+import { assertWellFormedStepFile } from "./step-well-formed.js";
+import { normalizePropertyValue } from "./normalize-property-value.js";
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
@@ -735,9 +735,9 @@ Both adapters are already implemented (Tasks 3-4); this test is a characterizati
 ```typescript
 // packages/parser-adapters/src/adapter-parity.test.ts
 import { describe, expect, it } from "vitest";
-import { WebIfcAdapter } from "./web-ifc-adapter";
-import { IfcLiteAdapter } from "./ifc-lite-adapter";
-import { fixturePath } from "./fixture-path";
+import { WebIfcAdapter } from "./web-ifc-adapter.js";
+import { IfcLiteAdapter } from "./ifc-lite-adapter.js";
+import { fixturePath } from "./fixture-path.js";
 
 describe("adapter parity", () => {
   it("both engines normalize the fixture wall identically (parse timing aside)", async () => {
@@ -768,13 +768,13 @@ Expected: PASS (15 tests total)
 - [ ] **Step 3: Update `packages/parser-adapters/src/index.ts` to export everything this package produces**
 
 ```typescript
-export * from "./types";
-export * from "./element-types";
-export * from "./normalize-property-value";
-export * from "./step-well-formed";
-export * from "./fixture-path";
-export * from "./web-ifc-adapter";
-export * from "./ifc-lite-adapter";
+export * from "./types.js";
+export * from "./element-types.js";
+export * from "./normalize-property-value.js";
+export * from "./step-well-formed.js";
+export * from "./fixture-path.js";
+export * from "./web-ifc-adapter.js";
+export * from "./ifc-lite-adapter.js";
 ```
 
 - [ ] **Step 4: Run the full package test suite once more**

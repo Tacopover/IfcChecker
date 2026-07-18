@@ -116,8 +116,8 @@ Expected: exits 0; `apps/api` now has its own `node_modules` linked via pnpm wor
 ```typescript
 // apps/api/src/app.test.ts
 import { describe, expect, it, afterAll } from "vitest";
-import { buildApp } from "./app";
-import { createTestDeps, closeTestDeps } from "./test/test-helpers";
+import { buildApp } from "./app.js";
+import { createTestDeps, closeTestDeps } from "./test/test-helpers.js";
 
 describe("buildApp", () => {
   const deps = createTestDeps();
@@ -218,7 +218,7 @@ import { LocalDiskStorageAdapter } from "@ifc-qa/storage";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { PARSE_JOB_QUEUE_NAME, type ParseJobPayload } from "@ifc-qa/shared-types";
-import { buildApp } from "./app";
+import { buildApp } from "./app.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 const DATABASE_URL =
@@ -269,8 +269,8 @@ git commit -m "feat(api): scaffold Fastify app with health check"
 // apps/api/src/rule-sets.test.ts
 import { describe, expect, it, beforeAll, afterEach, afterAll } from "vitest";
 import FormData from "form-data";
-import { buildApp } from "./app";
-import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers";
+import { buildApp } from "./app.js";
+import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers.js";
 import { ruleSets } from "@ifc-qa/db";
 
 describe("rule-sets routes", () => {
@@ -534,8 +534,8 @@ Expected: exits 0.
 import { describe, expect, it, beforeAll, afterEach, afterAll } from "vitest";
 import FormData from "form-data";
 import { eq } from "drizzle-orm";
-import { buildApp } from "./app";
-import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers";
+import { buildApp } from "./app.js";
+import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers.js";
 import { ruleSets, runs, fileJobs } from "@ifc-qa/db";
 
 describe("POST /runs", () => {
@@ -841,8 +841,8 @@ git commit -m "feat(api): add POST /runs with streamed uploads and BullMQ enqueu
 ```typescript
 // apps/api/src/run-status.test.ts
 import { describe, expect, it, beforeAll, afterEach, afterAll } from "vitest";
-import { buildApp } from "./app";
-import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers";
+import { buildApp } from "./app.js";
+import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers.js";
 import { ruleSets, runs, fileJobs } from "@ifc-qa/db";
 
 describe("GET /runs/:runId/status", () => {
@@ -1059,8 +1059,8 @@ git commit -m "feat(api): add GET /runs/:runId/status"
 ```typescript
 // apps/api/src/run-results.test.ts
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { buildApp } from "./app";
-import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers";
+import { buildApp } from "./app.js";
+import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers.js";
 import { ruleSets, runs, fileJobs, elementResults } from "@ifc-qa/db";
 
 describe("GET /runs/:runId/results", () => {
@@ -1270,8 +1270,8 @@ Expected: exits 0.
 ```typescript
 // apps/api/src/reports.test.ts
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { buildApp } from "./app";
-import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers";
+import { buildApp } from "./app.js";
+import { createTestDeps, closeTestDeps, migrateTestDb } from "./test/test-helpers.js";
 import { ruleSets, runs, fileJobs, elementResults } from "@ifc-qa/db";
 
 describe("report export routes", () => {

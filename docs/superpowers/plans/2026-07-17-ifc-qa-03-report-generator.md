@@ -115,7 +115,7 @@ export interface RunReportData {
 - [ ] **Step 5: Write `packages/report-generator/src/index.ts`**
 
 ```typescript
-export * from "./types";
+export * from "./types.js";
 ```
 
 - [ ] **Step 6: Install and type-check**
@@ -152,7 +152,7 @@ Sort choice (stated explicitly, per the spec's "Group or sort however is cleares
 ```typescript
 // packages/report-generator/src/sort-results.test.ts
 import { describe, expect, it } from "vitest";
-import { sortResults } from "./sort-results";
+import { sortResults } from "./sort-results.js";
 
 describe("sortResults", () => {
   it("sorts by file name, then errors before warnings, then element type", () => {
@@ -293,8 +293,8 @@ Expected: exits 0, adds `pdfkit`, `@types/pdfkit`, `@types/node` under `packages
 ```typescript
 // packages/report-generator/src/pdf-report.test.ts
 import { describe, expect, it } from "vitest";
-import { generatePdfReport } from "./pdf-report";
-import type { RunReportData } from "./types";
+import { generatePdfReport } from "./pdf-report.js";
+import type { RunReportData } from "./types.js";
 
 const fixture: RunReportData = {
   runId: "11111111-1111-1111-1111-111111111111",
@@ -357,8 +357,8 @@ Expected: FAIL — cannot resolve `./pdf-report` (module does not exist yet)
 import PDFDocument from "pdfkit";
 import { buffer } from "node:stream/consumers";
 import type { Severity } from "@ifc-qa/shared-types";
-import type { RunReportData } from "./types";
-import { sortResults } from "./sort-results";
+import type { RunReportData } from "./types.js";
+import { sortResults } from "./sort-results.js";
 
 const SEVERITY_COLORS: Record<Severity, string> = {
   error: "#B00020",
@@ -409,8 +409,8 @@ export async function generatePdfReport(data: RunReportData): Promise<Buffer> {
 - [ ] **Step 6: Modify `packages/report-generator/src/index.ts` to export it**
 
 ```typescript
-export * from "./types";
-export * from "./pdf-report";
+export * from "./types.js";
+export * from "./pdf-report.js";
 ```
 
 - [ ] **Step 7: Run test to verify it passes**
@@ -479,8 +479,8 @@ Expected: exits 0, adds `exceljs` under `packages/report-generator/node_modules`
 // packages/report-generator/src/excel-report.test.ts
 import { describe, expect, it } from "vitest";
 import { Workbook } from "exceljs";
-import { generateExcelReport } from "./excel-report";
-import type { RunReportData } from "./types";
+import { generateExcelReport } from "./excel-report.js";
+import type { RunReportData } from "./types.js";
 
 const fixture: RunReportData = {
   runId: "11111111-1111-1111-1111-111111111111",
@@ -565,8 +565,8 @@ Expected: FAIL — cannot resolve `./excel-report` (module does not exist yet)
 
 ```typescript
 import { Workbook } from "exceljs";
-import type { RunReportData } from "./types";
-import { sortResults } from "./sort-results";
+import type { RunReportData } from "./types.js";
+import { sortResults } from "./sort-results.js";
 
 const SUMMARY_SHEET_NAME = "Summary";
 const RESULTS_SHEET_NAME = "Results";
@@ -606,9 +606,9 @@ export async function generateExcelReport(data: RunReportData): Promise<Buffer> 
 - [ ] **Step 6: Modify `packages/report-generator/src/index.ts` to export it**
 
 ```typescript
-export * from "./types";
-export * from "./pdf-report";
-export * from "./excel-report";
+export * from "./types.js";
+export * from "./pdf-report.js";
+export * from "./excel-report.js";
 ```
 
 - [ ] **Step 7: Run test to verify it passes**
@@ -640,8 +640,8 @@ This closes the loop on the contract the api-service sub-plan (04) will actually
 ```typescript
 // packages/report-generator/src/index.test.ts
 import { describe, expect, it } from "vitest";
-import { generatePdfReport, generateExcelReport } from "./index";
-import type { RunReportData } from "./index";
+import { generatePdfReport, generateExcelReport } from "./index.js";
+import type { RunReportData } from "./index.js";
 
 const fixture: RunReportData = {
   runId: "11111111-1111-1111-1111-111111111111",
