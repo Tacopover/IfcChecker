@@ -99,7 +99,7 @@ Expected: exits 0; resolves `fast-xml-parser` and links `@ifc-qa/shared-types` a
 ```typescript
 // packages/ids-validator/src/parse-ids.test.ts
 import { describe, expect, it, vi } from "vitest";
-import { parseIdsXml } from "./parse-ids";
+import { parseIdsXml } from "./parse-ids.js";
 
 const SAMPLE_IDS = `<?xml version="1.0" encoding="utf-8"?>
 <ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd" xmlns="http://standards.buildingsmart.org/IDS">
@@ -366,7 +366,7 @@ function parsePropertyFacets(rawProperties: RawPropertyFacet[]): ParsedPropertyF
 - [ ] **Step 8: Write `packages/ids-validator/src/index.ts`**
 
 ```typescript
-export * from "./parse-ids";
+export * from "./parse-ids.js";
 ```
 
 - [ ] **Step 9: Run test to verify it passes**
@@ -400,8 +400,8 @@ git commit -m "feat(ids-validator): scaffold package and add IDS XML parsing lay
 // packages/ids-validator/src/facet-evaluation.test.ts
 import { describe, expect, it } from "vitest";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import { matchesApplicability, evaluateRequirement } from "./facet-evaluation";
-import type { ParsedAttributeFacet, ParsedPropertyFacet } from "./parse-ids";
+import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js";
+import type { ParsedAttributeFacet, ParsedPropertyFacet } from "./parse-ids.js";
 
 function makeElement(overrides: Partial<NormalizedElement>): NormalizedElement {
   return {
@@ -505,7 +505,7 @@ Expected: FAIL — `Cannot find module './facet-evaluation'`
 
 ```typescript
 import type { NormalizedElement, PropertyValue } from "@ifc-qa/shared-types";
-import type { ParsedRequirementFacet } from "./parse-ids";
+import type { ParsedRequirementFacet } from "./parse-ids.js";
 
 export interface FacetCheckResult {
   passed: boolean;
@@ -561,8 +561,8 @@ export function evaluateRequirement(
 - [ ] **Step 4: Add the export to `packages/ids-validator/src/index.ts`**
 
 ```typescript
-export * from "./parse-ids";
-export * from "./facet-evaluation";
+export * from "./parse-ids.js";
+export * from "./facet-evaluation.js";
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -596,7 +596,7 @@ git commit -m "feat(ids-validator): add applicability and requirement facet eval
 // packages/ids-validator/src/validate-elements.test.ts
 import { describe, expect, it } from "vitest";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import { validateElements } from "./validate-elements";
+import { validateElements } from "./validate-elements.js";
 
 const IDS_XML = `<?xml version="1.0" encoding="utf-8"?>
 <ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd" xmlns="http://standards.buildingsmart.org/IDS">
@@ -703,8 +703,8 @@ Expected: FAIL — `Cannot find module './validate-elements'`
 
 ```typescript
 import type { NormalizedElement, Severity } from "@ifc-qa/shared-types";
-import { parseIdsXml } from "./parse-ids";
-import { matchesApplicability, evaluateRequirement } from "./facet-evaluation";
+import { parseIdsXml } from "./parse-ids.js";
+import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js";
 
 export interface IdsViolation {
   elementGlobalId: string;
@@ -746,9 +746,9 @@ export function validateElements(elements: NormalizedElement[], idsXml: string):
 - [ ] **Step 4: Add the export to `packages/ids-validator/src/index.ts`**
 
 ```typescript
-export * from "./parse-ids";
-export * from "./facet-evaluation";
-export * from "./validate-elements";
+export * from "./parse-ids.js";
+export * from "./facet-evaluation.js";
+export * from "./validate-elements.js";
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -786,7 +786,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { NormalizedElementSchema } from "@ifc-qa/shared-types";
-import { validateElements } from "./validate-elements";
+import { validateElements } from "./validate-elements.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(__dirname, "..", "fixtures", "ids");

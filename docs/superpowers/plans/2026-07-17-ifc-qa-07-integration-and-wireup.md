@@ -26,7 +26,7 @@ This is the final, sequential plan. It depends on **all of sub-plans 00–06**. 
 
 **Files:**
 - Modify: `packages/shared-types/src/api.ts`
-- Modify: `packages/shared-types/src/index.ts` (no change needed — already does `export * from "./api"`; verify only)
+- Modify: `packages/shared-types/src/index.ts` (no change needed — already does `export * from "./api.js"`; verify only)
 - Test: `packages/shared-types/src/api.test.ts`
 
 **Interfaces:**
@@ -236,7 +236,7 @@ In `apps/web/src/api/types.ts`, remove the `RunSummary`/`RunListResponse` interf
 
 - [ ] **Step 2: Update the import in `apps/web/src/api/client.ts`**
 
-Change the `import type { RunListResponse } from "./types";` line to:
+Change the `import type { RunListResponse } from "./types.js";` line to:
 
 ```typescript
 import type { RunListResponse } from "@ifc-qa/shared-types";
@@ -336,7 +336,7 @@ import {
 import { LocalDiskStorageAdapter } from "@ifc-qa/storage";
 import { WebIfcAdapter, IfcLiteAdapter } from "@ifc-qa/parser-adapters";
 import { validateElements } from "@ifc-qa/ids-validator";
-import { processParseJob } from "./process-job";
+import { processParseJob } from "./process-job.js";
 
 const CONNECTION_STRING =
   process.env.DATABASE_URL ?? "postgresql://ifc_qa:ifc_qa@localhost:5432/ifc_qa";

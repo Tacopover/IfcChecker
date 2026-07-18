@@ -185,7 +185,7 @@ import {
   NormalizedElementSchema,
   ElementResultSchema,
   EngineIdSchema,
-} from "./domain";
+} from "./domain.js";
 
 describe("NormalizedElementSchema", () => {
   it("accepts a well-formed element", () => {
@@ -296,7 +296,7 @@ export type ElementResult = z.infer<typeof ElementResultSchema>;
 - [ ] **Step 4: Write `packages/shared-types/src/index.ts`**
 
 ```typescript
-export * from "./domain";
+export * from "./domain.js";
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -329,7 +329,7 @@ git commit -m "feat(shared-types): add domain schemas (NormalizedElement, Elemen
 ```typescript
 // packages/shared-types/src/queue.test.ts
 import { describe, expect, it } from "vitest";
-import { ParseJobPayloadSchema, ParseJobResultSchema, PARSE_JOB_QUEUE_NAME } from "./queue";
+import { ParseJobPayloadSchema, ParseJobResultSchema, PARSE_JOB_QUEUE_NAME } from "./queue.js";
 
 describe("PARSE_JOB_QUEUE_NAME", () => {
   it("is a stable, non-empty string", () => {
@@ -384,7 +384,7 @@ Expected: FAIL — `Cannot find module './queue'`
 
 ```typescript
 import { z } from "zod";
-import { EngineIdSchema } from "./domain";
+import { EngineIdSchema } from "./domain.js";
 
 export const PARSE_JOB_QUEUE_NAME = "parse-file-job";
 
@@ -410,8 +410,8 @@ export type ParseJobResult = z.infer<typeof ParseJobResultSchema>;
 - [ ] **Step 4: Add the export to `packages/shared-types/src/index.ts`**
 
 ```typescript
-export * from "./domain";
-export * from "./queue";
+export * from "./domain.js";
+export * from "./queue.js";
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -449,7 +449,7 @@ import {
   RunStatusResponseSchema,
   RunResultsResponseSchema,
   RuleSetSummarySchema,
-} from "./api";
+} from "./api.js";
 
 describe("CreateRunResponseSchema", () => {
   it("accepts a run id plus its file job ids", () => {
@@ -536,7 +536,7 @@ import {
   FileJobStatusSchema,
   RunStatusSchema,
   ElementResultSchema,
-} from "./domain";
+} from "./domain.js";
 
 export const CreateRunResponseSchema = z.object({
   runId: z.string(),
@@ -578,9 +578,9 @@ export type RuleSetSummary = z.infer<typeof RuleSetSummarySchema>;
 - [ ] **Step 4: Add the export to `packages/shared-types/src/index.ts`**
 
 ```typescript
-export * from "./domain";
-export * from "./queue";
-export * from "./api";
+export * from "./domain.js";
+export * from "./queue.js";
+export * from "./api.js";
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -664,7 +664,7 @@ export default defineConfig({
 ```typescript
 // packages/parser-adapters/src/types.test.ts
 import { describe, expect, it } from "vitest";
-import type { IfcParserAdapter } from "./types";
+import type { IfcParserAdapter } from "./types.js";
 
 class FakeAdapter implements IfcParserAdapter {
   async parse(filePath: string) {
@@ -717,7 +717,7 @@ export interface IfcParserAdapter {
 - [ ] **Step 7: Write `packages/parser-adapters/src/index.ts`**
 
 ```typescript
-export * from "./types";
+export * from "./types.js";
 ```
 
 - [ ] **Step 8: Run test to verify it passes**
@@ -802,7 +802,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { LocalDiskStorageAdapter } from "./local-disk-storage-adapter";
+import { LocalDiskStorageAdapter } from "./local-disk-storage-adapter.js";
 
 describe("LocalDiskStorageAdapter", () => {
   const roots: string[] = [];
@@ -880,7 +880,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
-import type { StorageAdapter } from "./types";
+import type { StorageAdapter } from "./types.js";
 
 export class LocalDiskStorageAdapter implements StorageAdapter {
   private readonly rootDir: string;
@@ -913,8 +913,8 @@ export class LocalDiskStorageAdapter implements StorageAdapter {
 - [ ] **Step 8: Write `packages/storage/src/index.ts`**
 
 ```typescript
-export * from "./types";
-export * from "./local-disk-storage-adapter";
+export * from "./types.js";
+export * from "./local-disk-storage-adapter.js";
 ```
 
 - [ ] **Step 9: Run test to verify it passes**
@@ -1116,7 +1116,7 @@ export const elementResults = pgTable("element_results", {
 ```typescript
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "./schema";
+import * as schema from "./schema.js";
 
 export function createDbClient(connectionString: string) {
   const pool = new Pool({ connectionString });
@@ -1130,8 +1130,8 @@ export { schema };
 - [ ] **Step 8: Write `packages/db/src/index.ts`**
 
 ```typescript
-export * from "./schema";
-export * from "./client";
+export * from "./schema.js";
+export * from "./client.js";
 ```
 
 - [ ] **Step 9: Write the integration test (requires `docker compose up -d postgres`)**
@@ -1140,7 +1140,7 @@ export * from "./client";
 // packages/db/src/client.integration.test.ts
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { execSync } from "node:child_process";
-import { createDbClient, ruleSets, runs, fileJobs } from "./index";
+import { createDbClient, ruleSets, runs, fileJobs } from "./index.js";
 
 const CONNECTION_STRING =
   process.env.DATABASE_URL ?? "postgresql://ifc_qa:ifc_qa@localhost:5432/ifc_qa";

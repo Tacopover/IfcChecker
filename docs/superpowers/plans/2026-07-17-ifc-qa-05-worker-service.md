@@ -153,8 +153,8 @@ import { createDbClient, elementResults, fileJobs, ruleSets, runs } from "@ifc-q
 import { LocalDiskStorageAdapter } from "@ifc-qa/storage";
 import type { IfcParserAdapter } from "@ifc-qa/parser-adapters";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import { processParseJob } from "./job-processor";
-import type { IdsViolation } from "./types";
+import { processParseJob } from "./job-processor.js";
+import type { IdsViolation } from "./types.js";
 
 const CONNECTION_STRING =
   process.env.DATABASE_URL ?? "postgresql://ifc_qa:ifc_qa@localhost:5432/ifc_qa";
@@ -332,7 +332,7 @@ import { elementResults, fileJobs, ruleSets, runs } from "@ifc-qa/db";
 import type { IfcParserAdapter } from "@ifc-qa/parser-adapters";
 import type { StorageAdapter } from "@ifc-qa/storage";
 import type { NormalizedElement, ParseJobPayload, ParseJobResult } from "@ifc-qa/shared-types";
-import type { IdsViolation } from "./types";
+import type { IdsViolation } from "./types.js";
 
 export interface ProcessParseJobDeps {
   db: DbClient;
@@ -568,7 +568,7 @@ git commit -m "feat(worker): catch parser adapter failures and fail only the own
 // apps/worker/src/adapter-factory.test.ts
 import { describe, expect, it } from "vitest";
 import { WebIfcAdapter, IfcLiteAdapter } from "@ifc-qa/parser-adapters";
-import { createParserAdapter } from "./adapter-factory";
+import { createParserAdapter } from "./adapter-factory.js";
 
 describe("createParserAdapter", () => {
   it("returns a WebIfcAdapter for 'web-ifc'", () => {
@@ -613,8 +613,8 @@ import type { ParseJobPayload, ParseJobResult } from "@ifc-qa/shared-types";
 import { createDbClient } from "@ifc-qa/db";
 import { LocalDiskStorageAdapter } from "@ifc-qa/storage";
 import { validateElements } from "@ifc-qa/ids-validator";
-import { processParseJob } from "./job-processor";
-import { createParserAdapter } from "./adapter-factory";
+import { processParseJob } from "./job-processor.js";
+import { createParserAdapter } from "./adapter-factory.js";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgresql://ifc_qa:ifc_qa@localhost:5432/ifc_qa";
