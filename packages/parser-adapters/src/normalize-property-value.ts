@@ -1,3 +1,5 @@
+import type { PropertyValue } from "@ifc-qa/shared-types";
+
 /**
  * Coerces a raw value read from either engine into NormalizedElement's
  * PropertyValue union (string | number | boolean | null). web-ifc wraps
@@ -7,7 +9,7 @@
  * multi-valued PropertyValue) are JSON-stringified since NormalizedElement
  * has no array member.
  */
-export function normalizePropertyValue(value: unknown): string | number | boolean | null {
+export function normalizePropertyValue(value: unknown): PropertyValue {
   if (value === null || value === undefined) return null;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return value;
