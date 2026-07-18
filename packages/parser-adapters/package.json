@@ -9,7 +9,9 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@ifc-qa/shared-types": "workspace:*"
+    "@ifc-qa/shared-types": "workspace:*",
+    "web-ifc": "^0.0.77",
+    "@ifc-lite/parser": "^3.10.1"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
