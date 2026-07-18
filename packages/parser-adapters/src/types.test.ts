@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IfcParserAdapter } from "./types";
+import type { IfcParserAdapter } from "./types.js";
 
 class FakeAdapter implements IfcParserAdapter {
   async parse(filePath: string) {

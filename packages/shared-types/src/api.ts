@@ -4,7 +4,7 @@ import {
   FileJobStatusSchema,
   RunStatusSchema,
   ElementResultSchema,
-} from "./domain";
+} from "./domain.js";
 
 export const CreateRunResponseSchema = z.object({
   runId: z.string(),

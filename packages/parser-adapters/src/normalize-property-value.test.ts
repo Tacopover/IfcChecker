@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizePropertyValue } from "./normalize-property-value";
+import { normalizePropertyValue } from "./normalize-property-value.js";
 
 describe("normalizePropertyValue", () => {
   it("passes primitives through unchanged", () => {

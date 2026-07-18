@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { LocalDiskStorageAdapter } from "./local-disk-storage-adapter";
+import { LocalDiskStorageAdapter } from "./local-disk-storage-adapter.js";
 
 describe("LocalDiskStorageAdapter", () => {
   const roots: string[] = [];

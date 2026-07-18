@@ -3,7 +3,7 @@ import {
   NormalizedElementSchema,
   ElementResultSchema,
   EngineIdSchema,
-} from "./domain";
+} from "./domain.js";
 
 describe("NormalizedElementSchema", () => {
   it("accepts a well-formed element", () => {

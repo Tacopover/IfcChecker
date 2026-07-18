@@ -4,7 +4,7 @@ import {
   RunStatusResponseSchema,
   RunResultsResponseSchema,
   RuleSetSummarySchema,
-} from "./api";
+} from "./api.js";
 
 describe("CreateRunResponseSchema", () => {
   it("accepts a run id plus its file job ids", () => {

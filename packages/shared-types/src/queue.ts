@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EngineIdSchema } from "./domain";
+import { EngineIdSchema } from "./domain.js";
 
 export const PARSE_JOB_QUEUE_NAME = "parse-file-job";
 

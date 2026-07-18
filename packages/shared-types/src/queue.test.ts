@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ParseJobPayloadSchema, ParseJobResultSchema, PARSE_JOB_QUEUE_NAME } from "./queue";
+import { ParseJobPayloadSchema, ParseJobResultSchema, PARSE_JOB_QUEUE_NAME } from "./queue.js";
 
 describe("PARSE_JOB_QUEUE_NAME", () => {
   it("is a stable, non-empty string", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ELEMENT_TYPE_NAMES } from "./element-types";
+import { ELEMENT_TYPE_NAMES } from "./element-types.js";
 
 describe("ELEMENT_TYPE_NAMES", () => {
   it("includes the core physical building element types the fixtures exercise", () => {

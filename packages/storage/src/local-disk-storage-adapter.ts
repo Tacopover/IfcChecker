@@ -3,7 +3,7 @@ import { mkdir, rm, access } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
-import type { StorageAdapter } from "./types";
+import type { StorageAdapter } from "./types.js";
 
 export class LocalDiskStorageAdapter implements StorageAdapter {
   private readonly rootDir: string;

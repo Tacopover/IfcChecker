@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertWellFormedStepFile } from "./step-well-formed";
+import { assertWellFormedStepFile } from "./step-well-formed.js";
 
 describe("assertWellFormedStepFile", () => {
   it("accepts a file ending with the ISO-10303-21 terminator", () => {

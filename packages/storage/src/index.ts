@@ -1,2 +1,2 @@
-export * from "./types";
-export * from "./local-disk-storage-adapter";
+export * from "./types.js";
+export * from "./local-disk-storage-adapter.js";
