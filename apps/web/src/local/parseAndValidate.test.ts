@@ -1,18 +1,29 @@
-import { describe, expect, it, vi } from "vitest";
-import { parseAndValidateFile, parseAndValidateFiles } from "./parseAndValidate.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { InvalidIdsRuleSetError, parseAndValidateFile, parseAndValidateFiles } from "./parseAndValidate.js";
 
 const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
   parseWebIfcBuffer: vi.fn(),
   parseIfcLiteBuffer: vi.fn(),
 }));
-const { validateElements } = vi.hoisted(() => ({ validateElements: vi.fn() }));
+const { validateElements, parseIdsXml } = vi.hoisted(() => ({
+  validateElements: vi.fn(),
+  parseIdsXml: vi.fn(),
+}));
 
 vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
-vi.mock("@ifc-qa/ids-validator", () => ({ validateElements }));
+vi.mock("@ifc-qa/ids-validator", () => ({ validateElements, parseIdsXml }));
 
 function makeFile(name: string, content = "ISO-10303-21;") {
   return new File([content], name);
 }
+
+// Every existing test below passes a real (if trivial) rule set through
+// idsXml, so parseIdsXml's pre-check should see at least one specification
+// unless a test deliberately overrides it to assert the empty-rule-set path.
+beforeEach(() => {
+  vi.clearAllMocks();
+  parseIdsXml.mockReturnValue([{ name: "fake-spec", applicabilityEntityNames: [], requirements: [] }]);
+});
 
 describe("parseAndValidateFile", () => {
   it("parses with the selected engine and maps violations to ElementResult rows tagged with the file name", async () => {
@@ -87,5 +98,15 @@ describe("parseAndValidateFiles", () => {
 
     expect(outcomes.map((o) => o.status)).toEqual(["succeeded", "failed", "succeeded"]);
     expect(outcomes.map((o) => o.fileName)).toEqual(["a.ifc", "b.ifc", "c.ifc"]);
+  });
+
+  it("rejects with InvalidIdsRuleSetError instead of silently reporting zero issues when the IDS file has no specifications", async () => {
+    parseIdsXml.mockReturnValue([]);
+
+    await expect(
+      parseAndValidateFiles([makeFile("a.ifc")], "<not-really-ids/>", "web-ifc")
+    ).rejects.toThrow(InvalidIdsRuleSetError);
+
+    expect(parseWebIfcBuffer).not.toHaveBeenCalled();
   });
 });

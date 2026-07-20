@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LocalDemoPage } from "./LocalDemoPage";
@@ -7,14 +7,22 @@ const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
   parseWebIfcBuffer: vi.fn(),
   parseIfcLiteBuffer: vi.fn(),
 }));
-const { validateElements } = vi.hoisted(() => ({ validateElements: vi.fn() }));
+const { validateElements, parseIdsXml } = vi.hoisted(() => ({
+  validateElements: vi.fn(),
+  parseIdsXml: vi.fn(),
+}));
 
 vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
-vi.mock("@ifc-qa/ids-validator", () => ({ validateElements }));
+vi.mock("@ifc-qa/ids-validator", () => ({ validateElements, parseIdsXml }));
 
 function makeFile(name: string, content = "ISO-10303-21;") {
   return new File([content], name);
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  parseIdsXml.mockReturnValue([{ name: "fake-spec", applicabilityEntityNames: [], requirements: [] }]);
+});
 
 describe("LocalDemoPage", () => {
   it("disables the run button until an engine, an IDS file, and at least one IFC file are chosen", async () => {
@@ -75,6 +83,22 @@ describe("LocalDemoPage", () => {
     expect(await screen.findByText("failed")).toBeInTheDocument();
     expect(screen.getByText("unexpected EOF")).toBeInTheDocument();
     expect(screen.getByText("succeeded")).toBeInTheDocument();
+  });
+
+  it("shows an error instead of a silent 'no issues' result when the IDS file has no specifications", async () => {
+    parseIdsXml.mockReturnValue([]);
+    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+
+    const user = userEvent.setup();
+    render(<LocalDemoPage />);
+
+    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
+    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("not-really-ids.xml", "<not-ids/>"));
+    await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-a.ifc"));
+    await user.click(screen.getByRole("button", { name: "Parse & validate" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("doesn't look like a valid IDS rule set");
+    expect(screen.queryByRole("table", { name: "File results" })).not.toBeInTheDocument();
   });
 
   it("shows an error and disables the button when more than 20 IFC files are selected", async () => {

@@ -11,6 +11,7 @@ export function LocalDemoPage() {
   const [ifcFiles, setIfcFiles] = useState<File[]>([]);
   const [outcomes, setOutcomes] = useState<LocalFileOutcome[] | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
 
   const tooManyFiles = ifcFiles.length > MAX_FILES;
   const canRun = engine !== "" && idsFile !== null && ifcFiles.length > 0 && !tooManyFiles && !isRunning;
@@ -22,10 +23,14 @@ export function LocalDemoPage() {
   async function handleRun() {
     if (!canRun) return;
     setIsRunning(true);
+    setRunError(null);
     try {
       const idsXml = await idsFile.text();
       const results = await parseAndValidateFiles(ifcFiles, idsXml, engine);
       setOutcomes(results);
+    } catch (error) {
+      setOutcomes(null);
+      setRunError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsRunning(false);
     }
@@ -87,6 +92,8 @@ export function LocalDemoPage() {
       <button type="button" disabled={!canRun} onClick={handleRun}>
         {isRunning ? "Parsing..." : "Parse & validate"}
       </button>
+
+      {runError && <p role="alert">{runError}</p>}
 
       {outcomes && (
         <>
