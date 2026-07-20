@@ -3,3 +3,4 @@ dist/
 *.tsbuildinfo
 .env
 docker/pgdata/
+apps/web/public/wasm/

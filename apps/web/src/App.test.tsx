@@ -20,5 +20,8 @@ describe("App", () => {
 
     await user.click(screen.getByRole("link", { name: "Upload" }));
     expect(await screen.findByRole("heading", { name: "Upload IFC Files" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Local Demo" }));
+    expect(await screen.findByRole("heading", { name: "Local Demo" })).toBeInTheDocument();
   });
 });

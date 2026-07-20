@@ -16,12 +16,22 @@ function stripEnumDots(value: unknown): string | null {
 // Buffer-based entry point shared by the Node adapter (below, which reads the
 // file itself) and the browser client (apps/web), which only ever has an
 // in-memory ArrayBuffer from a <input type="file"> — never a filesystem path.
-export async function parseWebIfcBuffer(raw: Uint8Array): Promise<IfcParseResult> {
+//
+// `locateWasm` lets a browser caller override where web-ifc's .wasm binary is
+// fetched from. web-ifc's default lookup (relative to the *importing script's*
+// URL) is Node-build-specific; a Vite-bundled browser build has no filesystem
+// to resolve that path against, so it must supply the real served URL itself
+// (see apps/web/src/local/webIfcWasm.ts). The Node adapter below never passes
+// one, so web-ifc's own Node-condition build resolves its default path as before.
+export async function parseWebIfcBuffer(
+  raw: Uint8Array,
+  locateWasm?: (path: string, prefix: string) => string
+): Promise<IfcParseResult> {
   const start = performance.now();
   assertWellFormedStepFile(new TextDecoder("utf-8").decode(raw));
 
   const ifcApi = new WebIFC.IfcAPI();
-  await ifcApi.Init();
+  await ifcApi.Init(locateWasm, true);
   const modelID = ifcApi.OpenModel(new Uint8Array(raw));
 
   try {

@@ -20,6 +20,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@ifc-qa/ids-validator':
+        specifier: workspace:*
+        version: link:../../packages/ids-validator
+      '@ifc-qa/parser-adapters':
+        specifier: workspace:*
+        version: link:../../packages/parser-adapters
       '@ifc-qa/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
@@ -38,6 +44,9 @@ importers:
       react-router-dom:
         specifier: ^7.18.1
         version: 7.18.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      web-ifc:
+        specifier: ^0.0.77
+        version: 0.0.77
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^6.9.1

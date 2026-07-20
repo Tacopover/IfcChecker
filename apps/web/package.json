@@ -4,18 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "dev": "node scripts/copy-web-ifc-wasm.mjs && vite",
+    "build": "node scripts/copy-web-ifc-wasm.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run"
   },
   "dependencies": {
+    "@ifc-qa/ids-validator": "workspace:*",
+    "@ifc-qa/parser-adapters": "workspace:*",
     "@ifc-qa/shared-types": "workspace:*",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-table": "^8.21.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1"
+    "react-router-dom": "^7.18.1",
+    "web-ifc": "^0.0.77"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
