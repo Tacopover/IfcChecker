@@ -42,6 +42,46 @@ describe("LocalDemoPage", () => {
     expect(submit).toBeEnabled();
   });
 
+  it("tells the user what's still needed while the run button is disabled, updating as fields are filled", async () => {
+    const user = userEvent.setup();
+    render(<LocalDemoPage />);
+
+    expect(screen.getByText(/select an engine/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose an IDS rule set file/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose at least one IFC file/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
+    expect(screen.queryByText(/select an engine/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/choose an IDS rule set file/i)).toBeInTheDocument();
+
+    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-a.ifc"));
+    expect(screen.queryByText(/choose an IDS rule set file/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/choose at least one IFC file/i)).not.toBeInTheDocument();
+  });
+
+  it("resets the engine, files, and results back to the empty state", async () => {
+    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    validateElements.mockReturnValueOnce([]);
+
+    const user = userEvent.setup();
+    render(<LocalDemoPage />);
+
+    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
+    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-a.ifc"));
+    await user.click(screen.getByRole("button", { name: "Parse & validate" }));
+    await screen.findByRole("table", { name: "File results" });
+
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+
+    expect(screen.queryByRole("table", { name: "File results" })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "web-ifc" })).not.toBeChecked();
+    expect((screen.getByLabelText("IDS rule set (XML)") as HTMLInputElement).files).toHaveLength(0);
+    expect((screen.getByLabelText(/IFC files/) as HTMLInputElement).files).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Parse & validate" })).toBeDisabled();
+  });
+
   it("parses uploaded files entirely client-side and renders per-file status plus violations", async () => {
     parseWebIfcBuffer.mockResolvedValueOnce({
       elements: [{ globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} }],

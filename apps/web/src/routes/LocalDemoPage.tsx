@@ -12,9 +12,18 @@ export function LocalDemoPage() {
   const [outcomes, setOutcomes] = useState<LocalFileOutcome[] | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  // Bumped on Reset to remount the two file inputs — clearing their React
+  // state doesn't clear what the native <input type="file"> visually shows,
+  // since its displayed filename isn't controlled by React.
+  const [resetKey, setResetKey] = useState(0);
 
   const tooManyFiles = ifcFiles.length > MAX_FILES;
   const canRun = engine !== "" && idsFile !== null && ifcFiles.length > 0 && !tooManyFiles && !isRunning;
+
+  const missingRequirements: string[] = [];
+  if (engine === "") missingRequirements.push("select an engine");
+  if (idsFile === null) missingRequirements.push("choose an IDS rule set file");
+  if (ifcFiles.length === 0) missingRequirements.push("choose at least one IFC file");
 
   function handleIfcFilesChange(event: ChangeEvent<HTMLInputElement>) {
     setIfcFiles(Array.from(event.target.files ?? []));
@@ -34,6 +43,15 @@ export function LocalDemoPage() {
     } finally {
       setIsRunning(false);
     }
+  }
+
+  function handleReset() {
+    setEngine("");
+    setIdsFile(null);
+    setIfcFiles([]);
+    setOutcomes(null);
+    setRunError(null);
+    setResetKey((key) => key + 1);
   }
 
   const allResults = outcomes?.flatMap((outcome) => outcome.results) ?? [];
@@ -69,6 +87,7 @@ export function LocalDemoPage() {
 
       <label htmlFor="local-ids-file">IDS rule set (XML)</label>
       <input
+        key={`ids-${resetKey}`}
         id="local-ids-file"
         type="file"
         accept=".xml"
@@ -77,6 +96,7 @@ export function LocalDemoPage() {
 
       <label htmlFor="local-ifc-files">IFC files (up to {MAX_FILES})</label>
       <input
+        key={`ifc-${resetKey}`}
         id="local-ifc-files"
         type="file"
         multiple
@@ -91,7 +111,14 @@ export function LocalDemoPage() {
 
       <button type="button" disabled={!canRun} onClick={handleRun}>
         {isRunning ? "Parsing..." : "Parse & validate"}
+      </button>{" "}
+      <button type="button" className="secondary" disabled={isRunning} onClick={handleReset}>
+        Reset
       </button>
+
+      {!canRun && !isRunning && !tooManyFiles && missingRequirements.length > 0 && (
+        <p>To run: {missingRequirements.join(", ")}.</p>
+      )}
 
       {runError && <p role="alert">{runError}</p>}
 
