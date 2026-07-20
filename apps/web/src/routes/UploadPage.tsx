@@ -34,7 +34,7 @@ export function UploadPage() {
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!canSubmit || engine === "") return;
+    if (!canSubmit) return;
     createRunMutation.mutate({ files, ruleSetId, engine });
   }
 
