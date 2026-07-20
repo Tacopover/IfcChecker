@@ -9,7 +9,7 @@ const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
 }));
 const { validateElements } = vi.hoisted(() => ({ validateElements: vi.fn() }));
 
-vi.mock("@ifc-qa/parser-adapters", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
+vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
 vi.mock("@ifc-qa/ids-validator", () => ({ validateElements }));
 
 function makeFile(name: string, content = "ISO-10303-21;") {

@@ -1,5 +1,5 @@
 import type { ElementResult, EngineId } from "@ifc-qa/shared-types";
-import { parseIfcLiteBuffer, parseWebIfcBuffer } from "@ifc-qa/parser-adapters";
+import { parseIfcLiteBuffer, parseWebIfcBuffer } from "@ifc-qa/parser-adapters/browser";
 import { validateElements } from "@ifc-qa/ids-validator";
 import { locateWebIfcWasm } from "./webIfcWasm.js";
 

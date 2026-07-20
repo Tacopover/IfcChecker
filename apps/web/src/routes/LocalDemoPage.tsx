@@ -107,7 +107,7 @@ export function LocalDemoPage() {
                 <tr key={outcome.fileName}>
                   <td>{outcome.fileName}</td>
                   <td>{outcome.status}</td>
-                  <td>{outcome.parseMs ?? "—"}</td>
+                  <td>{outcome.parseMs !== null ? Math.round(outcome.parseMs) : "—"}</td>
                   <td>{outcome.elementCount}</td>
                   <td>{outcome.errorMessage ?? ""}</td>
                 </tr>
