@@ -50,6 +50,7 @@ export function IssueTable({ results }: { results: ResultRow[] }) {
         <label>
           File
           <input
+            type="text"
             aria-label="Filter by file name"
             value={filterValue("fileName")}
             onChange={(e) => table.getColumn("fileName")?.setFilterValue(e.target.value)}
@@ -58,6 +59,7 @@ export function IssueTable({ results }: { results: ResultRow[] }) {
         <label>
           Element type
           <input
+            type="text"
             aria-label="Filter by element type"
             value={filterValue("elementType")}
             onChange={(e) => table.getColumn("elementType")?.setFilterValue(e.target.value)}
@@ -66,6 +68,7 @@ export function IssueTable({ results }: { results: ResultRow[] }) {
         <label>
           Rule
           <input
+            type="text"
             aria-label="Filter by rule id"
             value={filterValue("ruleId")}
             onChange={(e) => table.getColumn("ruleId")?.setFilterValue(e.target.value)}
