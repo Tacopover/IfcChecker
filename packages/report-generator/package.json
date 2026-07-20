@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ifc-qa/shared-types": "workspace:*",
+    "exceljs": "^4.4.0",
     "pdfkit": "^0.19.1"
   },
   "devDependencies": {
