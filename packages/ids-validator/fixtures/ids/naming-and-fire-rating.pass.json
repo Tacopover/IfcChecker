@@ -1,0 +1,15 @@
+[
+  {
+    "globalId": "1a2B3c4D5e6F7g8H9i0Jkl",
+    "ifcType": "IFCWALL",
+    "predefinedType": "STANDARD",
+    "name": "W-001",
+    "attributes": {},
+    "propertySets": {
+      "Pset_WallCommon": {
+        "FireRating": "REI60",
+        "IsExternal": true
+      }
+    }
+  }
+]
