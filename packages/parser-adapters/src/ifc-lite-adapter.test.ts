@@ -1,5 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { IfcLiteAdapter } from "./ifc-lite-adapter.js";
+import { IfcLiteAdapter, parseIfcLiteBuffer } from "./ifc-lite-adapter.js";
 import { fixturePath } from "./fixture-path.js";
 
 describe("IfcLiteAdapter", () => {
@@ -26,5 +27,15 @@ describe("IfcLiteAdapter", () => {
   it("rejects the truncated fixture", async () => {
     const adapter = new IfcLiteAdapter();
     await expect(adapter.parse(fixturePath("corrupt-truncated.ifc"))).rejects.toThrow();
+  });
+});
+
+describe("parseIfcLiteBuffer", () => {
+  it("parses an in-memory buffer the same way the file-based adapter does", async () => {
+    const raw = await readFile(fixturePath("minimal-wall.ifc"));
+    const result = await parseIfcLiteBuffer(raw);
+
+    expect(result.elements).toHaveLength(1);
+    expect(result.elements[0].globalId).toBe("1abc2defGHI3jkl4mno5pq");
   });
 });

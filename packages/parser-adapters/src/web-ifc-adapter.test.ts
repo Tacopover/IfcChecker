@@ -1,5 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { WebIfcAdapter } from "./web-ifc-adapter.js";
+import { WebIfcAdapter, parseWebIfcBuffer } from "./web-ifc-adapter.js";
 import { fixturePath } from "./fixture-path.js";
 
 describe("WebIfcAdapter", () => {
@@ -26,5 +27,15 @@ describe("WebIfcAdapter", () => {
   it("rejects the truncated fixture", async () => {
     const adapter = new WebIfcAdapter();
     await expect(adapter.parse(fixturePath("corrupt-truncated.ifc"))).rejects.toThrow();
+  });
+});
+
+describe("parseWebIfcBuffer", () => {
+  it("parses an in-memory buffer the same way the file-based adapter does", async () => {
+    const raw = await readFile(fixturePath("minimal-wall.ifc"));
+    const result = await parseWebIfcBuffer(raw);
+
+    expect(result.elements).toHaveLength(1);
+    expect(result.elements[0].globalId).toBe("1abc2defGHI3jkl4mno5pq");
   });
 });
