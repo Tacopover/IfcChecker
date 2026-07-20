@@ -50,7 +50,8 @@ describe("generateExcelReport", () => {
     expect(result.length).toBeGreaterThan(0);
 
     const workbook = new Workbook();
-    await workbook.xlsx.load(result);
+    // see the cast note in excel-report.ts: exceljs's own .d.ts shadows the real Buffer type
+    await workbook.xlsx.load(result as unknown as ArrayBuffer);
 
     const resultsSheet = workbook.getWorksheet("Results");
     if (!resultsSheet) throw new Error("Results worksheet missing");

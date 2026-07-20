@@ -33,5 +33,8 @@ export async function generateExcelReport(data: RunReportData): Promise<Buffer> 
   ];
   resultsSheet.addRows(sortResults(data.results));
 
-  return workbook.xlsx.writeBuffer();
+  // exceljs's own index.d.ts declares a top-level `Buffer extends ArrayBuffer {}`
+  // that shadows Node's real Buffer within that file's scope, so writeBuffer()'s
+  // declared return type structurally mismatches the real Buffer it returns at runtime.
+  return workbook.xlsx.writeBuffer() as unknown as Promise<Buffer>;
 }
