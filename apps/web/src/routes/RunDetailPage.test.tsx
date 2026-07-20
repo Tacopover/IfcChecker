@@ -4,7 +4,7 @@ import { screen } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { server } from "../test/mocks/server";
 import { renderWithProviders } from "../test/renderWithProviders";
-import { completedStatusResponse, runningStatusResponse } from "../test/mocks/fixtures";
+import { completedStatusResponse, runningStatusResponse, runResultsFixture } from "../test/mocks/fixtures";
 import { RunDetailPage } from "./RunDetailPage";
 
 describe("RunDetailPage", () => {
@@ -77,5 +77,34 @@ describe("RunDetailPage", () => {
     server.use(http.get("/runs/:runId/status", () => new HttpResponse(null, { status: 500 })));
     renderWithProviders(<RunDetailPage />, { route: "/runs/run-1", path: "/runs/:runId" });
     expect(await screen.findByRole("alert")).toHaveTextContent("500");
+  });
+
+  it("fetches and renders the results table once the run is completed", async () => {
+    server.use(
+      http.get("/runs/:runId/status", () => HttpResponse.json(completedStatusResponse)),
+      http.get("/runs/:runId/results", () => HttpResponse.json(runResultsFixture))
+    );
+
+    renderWithProviders(<RunDetailPage />, { route: "/runs/run-1", path: "/runs/:runId" });
+
+    await screen.findByText("Status: completed");
+    expect(await screen.findByText("naming-prefix")).toBeInTheDocument();
+    expect(screen.getByText("Name must start with 'W-'")).toBeInTheDocument();
+  });
+
+  it("does not fetch results while the run is still running", async () => {
+    let resultsRequests = 0;
+    server.use(
+      http.get("/runs/:runId/status", () => HttpResponse.json(runningStatusResponse)),
+      http.get("/runs/:runId/results", () => {
+        resultsRequests += 1;
+        return HttpResponse.json(runResultsFixture);
+      })
+    );
+
+    renderWithProviders(<RunDetailPage />, { route: "/runs/run-1", path: "/runs/:runId" });
+
+    await screen.findByText("Status: running");
+    expect(resultsRequests).toBe(0);
   });
 });
