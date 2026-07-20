@@ -4,6 +4,7 @@ import {
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnFiltersState,
@@ -23,6 +24,11 @@ const columns = [
   columnHelper.accessor("message", { header: "Message" }),
 ];
 
+// A run can produce thousands of violations across a large batch; rendering
+// every row into the DOM unconditionally risks a slow/janky table at that
+// scale, so results are paginated instead.
+const PAGE_SIZE = 25;
+
 export function IssueTable({ results }: { results: ResultRow[] }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -33,11 +39,13 @@ export function IssueTable({ results }: { results: ResultRow[] }) {
     data,
     columns,
     state: { sorting, columnFilters },
+    initialState: { pagination: { pageSize: PAGE_SIZE } },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
   });
 
   function filterValue(columnId: string): string {
@@ -121,6 +129,30 @@ export function IssueTable({ results }: { results: ResultRow[] }) {
       </table>
 
       {table.getRowModel().rows.length === 0 && <p>No issues match the current filters.</p>}
+
+      {table.getPageCount() > 1 && (
+        <div>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage()}
+          >
+            Previous page
+          </button>{" "}
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => table.nextPage()}
+            disabled={!table.getCanNextPage()}
+          >
+            Next page
+          </button>{" "}
+          <span>
+            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
