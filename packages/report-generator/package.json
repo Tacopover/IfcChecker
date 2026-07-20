@@ -9,9 +9,12 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@ifc-qa/shared-types": "workspace:*"
+    "@ifc-qa/shared-types": "workspace:*",
+    "pdfkit": "^0.19.1"
   },
   "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/pdfkit": "^0.17.6",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   }
