@@ -1,5 +1,6 @@
-import { IfcParser, extractPropertiesOnDemand, extractAllEntityAttributes } from "@ifc-lite/parser";
-import type { NormalizedElement } from "@ifc-qa/shared-types";
+import { IfcParser, extractPropertiesOnDemand, extractAllEntityAttributes, type IfcDataStore } from "@ifc-lite/parser";
+import { IfcTypeEnumToString, type SpatialNode } from "@ifc-lite/data";
+import type { ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
 import type { IfcParseResult } from "./types.js";
 import { ELEMENT_TYPE_NAMES } from "./element-types.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
@@ -8,6 +9,39 @@ import { normalizePropertyValue } from "./normalize-property-value.js";
 function stripEnumDots(value: unknown): string | null {
   const normalized = normalizePropertyValue(value);
   return typeof normalized === "string" && normalized !== "" ? normalized.replace(/^\.|\.$/g, "") : null;
+}
+
+// @ifc-lite/parser already builds the project/site/building/storey tree
+// (store.spatialHierarchy.project) as part of parseColumnar() — this just
+// reshapes it into our engine-agnostic ModelStructureNode, matching what
+// web-ifc-buffer.ts derives by hand from raw IFCRELAGGREGATES/
+// IFCRELCONTAINEDINSPATIALSTRUCTURE relationships.
+function toModelStructureNode(
+  node: SpatialNode,
+  elementTypeByExpressId: Map<number, string>
+): ModelStructureNode {
+  const elementCounts: Record<string, number> = {};
+  for (const expressId of node.elements) {
+    const ifcType = elementTypeByExpressId.get(expressId);
+    if (!ifcType) continue;
+    elementCounts[ifcType] = (elementCounts[ifcType] ?? 0) + 1;
+  }
+
+  return {
+    expressId: node.expressId,
+    ifcType: IfcTypeEnumToString(node.type).toUpperCase(),
+    name: node.name !== "" ? node.name : null,
+    elementCounts,
+    children: node.children.map((child) => toModelStructureNode(child, elementTypeByExpressId)),
+  };
+}
+
+function buildIfcLiteModelStructure(
+  store: IfcDataStore,
+  elementTypeByExpressId: Map<number, string>
+): ModelStructureNode | null {
+  const project = store.spatialHierarchy?.project;
+  return project ? toModelStructureNode(project, elementTypeByExpressId) : null;
 }
 
 // Buffer-based entry point shared by the Node adapter (ifc-lite-adapter.ts,
@@ -25,11 +59,13 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
   );
 
   const elements: NormalizedElement[] = [];
+  const elementTypeByExpressId = new Map<number, string>();
 
   for (const typeName of ELEMENT_TYPE_NAMES) {
     const expressIds = store.entityIndex.byType.get(typeName) ?? [];
 
     for (const expressId of expressIds) {
+      elementTypeByExpressId.set(expressId, typeName);
       const psets = extractPropertiesOnDemand(store, expressId);
       const propertySets: Record<string, Record<string, string | number | boolean | null>> = {};
       for (const pset of psets) {
@@ -66,5 +102,6 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
     }
   }
 
-  return { elements, parseMs: performance.now() - start };
+  const modelStructure = buildIfcLiteModelStructure(store, elementTypeByExpressId);
+  return { elements, parseMs: performance.now() - start, modelStructure };
 }

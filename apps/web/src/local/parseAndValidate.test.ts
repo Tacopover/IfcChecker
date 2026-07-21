@@ -27,9 +27,17 @@ beforeEach(() => {
 
 describe("parseAndValidateFile", () => {
   it("parses with the selected engine and maps violations to ElementResult rows tagged with the file name", async () => {
+    const modelStructure = {
+      expressId: 1,
+      ifcType: "IFCPROJECT",
+      name: "Fixture Project",
+      elementCounts: {},
+      children: [],
+    };
     parseWebIfcBuffer.mockResolvedValueOnce({
       elements: [{ globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} }],
       parseMs: 12,
+      modelStructure,
     });
     validateElements.mockReturnValueOnce([
       { elementGlobalId: "g1", elementType: "IFCWALL", ruleId: "naming-prefix", severity: "error", message: "Name must start with 'W-'" },
@@ -58,6 +66,7 @@ describe("parseAndValidateFile", () => {
         message: "Name must start with 'W-'",
       }),
     ]);
+    expect(outcome.modelStructure).toEqual(modelStructure);
   });
 
   it("routes to the ifc-lite engine when selected", async () => {
@@ -79,6 +88,7 @@ describe("parseAndValidateFile", () => {
     expect(outcome.errorMessage).toBe("unexpected EOF");
     expect(outcome.parseMs).toBeNull();
     expect(outcome.results).toEqual([]);
+    expect(outcome.modelStructure).toBeNull();
   });
 });
 

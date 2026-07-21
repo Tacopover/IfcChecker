@@ -1,7 +1,8 @@
-import { useState, type ChangeEvent } from "react";
+import { Fragment, useState, type ChangeEvent } from "react";
 import type { EngineId } from "@ifc-qa/shared-types";
 import { parseAndValidateFiles, type LocalFileOutcome } from "../local/parseAndValidate.js";
 import { IssueTable } from "../components/IssueTable";
+import { ModelStructureTree } from "../components/ModelStructureTree";
 
 const MAX_FILES = 20;
 
@@ -14,6 +15,7 @@ export function IfcCheckerPage() {
   const [idsFile, setIdsFile] = useState<File | null>(null);
   const [ifcFiles, setIfcFiles] = useState<File[]>([]);
   const [outcomes, setOutcomes] = useState<LocalFileOutcome[] | null>(null);
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [isRunning, setIsRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   // Bumped on Reset to remount the IDS file input — clearing its React state
@@ -46,6 +48,18 @@ export function IfcCheckerPage() {
     setIfcFiles((prev) => prev.filter((file) => fileKey(file) !== key));
   }
 
+  function toggleStructureExpanded(fileName: string) {
+    setExpandedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileName)) {
+        next.delete(fileName);
+      } else {
+        next.add(fileName);
+      }
+      return next;
+    });
+  }
+
   async function handleRun() {
     if (!canRun) return;
     setIsRunning(true);
@@ -54,6 +68,7 @@ export function IfcCheckerPage() {
       const idsXml = await idsFile.text();
       const results = await parseAndValidateFiles(ifcFiles, idsXml, engine);
       setOutcomes(results);
+      setExpandedFiles(new Set());
     } catch (error) {
       setOutcomes(null);
       setRunError(error instanceof Error ? error.message : String(error));
@@ -68,6 +83,7 @@ export function IfcCheckerPage() {
     setIfcFiles([]);
     setOutcomes(null);
     setRunError(null);
+    setExpandedFiles(new Set());
     setResetKey((key) => key + 1);
   }
 
@@ -165,18 +181,45 @@ export function IfcCheckerPage() {
                 <th>Parse time (ms)</th>
                 <th>Elements</th>
                 <th>Error</th>
+                <th>Structure</th>
               </tr>
             </thead>
             <tbody>
-              {outcomes.map((outcome) => (
-                <tr key={outcome.fileName}>
-                  <td>{outcome.fileName}</td>
-                  <td>{outcome.status}</td>
-                  <td>{outcome.parseMs !== null ? Math.round(outcome.parseMs) : "—"}</td>
-                  <td>{outcome.elementCount}</td>
-                  <td>{outcome.errorMessage ?? ""}</td>
-                </tr>
-              ))}
+              {outcomes.map((outcome) => {
+                const isExpanded = expandedFiles.has(outcome.fileName);
+                return (
+                  <Fragment key={outcome.fileName}>
+                    <tr>
+                      <td>{outcome.fileName}</td>
+                      <td>{outcome.status}</td>
+                      <td>{outcome.parseMs !== null ? Math.round(outcome.parseMs) : "—"}</td>
+                      <td>{outcome.elementCount}</td>
+                      <td>{outcome.errorMessage ?? ""}</td>
+                      <td>
+                        {outcome.modelStructure && (
+                          <button
+                            type="button"
+                            className="secondary"
+                            aria-expanded={isExpanded}
+                            onClick={() => toggleStructureExpanded(outcome.fileName)}
+                          >
+                            {isExpanded
+                              ? `Hide structure for ${outcome.fileName}`
+                              : `Show structure for ${outcome.fileName}`}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && outcome.modelStructure && (
+                      <tr>
+                        <td colSpan={6}>
+                          <ModelStructureTree node={outcome.modelStructure} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
 

@@ -151,6 +151,63 @@ describe("IfcCheckerPage", () => {
     expect(screen.getByText("Name must start with 'W-'")).toBeInTheDocument();
   });
 
+  it("lets the user expand a parsed file's row to see its project/site/building/storey structure", async () => {
+    parseWebIfcBuffer.mockResolvedValueOnce({
+      elements: [],
+      parseMs: 5,
+      modelStructure: {
+        expressId: 1,
+        ifcType: "IFCPROJECT",
+        name: "Fixture Project",
+        elementCounts: {},
+        children: [
+          {
+            expressId: 14,
+            ifcType: "IFCBUILDINGSTOREY",
+            name: "Level 1",
+            elementCounts: { IFCWALL: 1 },
+            children: [],
+          },
+        ],
+      },
+    });
+    validateElements.mockReturnValueOnce([]);
+
+    const user = userEvent.setup();
+    render(<IfcCheckerPage />);
+
+    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
+    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-a.ifc"));
+    await user.click(screen.getByRole("button", { name: "Parse & validate" }));
+
+    await screen.findByRole("table", { name: "File results" });
+    expect(screen.queryByRole("list", { name: "Model structure" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show structure for model-a.ifc" }));
+    expect(screen.getByText("Fixture Project")).toBeInTheDocument();
+    expect(screen.getByText("Level 1")).toBeInTheDocument();
+    expect(screen.getByText("IFCWALL: 1")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Hide structure for model-a.ifc" }));
+    expect(screen.queryByRole("list", { name: "Model structure" })).not.toBeInTheDocument();
+  });
+
+  it("doesn't offer to show structure for a file that failed to parse", async () => {
+    parseWebIfcBuffer.mockRejectedValueOnce(new Error("unexpected EOF"));
+
+    const user = userEvent.setup();
+    render(<IfcCheckerPage />);
+
+    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
+    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText(/IFC files/), makeFile("corrupt.ifc"));
+    await user.click(screen.getByRole("button", { name: "Parse & validate" }));
+
+    expect(await screen.findByText("failed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show structure/ })).not.toBeInTheDocument();
+  });
+
   it("shows a failed status and error message for a file that fails to parse, without blocking other files", async () => {
     parseWebIfcBuffer
       .mockRejectedValueOnce(new Error("unexpected EOF"))

@@ -1,8 +1,9 @@
-import type { NormalizedElement } from "@ifc-qa/shared-types";
+import type { ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
 
 export interface IfcParseResult {
   elements: NormalizedElement[];
   parseMs: number;
+  modelStructure: ModelStructureNode | null;
 }
 
 export interface IfcParserAdapter {

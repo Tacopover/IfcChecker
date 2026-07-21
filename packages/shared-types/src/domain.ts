@@ -18,6 +18,24 @@ export const NormalizedElementSchema = z.object({
 });
 export type NormalizedElement = z.infer<typeof NormalizedElementSchema>;
 
+export interface ModelStructureNode {
+  expressId: number;
+  ifcType: string;
+  name: string | null;
+  elementCounts: Record<string, number>;
+  children: ModelStructureNode[];
+}
+
+export const ModelStructureNodeSchema: z.ZodType<ModelStructureNode> = z.lazy(() =>
+  z.object({
+    expressId: z.number(),
+    ifcType: z.string(),
+    name: z.string().nullable(),
+    elementCounts: z.record(z.string(), z.number()),
+    children: z.array(ModelStructureNodeSchema),
+  })
+);
+
 export const EngineIdSchema = z.enum(["web-ifc", "ifc-lite"]);
 export type EngineId = z.infer<typeof EngineIdSchema>;
 

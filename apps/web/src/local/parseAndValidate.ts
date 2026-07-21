@@ -1,4 +1,4 @@
-import type { ElementResult, EngineId, NormalizedElement } from "@ifc-qa/shared-types";
+import type { ElementResult, EngineId, ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
 import { parseIfcLiteBuffer, parseWebIfcBuffer } from "@ifc-qa/parser-adapters/browser";
 import { parseIdsXml, validateElements } from "@ifc-qa/ids-validator";
 import { locateWebIfcWasm } from "./webIfcWasm.js";
@@ -25,11 +25,16 @@ export interface LocalFileOutcome {
   errorMessage: string | null;
   elementCount: number;
   results: Array<ElementResult & { fileName: string }>;
+  modelStructure: ModelStructureNode | null;
 }
 
 const PARSE_BY_ENGINE: Record<
   EngineId,
-  (buffer: Uint8Array) => Promise<{ elements: NormalizedElement[]; parseMs: number }>
+  (buffer: Uint8Array) => Promise<{
+    elements: NormalizedElement[];
+    parseMs: number;
+    modelStructure: ModelStructureNode | null;
+  }>
 > = {
   "web-ifc": (buffer) => parseWebIfcBuffer(buffer, locateWebIfcWasm),
   "ifc-lite": parseIfcLiteBuffer,
@@ -42,7 +47,7 @@ export async function parseAndValidateFile(
 ): Promise<LocalFileOutcome> {
   try {
     const buffer = new Uint8Array(await file.arrayBuffer());
-    const { elements, parseMs } = await PARSE_BY_ENGINE[engine](buffer);
+    const { elements, parseMs, modelStructure } = await PARSE_BY_ENGINE[engine](buffer);
     const violations = validateElements(elements, idsXml);
 
     // No real FileJob exists in this client-only path — file.name stands in
@@ -66,6 +71,7 @@ export async function parseAndValidateFile(
       errorMessage: null,
       elementCount: elements.length,
       results,
+      modelStructure,
     };
   } catch (error) {
     return {
@@ -75,6 +81,7 @@ export async function parseAndValidateFile(
       errorMessage: error instanceof Error ? error.message : String(error),
       elementCount: 0,
       results: [],
+      modelStructure: null,
     };
   }
 }

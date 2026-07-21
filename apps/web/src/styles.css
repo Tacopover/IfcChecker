@@ -187,6 +187,47 @@ button.remove-file:hover {
   background: var(--error-bg);
 }
 
+/* --- Model structure tree --- */
+
+.model-structure-tree,
+.model-structure-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1.25rem;
+  font-size: 0.9rem;
+}
+
+.model-structure-tree {
+  padding-left: 0;
+  text-align: left;
+}
+
+.model-structure-tree li {
+  margin: 0.35rem 0;
+}
+
+.model-structure-tree .node-type {
+  display: inline-block;
+  min-width: 4.5rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.model-structure-tree .node-name {
+  font-weight: 500;
+}
+
+.model-structure-tree ul.element-counts {
+  padding-left: 1.25rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 /* --- Alerts --- */
 
 [role="alert"] {

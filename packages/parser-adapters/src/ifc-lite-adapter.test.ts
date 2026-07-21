@@ -38,4 +38,27 @@ describe("parseIfcLiteBuffer", () => {
     expect(result.elements).toHaveLength(1);
     expect(result.elements[0].globalId).toBe("1abc2defGHI3jkl4mno5pq");
   });
+
+  it("builds the project/site/building/storey tree with per-storey element counts", async () => {
+    const raw = await readFile(fixturePath("minimal-wall.ifc"));
+    const result = await parseIfcLiteBuffer(raw);
+
+    const project = result.modelStructure;
+    expect(project?.ifcType).toBe("IFCPROJECT");
+    expect(project?.name).toBe("Fixture Project");
+
+    const site = project?.children[0];
+    expect(site?.ifcType).toBe("IFCSITE");
+    expect(site?.name).toBe("Fixture Site");
+
+    const building = site?.children[0];
+    expect(building?.ifcType).toBe("IFCBUILDING");
+    expect(building?.name).toBe("Fixture Building");
+
+    const storey = building?.children[0];
+    expect(storey?.ifcType).toBe("IFCBUILDINGSTOREY");
+    expect(storey?.name).toBe("Level 1");
+    expect(storey?.elementCounts).toEqual({ IFCWALL: 1 });
+    expect(storey?.children).toEqual([]);
+  });
 });

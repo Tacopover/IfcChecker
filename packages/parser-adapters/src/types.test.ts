@@ -15,6 +15,7 @@ class FakeAdapter implements IfcParserAdapter {
         },
       ],
       parseMs: 1,
+      modelStructure: null,
     };
   }
 }

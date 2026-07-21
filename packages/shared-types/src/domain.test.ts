@@ -3,6 +3,7 @@ import {
   NormalizedElementSchema,
   ElementResultSchema,
   EngineIdSchema,
+  ModelStructureNodeSchema,
 } from "./domain.js";
 
 describe("NormalizedElementSchema", () => {
@@ -35,6 +36,54 @@ describe("EngineIdSchema", () => {
     expect(EngineIdSchema.safeParse("web-ifc").success).toBe(true);
     expect(EngineIdSchema.safeParse("ifc-lite").success).toBe(true);
     expect(EngineIdSchema.safeParse("revit").success).toBe(false);
+  });
+});
+
+describe("ModelStructureNodeSchema", () => {
+  it("accepts a nested project/site/building/storey tree with per-storey element counts", () => {
+    const parsed = ModelStructureNodeSchema.parse({
+      expressId: 1,
+      ifcType: "IFCPROJECT",
+      name: "Fixture Project",
+      elementCounts: {},
+      children: [
+        {
+          expressId: 11,
+          ifcType: "IFCSITE",
+          name: "Fixture Site",
+          elementCounts: {},
+          children: [
+            {
+              expressId: 13,
+              ifcType: "IFCBUILDING",
+              name: "Fixture Building",
+              elementCounts: {},
+              children: [
+                {
+                  expressId: 14,
+                  ifcType: "IFCBUILDINGSTOREY",
+                  name: "Level 1",
+                  elementCounts: { IFCWALL: 1 },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(parsed.children[0].children[0].children[0].elementCounts).toEqual({ IFCWALL: 1 });
+  });
+
+  it("rejects a node missing its children array", () => {
+    const result = ModelStructureNodeSchema.safeParse({
+      expressId: 1,
+      ifcType: "IFCPROJECT",
+      name: null,
+      elementCounts: {},
+    });
+    expect(result.success).toBe(false);
   });
 });
 
