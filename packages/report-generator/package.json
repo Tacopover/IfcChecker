@@ -1,0 +1,22 @@
+{
+  "name": "@ifc-qa/report-generator",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ifc-qa/shared-types": "workspace:*",
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.19.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/pdfkit": "^0.17.6",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

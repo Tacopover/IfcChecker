@@ -1,0 +1,24 @@
+{
+  "name": "ifc-qa-tool",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "db:generate": "pnpm --filter @ifc-qa/db run db:generate",
+    "db:migrate": "pnpm --filter @ifc-qa/db run db:migrate"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.10"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/node": "^22.10.1"
+    }
+  }
+}
