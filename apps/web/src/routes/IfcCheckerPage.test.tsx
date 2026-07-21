@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { LocalDemoPage } from "./LocalDemoPage";
+import { IfcCheckerPage } from "./IfcCheckerPage";
 
 const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
   parseWebIfcBuffer: vi.fn(),
@@ -24,10 +24,10 @@ beforeEach(() => {
   parseIdsXml.mockReturnValue([{ name: "fake-spec", applicabilityEntityNames: [], requirements: [] }]);
 });
 
-describe("LocalDemoPage", () => {
+describe("IfcCheckerPage", () => {
   it("disables the run button until an engine, an IDS file, and at least one IFC file are chosen", async () => {
     const user = userEvent.setup();
-    render(<LocalDemoPage />);
+    render(<IfcCheckerPage />);
 
     const submit = screen.getByRole("button", { name: "Parse & validate" });
     expect(submit).toBeDisabled();
@@ -44,7 +44,7 @@ describe("LocalDemoPage", () => {
 
   it("tells the user what's still needed while the run button is disabled, updating as fields are filled", async () => {
     const user = userEvent.setup();
-    render(<LocalDemoPage />);
+    render(<IfcCheckerPage />);
 
     expect(screen.getByText(/select an engine/i)).toBeInTheDocument();
     expect(screen.getByText(/choose an IDS rule set file/i)).toBeInTheDocument();
@@ -60,12 +60,56 @@ describe("LocalDemoPage", () => {
     expect(screen.queryByText(/choose at least one IFC file/i)).not.toBeInTheDocument();
   });
 
+  it("lists every selected IFC file and lets individual files be removed", async () => {
+    const user = userEvent.setup();
+    render(<IfcCheckerPage />);
+
+    await user.upload(screen.getByLabelText(/IFC files/), [makeFile("model-a.ifc"), makeFile("model-b.ifc")]);
+
+    const fileList = screen.getByRole("list", { name: "Selected IFC files" });
+    expect(within(fileList).getByText("model-a.ifc")).toBeInTheDocument();
+    expect(within(fileList).getByText("model-b.ifc")).toBeInTheDocument();
+
+    await user.click(within(fileList).getByRole("button", { name: "Remove model-a.ifc" }));
+
+    expect(within(fileList).queryByText("model-a.ifc")).not.toBeInTheDocument();
+    expect(within(fileList).getByText("model-b.ifc")).toBeInTheDocument();
+  });
+
+  it("re-disables the run button and shows the hint again once the last IFC file is removed", async () => {
+    const user = userEvent.setup();
+    render(<IfcCheckerPage />);
+
+    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
+    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-a.ifc"));
+    expect(screen.getByRole("button", { name: "Parse & validate" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Remove model-a.ifc" }));
+
+    expect(screen.getByRole("button", { name: "Parse & validate" })).toBeDisabled();
+    expect(screen.getByText(/choose at least one IFC file/i)).toBeInTheDocument();
+  });
+
+  it("adds newly chosen IFC files to the existing selection instead of replacing it", async () => {
+    const user = userEvent.setup();
+    render(<IfcCheckerPage />);
+
+    const ifcInput = screen.getByLabelText(/IFC files/);
+    await user.upload(ifcInput, makeFile("model-a.ifc"));
+    await user.upload(ifcInput, makeFile("model-b.ifc"));
+
+    const fileList = screen.getByRole("list", { name: "Selected IFC files" });
+    expect(within(fileList).getByText("model-a.ifc")).toBeInTheDocument();
+    expect(within(fileList).getByText("model-b.ifc")).toBeInTheDocument();
+  });
+
   it("resets the engine, files, and results back to the empty state", async () => {
     parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateElements.mockReturnValueOnce([]);
 
     const user = userEvent.setup();
-    render(<LocalDemoPage />);
+    render(<IfcCheckerPage />);
 
     await user.click(screen.getByRole("radio", { name: "web-ifc" }));
     await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
@@ -79,6 +123,7 @@ describe("LocalDemoPage", () => {
     expect(screen.getByRole("radio", { name: "web-ifc" })).not.toBeChecked();
     expect((screen.getByLabelText("IDS rule set (XML)") as HTMLInputElement).files).toHaveLength(0);
     expect((screen.getByLabelText(/IFC files/) as HTMLInputElement).files).toHaveLength(0);
+    expect(screen.queryByRole("list", { name: "Selected IFC files" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Parse & validate" })).toBeDisabled();
   });
 
@@ -92,7 +137,7 @@ describe("LocalDemoPage", () => {
     ]);
 
     const user = userEvent.setup();
-    render(<LocalDemoPage />);
+    render(<IfcCheckerPage />);
 
     await user.click(screen.getByRole("radio", { name: "web-ifc" }));
     await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
@@ -113,7 +158,7 @@ describe("LocalDemoPage", () => {
     validateElements.mockReturnValue([]);
 
     const user = userEvent.setup();
-    render(<LocalDemoPage />);
+    render(<IfcCheckerPage />);
 
     await user.click(screen.getByRole("radio", { name: "web-ifc" }));
     await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
@@ -130,7 +175,7 @@ describe("LocalDemoPage", () => {
     parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
     const user = userEvent.setup();
-    render(<LocalDemoPage />);
+    render(<IfcCheckerPage />);
 
     await user.click(screen.getByRole("radio", { name: "web-ifc" }));
     await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("not-really-ids.xml", "<not-ids/>"));
@@ -143,7 +188,7 @@ describe("LocalDemoPage", () => {
 
   it("shows an error and disables the button when more than 20 IFC files are selected", async () => {
     const user = userEvent.setup();
-    render(<LocalDemoPage />);
+    render(<IfcCheckerPage />);
 
     await user.click(screen.getByRole("radio", { name: "web-ifc" }));
     await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));

@@ -5,16 +5,22 @@ import { IssueTable } from "../components/IssueTable";
 
 const MAX_FILES = 20;
 
-export function LocalDemoPage() {
+function fileKey(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+export function IfcCheckerPage() {
   const [engine, setEngine] = useState<EngineId | "">("");
   const [idsFile, setIdsFile] = useState<File | null>(null);
   const [ifcFiles, setIfcFiles] = useState<File[]>([]);
   const [outcomes, setOutcomes] = useState<LocalFileOutcome[] | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
-  // Bumped on Reset to remount the two file inputs — clearing their React
-  // state doesn't clear what the native <input type="file"> visually shows,
-  // since its displayed filename isn't controlled by React.
+  // Bumped on Reset to remount the IDS file input — clearing its React state
+  // doesn't clear what the native <input type="file"> visually shows, since
+  // its displayed filename isn't controlled by React. The IFC input is
+  // cleared after every change instead (see handleIfcFilesChange), so it
+  // doesn't need remounting.
   const [resetKey, setResetKey] = useState(0);
 
   const tooManyFiles = ifcFiles.length > MAX_FILES;
@@ -26,7 +32,18 @@ export function LocalDemoPage() {
   if (ifcFiles.length === 0) missingRequirements.push("choose at least one IFC file");
 
   function handleIfcFilesChange(event: ChangeEvent<HTMLInputElement>) {
-    setIfcFiles(Array.from(event.target.files ?? []));
+    const newFiles = Array.from(event.target.files ?? []);
+    setIfcFiles((prev) => {
+      const existingKeys = new Set(prev.map(fileKey));
+      return [...prev, ...newFiles.filter((file) => !existingKeys.has(fileKey(file)))];
+    });
+    // Clear the input so picking files again adds to the list instead of
+    // being a no-op (the browser won't fire onChange for a repeat selection).
+    event.target.value = "";
+  }
+
+  function handleRemoveIfcFile(key: string) {
+    setIfcFiles((prev) => prev.filter((file) => fileKey(file) !== key));
   }
 
   async function handleRun() {
@@ -58,7 +75,7 @@ export function LocalDemoPage() {
 
   return (
     <section>
-      <h1>Local Demo</h1>
+      <h1>Ifc Checker</h1>
       <p>Parse and validate IFC files entirely in your browser — no server, no upload.</p>
 
       <fieldset>
@@ -95,18 +112,32 @@ export function LocalDemoPage() {
       />
 
       <label htmlFor="local-ifc-files">IFC files (up to {MAX_FILES})</label>
-      <input
-        key={`ifc-${resetKey}`}
-        id="local-ifc-files"
-        type="file"
-        multiple
-        accept=".ifc"
-        onChange={handleIfcFilesChange}
-      />
+      <input id="local-ifc-files" type="file" multiple accept=".ifc" onChange={handleIfcFilesChange} />
       {tooManyFiles && (
         <p role="alert">
           Select up to {MAX_FILES} files ({ifcFiles.length} selected).
         </p>
+      )}
+
+      {ifcFiles.length > 0 && (
+        <ul aria-label="Selected IFC files">
+          {ifcFiles.map((file) => {
+            const key = fileKey(file);
+            return (
+              <li key={key}>
+                <span>{file.name}</span>
+                <button
+                  type="button"
+                  className="remove-file"
+                  aria-label={`Remove ${file.name}`}
+                  onClick={() => handleRemoveIfcFile(key)}
+                >
+                  ×
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       <button type="button" disabled={!canRun} onClick={handleRun}>
