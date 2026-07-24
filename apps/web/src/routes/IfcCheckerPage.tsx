@@ -1,6 +1,6 @@
-import { Fragment, useState, type ChangeEvent } from "react";
+import { Fragment, useRef, useState, type ChangeEvent } from "react";
 import type { EngineId } from "@ifc-qa/shared-types";
-import { parseAndValidateFiles, type LocalFileOutcome } from "../local/parseAndValidate.js";
+import { parseAndValidateFiles, type LocalFileOutcome, type ParseProgress } from "../local/parseAndValidate.js";
 import { IssueTable } from "../components/IssueTable";
 import { ModelStructureTree } from "../components/ModelStructureTree";
 
@@ -18,6 +18,9 @@ export function IfcCheckerPage() {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [isRunning, setIsRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ParseProgress | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const tickIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   // Bumped on Reset to remount the IDS file input — clearing its React state
   // doesn't clear what the native <input type="file"> visually shows, since
   // its displayed filename isn't controlled by React. The IFC input is
@@ -64,16 +67,26 @@ export function IfcCheckerPage() {
     if (!canRun) return;
     setIsRunning(true);
     setRunError(null);
+    setProgress(null);
+    setElapsedSeconds(0);
     try {
       const idsXml = await idsFile.text();
-      const results = await parseAndValidateFiles(ifcFiles, idsXml, engine);
+      const results = await parseAndValidateFiles(ifcFiles, idsXml, engine, (nextProgress) => {
+        clearInterval(tickIntervalRef.current);
+        setProgress(nextProgress);
+        setElapsedSeconds(0);
+        tickIntervalRef.current = setInterval(() => setElapsedSeconds((seconds) => seconds + 1), 1000);
+      });
       setOutcomes(results);
       setExpandedFiles(new Set());
     } catch (error) {
       setOutcomes(null);
       setRunError(error instanceof Error ? error.message : String(error));
     } finally {
+      clearInterval(tickIntervalRef.current);
       setIsRunning(false);
+      setProgress(null);
+      setElapsedSeconds(0);
     }
   }
 
@@ -165,6 +178,12 @@ export function IfcCheckerPage() {
 
       {!canRun && !isRunning && !tooManyFiles && missingRequirements.length > 0 && (
         <p>To run: {missingRequirements.join(", ")}.</p>
+      )}
+
+      {isRunning && progress && (
+        <p role="status">
+          Parsing {progress.index} of {progress.total}: {progress.fileName}… ({elapsedSeconds}s elapsed)
+        </p>
       )}
 
       {runError && <p role="alert">{runError}</p>}

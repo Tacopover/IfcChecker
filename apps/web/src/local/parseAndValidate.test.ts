@@ -119,4 +119,27 @@ describe("parseAndValidateFiles", () => {
 
     expect(parseWebIfcBuffer).not.toHaveBeenCalled();
   });
+
+  it("reports progress for each file before it starts parsing, in order", async () => {
+    parseWebIfcBuffer
+      .mockResolvedValueOnce({ elements: [], parseMs: 3 })
+      .mockResolvedValueOnce({ elements: [], parseMs: 7 });
+    validateElements.mockReturnValue([]);
+
+    const onProgress = vi.fn();
+    await parseAndValidateFiles([makeFile("a.ifc"), makeFile("b.ifc")], "<ids/>", "web-ifc", onProgress);
+
+    expect(onProgress).toHaveBeenNthCalledWith(1, { fileName: "a.ifc", index: 1, total: 2 });
+    expect(onProgress).toHaveBeenNthCalledWith(2, { fileName: "b.ifc", index: 2, total: 2 });
+  });
+
+  it("still reports progress for a file that goes on to fail", async () => {
+    parseWebIfcBuffer.mockRejectedValueOnce(new Error("bad file"));
+
+    const onProgress = vi.fn();
+    const outcomes = await parseAndValidateFiles([makeFile("a.ifc")], "<ids/>", "web-ifc", onProgress);
+
+    expect(onProgress).toHaveBeenCalledWith({ fileName: "a.ifc", index: 1, total: 1 });
+    expect(outcomes[0].status).toBe("failed");
+  });
 });

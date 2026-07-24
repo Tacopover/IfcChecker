@@ -51,7 +51,7 @@ function buildIfcLiteModelStructure(
 // safe to import from a browser bundle via the package's "./browser" export.
 export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResult> {
   const start = performance.now();
-  assertWellFormedStepFile(new TextDecoder("utf-8").decode(raw));
+  assertWellFormedStepFile(raw);
 
   const parser = new IfcParser();
   const store = await parser.parseColumnar(

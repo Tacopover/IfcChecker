@@ -5,19 +5,19 @@ import { assertWellFormedStepFile } from "./step-well-formed.js";
 
 describe("IFC fixtures", () => {
   it("minimal-wall.ifc is a well-formed STEP file", async () => {
-    const text = await readFile(fixturePath("minimal-wall.ifc"), "utf-8");
-    expect(() => assertWellFormedStepFile(text)).not.toThrow();
-    expect(text).toContain("IFCWALL");
+    const buffer = await readFile(fixturePath("minimal-wall.ifc"));
+    expect(() => assertWellFormedStepFile(new Uint8Array(buffer))).not.toThrow();
+    expect(buffer.toString("utf-8")).toContain("IFCWALL");
   });
 
   it("multi-storey.ifc is a well-formed STEP file", async () => {
-    const text = await readFile(fixturePath("multi-storey.ifc"), "utf-8");
-    expect(() => assertWellFormedStepFile(text)).not.toThrow();
-    expect(text).toContain("IFCBUILDINGSTOREY");
+    const buffer = await readFile(fixturePath("multi-storey.ifc"));
+    expect(() => assertWellFormedStepFile(new Uint8Array(buffer))).not.toThrow();
+    expect(buffer.toString("utf-8")).toContain("IFCBUILDINGSTOREY");
   });
 
   it("corrupt-truncated.ifc is not well-formed", async () => {
-    const text = await readFile(fixturePath("corrupt-truncated.ifc"), "utf-8");
-    expect(() => assertWellFormedStepFile(text)).toThrow();
+    const buffer = await readFile(fixturePath("corrupt-truncated.ifc"));
+    expect(() => assertWellFormedStepFile(new Uint8Array(buffer))).toThrow();
   });
 });

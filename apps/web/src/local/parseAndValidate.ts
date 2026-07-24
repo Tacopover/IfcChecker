@@ -18,6 +18,12 @@ export class InvalidIdsRuleSetError extends Error {
   }
 }
 
+export interface ParseProgress {
+  fileName: string;
+  index: number;
+  total: number;
+}
+
 export interface LocalFileOutcome {
   fileName: string;
   status: "succeeded" | "failed";
@@ -89,7 +95,8 @@ export async function parseAndValidateFile(
 export async function parseAndValidateFiles(
   files: File[],
   idsXml: string,
-  engine: EngineId
+  engine: EngineId,
+  onProgress?: (progress: ParseProgress) => void
 ): Promise<LocalFileOutcome[]> {
   if (parseIdsXml(idsXml).length === 0) {
     throw new InvalidIdsRuleSetError();
@@ -100,7 +107,8 @@ export async function parseAndValidateFiles(
   // instance (see parseWebIfcBuffer/parseIfcLiteBuffer); running many of
   // those concurrently in one tab risks memory pressure on a large batch
   // (up to 20 files, up to 2GB each per the product spec).
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
+    onProgress?.({ fileName: file.name, index: index + 1, total: files.length });
     outcomes.push(await parseAndValidateFile(file, idsXml, engine));
   }
   return outcomes;

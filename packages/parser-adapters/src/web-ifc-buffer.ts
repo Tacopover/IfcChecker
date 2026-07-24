@@ -108,7 +108,7 @@ export async function parseWebIfcBuffer(
   locateWasm?: (path: string, prefix: string) => string
 ): Promise<IfcParseResult> {
   const start = performance.now();
-  assertWellFormedStepFile(new TextDecoder("utf-8").decode(raw));
+  assertWellFormedStepFile(raw);
 
   const ifcApi = new WebIFC.IfcAPI();
   await ifcApi.Init(locateWasm, true);

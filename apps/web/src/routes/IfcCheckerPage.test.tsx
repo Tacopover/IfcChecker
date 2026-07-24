@@ -19,8 +19,25 @@ function makeFile(name: string, content = "ISO-10303-21;") {
   return new File([content], name);
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
-  vi.clearAllMocks();
+  // resetAllMocks (not clearAllMocks): a test whose IDS file has no
+  // specifications throws before parseWebIfcBuffer is ever called (see
+  // "no specifications" test below), leaving its queued
+  // mockResolvedValueOnce unconsumed — clearAllMocks only resets call
+  // history, not that queue, so the leftover value would otherwise leak
+  // into whichever test runs next and desync its call-by-call mock
+  // sequencing.
+  vi.resetAllMocks();
   parseIdsXml.mockReturnValue([{ name: "fake-spec", applicabilityEntityNames: [], requirements: [] }]);
 });
 
@@ -241,6 +258,31 @@ describe("IfcCheckerPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("doesn't look like a valid IDS rule set");
     expect(screen.queryByRole("table", { name: "File results" })).not.toBeInTheDocument();
+  });
+
+  it("shows live progress naming the current file and its position in the batch while parsing, then clears it", async () => {
+    const first = deferred<{ elements: unknown[]; parseMs: number }>();
+    const second = deferred<{ elements: unknown[]; parseMs: number }>();
+    parseWebIfcBuffer.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    validateElements.mockReturnValue([]);
+
+    const user = userEvent.setup();
+    render(<IfcCheckerPage />);
+
+    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
+    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText(/IFC files/), [makeFile("model-a.ifc"), makeFile("model-b.ifc")]);
+    await user.click(screen.getByRole("button", { name: "Parse & validate" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(/Parsing 1 of 2: model-a\.ifc/);
+    expect(screen.getByRole("status")).toHaveTextContent(/\d+s elapsed/);
+
+    first.resolve({ elements: [], parseMs: 5 });
+    await screen.findByText(/Parsing 2 of 2: model-b\.ifc/);
+
+    second.resolve({ elements: [], parseMs: 5 });
+    await screen.findByRole("table", { name: "File results" });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("shows an error and disables the button when more than 20 IFC files are selected", async () => {
