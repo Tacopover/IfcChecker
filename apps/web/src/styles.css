@@ -1,27 +1,94 @@
 :root {
   --accent: #2563eb;
   --accent-dark: #1d4ed8;
-  --text: #1e293b;
+  --accent-soft: #e6edfd;
+  --accent-text: #ffffff;
+  --text: #16202b;
   --text-muted: #64748b;
-  --border: #e2e8f0;
+  --border: #dbe2ea;
   --bg-subtle: #f8fafc;
   --error-bg: #fef2f2;
   --error-border: #fecaca;
   --error-text: #b91c1c;
+
+  --ground: #f6f8fb;
+  --panel: #e7edf4;
+  --panel-line: #c8d4e0;
+  --surface: #ffffff;
+  --surface-2: #f2f5f9;
+  --border-strong: #bcc8d6;
+  --muted: #5e6d7c;
+  --faint: #8896a4;
+  --data: #0b6f7e;
+  --data-soft: #ddf0f2;
+  --group: #6b3fa0;
+  --group-soft: #efe8f8;
+  --pass: #15784a;
+  --fail: #b42318;
+  --fail-soft: #fdeceb;
+  --warn: #93600f;
+  --shadow: 0 1px 2px rgba(22, 32, 43, 0.05), 0 8px 20px -14px rgba(22, 32, 43, 0.3);
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #71a3ff;
+    --accent-dark: #8fb6ff;
+    --accent-soft: #18263a;
+    --accent-text: #0d1620;
+    --text: #e4eaf0;
+    --text-muted: #93a3b3;
+    --border: #2a3644;
+    --bg-subtle: #212c38;
+    --error-bg: #2d1614;
+    --error-border: #5a2b26;
+    --error-text: #f0827a;
+
+    --ground: #121a23;
+    --panel: #0a0f15;
+    --panel-line: #2b3947;
+    --surface: #1a232e;
+    --surface-2: #212c38;
+    --border-strong: #3c4d5f;
+    --muted: #93a3b3;
+    --faint: #6c7c8b;
+    --data: #52c6d4;
+    --data-soft: #0d2b31;
+    --group: #b491e8;
+    --group-soft: #241b38;
+    --pass: #48c686;
+    --fail: #f0827a;
+    --fail-soft: #2d1614;
+    --warn: #d8a545;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 24px -16px #000;
+  }
 }
 
 * {
   box-sizing: border-box;
 }
 
+/* The two pages stay mounted so neither loses its state when tabs switch; the
+   inactive one must be gone from layout, not merely invisible. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
-  max-width: 960px;
-  padding: 0 1.5rem 3rem;
-  margin-inline: auto;
+  background: var(--ground);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   line-height: 1.5;
+}
+
+/* The rule builder is full-bleed; the validate page keeps the reading measure
+   the body used to impose on everything. */
+.page-narrow {
+  max-width: 960px;
+  padding: 0 1.5rem 3rem;
+  margin-inline: auto;
 }
 
 h1 {
@@ -84,7 +151,7 @@ select {
   border-radius: 6px;
   font: inherit;
   color: var(--text);
-  background: #fff;
+  background: var(--surface);
   margin-bottom: 0.5rem;
 }
 
@@ -101,7 +168,7 @@ button {
   border-radius: 6px;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -119,7 +186,7 @@ button:disabled {
 }
 
 button.secondary {
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
   border-color: var(--border);
 }
@@ -300,4 +367,955 @@ caption {
 [aria-label="Issue filters"] select {
   margin: 0.25rem 0 0;
   max-width: 160px;
+}
+
+/* ==========================================================================
+   App chrome + IDS rule builder
+   ========================================================================== */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0 1.1rem;
+  height: 46px;
+  font-size: 13.5px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--panel-line);
+}
+
+.brand {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.15rem;
+  align-self: stretch;
+}
+
+.tab {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  margin: 0;
+  padding: 0 0.7rem;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+}
+
+.tab:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
+}
+
+.tab[aria-current="page"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* The page-wide form/button/table rules above are written for the validate
+   page; the builder's controls set their own box, so only the inherited
+   layout defaults have to be undone here. Keep this block first. */
+.builder button,
+.builder select,
+.builder input[type="text"] {
+  margin: 0;
+}
+
+.builder select,
+.builder input[type="text"] {
+  display: inline-block;
+  width: auto;
+  max-width: none;
+}
+
+.builder h1,
+.builder h2 {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.builder table {
+  font-size: inherit;
+}
+
+.builder {
+  font-size: 13.5px;
+}
+
+.builder .num {
+  font-variant-numeric: tabular-nums;
+}
+
+.builder .micro {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 650;
+  color: var(--faint);
+}
+
+.builder .spacer {
+  flex: 1;
+}
+
+.loadbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 1.3rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.loadbar fieldset,
+.loadbar label,
+.loadbar input[type="file"] {
+  margin: 0;
+}
+
+.loadbar fieldset {
+  padding: 0.2rem 0.7rem 0.4rem;
+}
+
+.loadbar .loadfile label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.builder > [role="status"],
+.builder > [role="alert"] {
+  margin: 0.75rem 1.3rem;
+}
+
+.srcfile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 0.18rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.srcfile .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--data);
+}
+
+.srcfile .n {
+  color: var(--faint);
+}
+
+.empty-state {
+  padding: 2.5rem 1.3rem;
+  max-width: 46rem;
+}
+
+.empty-state h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+}
+
+.empty-state p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.wrap {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  align-items: start;
+}
+
+/* ---------- left: model explorer ---------- */
+
+.explorer {
+  position: sticky;
+  top: 46px;
+  height: calc(100dvh - 46px);
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 2px solid var(--panel-line);
+  padding: 0.8rem 0.7rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+/* The rail is a fixed-height flex column that scrolls. Cards carry
+   overflow:hidden for their rounded corners, which kills a flex item's
+   automatic minimum size — without flex-shrink:0 they collapse to their
+   headers and clip their own content instead of the rail scrolling. */
+.explorer > *,
+.schema > * {
+  flex-shrink: 0;
+}
+
+.explorer-intro {
+  padding: 0 0.2rem;
+}
+
+.explorer-intro p {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.schema {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.card > header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.38rem 0.6rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.card > header .micro {
+  color: var(--muted);
+}
+
+.card > header .tally {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.card > .body {
+  padding: 0.3rem;
+}
+
+.card.pset > header {
+  background: var(--data-soft);
+  border-bottom-color: transparent;
+}
+
+.card.pset > header .micro {
+  color: var(--data);
+}
+
+.card.pset > header .psname {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--data);
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.28rem 0.45rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font-weight: 400;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.row:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.row[data-selected="true"] {
+  background: var(--data-soft);
+  box-shadow: inset 2px 0 0 var(--data);
+}
+
+.row[data-selected="true"] .row-name {
+  color: var(--data);
+  font-weight: 600;
+}
+
+.row.grp[data-selected="true"] {
+  background: var(--group-soft);
+  box-shadow: inset 2px 0 0 var(--group);
+}
+
+.row.grp[data-selected="true"] .row-name {
+  color: var(--group);
+}
+
+/* Caret and label are separate controls — a button inside a button is neither
+   valid nor operable, and the mockup's single row had to disambiguate the
+   click target by hand. */
+.rowline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.row-name {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row.grp .row-name {
+  color: var(--group);
+}
+
+.row-meta {
+  font-size: 10.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tree,
+.tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree ul {
+  position: relative;
+}
+
+.tree ul::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+.twist {
+  width: 11px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--faint);
+  font-size: 8px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.twist:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
+}
+
+.mini {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 0.02rem 0.28rem;
+  border-radius: 2px;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.24rem 0.45rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.field:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.field:hover .plus {
+  opacity: 1;
+}
+
+.field-name {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cov {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cov[data-low="1"] {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.plus {
+  opacity: 0;
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1;
+  width: 12px;
+}
+
+.samples {
+  margin: 0 0 0.3rem 1rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.more {
+  font-size: 10px;
+  color: var(--faint);
+  align-self: center;
+}
+
+/* ---------- right: rule stack ---------- */
+
+.stack {
+  padding: 1.1rem 1.3rem 5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.stack-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.stack-head h2 {
+  font-size: 14px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.stack-head .micro {
+  color: var(--muted);
+}
+
+.rule {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}
+
+.rule.is-active {
+  border-color: var(--accent);
+}
+
+.rule-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.disclose {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  width: 18px;
+  padding: 0;
+  font-size: 10px;
+  transition: transform 0.12s ease;
+}
+
+.disclose:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
+}
+
+.rule.open .disclose {
+  transform: rotate(90deg);
+}
+
+.rule-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 620;
+  font-size: 13.5px;
+  border: 1px solid transparent;
+  background: none;
+  padding: 0.14rem 0.3rem;
+  border-radius: 3px;
+}
+
+.rule-title:hover,
+.rule-title:focus {
+  border-color: var(--border-strong);
+  background: var(--ground);
+}
+
+.score {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bar {
+  width: 76px;
+  height: 6px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--fail-soft);
+  flex-shrink: 0;
+}
+
+.bar[data-empty="1"] {
+  background: var(--border);
+}
+
+.bar > i {
+  display: block;
+  height: 100%;
+  background: var(--pass);
+}
+
+.score-text {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.score.all-pass .score-text {
+  color: var(--pass);
+}
+
+.score.has-fail .score-text {
+  color: var(--fail);
+}
+
+.score.empty .score-text {
+  color: var(--faint);
+}
+
+.iconbtn {
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0.16rem 0.34rem;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.iconbtn:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.iconbtn.danger:hover:not(:disabled) {
+  color: var(--fail);
+  border-color: var(--fail);
+  background: var(--fail-soft);
+}
+
+.rule-body {
+  padding: 0 0.7rem 0.7rem 1.5rem;
+}
+
+.clause {
+  padding: 0.55rem 0;
+  border-top: 1px dashed var(--border);
+}
+
+.clause > .micro {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--data-soft);
+  color: var(--data);
+  padding: 0.15rem 0.2rem 0.15rem 0.45rem;
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+
+.chip.group {
+  background: var(--group-soft);
+  color: var(--group);
+  border-color: color-mix(in srgb, var(--group) 30%, transparent);
+}
+
+.chip .x {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.55;
+  padding: 0 0.15rem;
+  line-height: 1;
+}
+
+.chip .x:hover:not(:disabled) {
+  background: none;
+  opacity: 1;
+}
+
+.chip-count {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.linkbtn {
+  border: 1px dashed var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 400;
+  font-size: 11.5px;
+  padding: 0.16rem 0.45rem;
+  border-radius: 3px;
+}
+
+.linkbtn:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-style: solid;
+}
+
+.cond {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.38rem 0.4rem;
+  border-radius: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  margin-bottom: 0.3rem;
+}
+
+.cond.prohibited {
+  background: var(--fail-soft);
+  border-color: color-mix(in srgb, var(--fail) 28%, transparent);
+}
+
+.cond select,
+.cond input[type="text"] {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: 3px;
+  padding: 0.16rem 0.3rem;
+  font-size: 12px;
+  max-width: 220px;
+}
+
+.cond select.tok,
+.cond input.tok {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.cond .glue {
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+.cond-score {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.cond .iconbtn {
+  padding: 0.1rem 0.28rem;
+}
+
+/* A pattern the RegExp engine rejects would otherwise fail every element with
+   no visible reason, so the row has to say so itself. */
+.cond-error {
+  flex-basis: 100%;
+  margin: 0.15rem 0 0;
+  font-size: 11px;
+  color: var(--fail);
+}
+
+.cond input[type="text"][aria-invalid="true"] {
+  border-color: var(--fail);
+}
+
+.values {
+  flex-basis: 100%;
+  margin-top: 0.3rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.values-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.values-head input[type="text"] {
+  max-width: 160px;
+}
+
+.vgrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.9rem;
+}
+
+.vopt {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-family: var(--mono);
+  font-weight: 400;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.vopt input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.vopt .n {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-family: inherit;
+}
+
+.vopt.absent .n {
+  color: var(--warn);
+}
+
+.failing {
+  margin-top: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.failing table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11.5px;
+}
+
+.failing th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+  padding: 0.3rem 0.5rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-weight: 650;
+}
+
+.failing td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+}
+
+.failing tr:last-child td {
+  border-bottom: 0;
+}
+
+.failing .miss {
+  color: var(--warn);
+  font-style: italic;
+}
+
+.failing-more {
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.scroller {
+  overflow-x: auto;
+}
+
+.rule-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+
+.hint {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 0.1rem 0 0.3rem;
+}
+
+.addrule {
+  border: 1px dashed var(--border-strong);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 0.55rem;
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.addrule:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-style: solid;
+}
+
+.export {
+  margin-top: 1.2rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}
+
+.export-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.btn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  filter: brightness(1.07);
+}
+
+.btn.ghost {
+  background: none;
+  color: var(--accent);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  background: var(--accent-soft);
+  filter: none;
+}
+
+pre.xml {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  max-height: 380px;
+}
+
+pre.xml .t {
+  color: var(--accent);
+}
+
+pre.xml .a {
+  color: var(--data);
+}
+
+pre.xml .v {
+  color: var(--pass);
+}
+
+@media (max-width: 900px) {
+  .wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .explorer {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 2px solid var(--panel-line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disclose {
+    transition: none;
+  }
 }
