@@ -1,0 +1,1043 @@
+<title>IDS Rule Builder — interaction mockup</title>
+<style>
+:root {
+  --ground: #f6f8fb;
+  --panel: #e7edf4;
+  --panel-line: #c8d4e0;
+  --surface: #ffffff;
+  --surface-2: #f2f5f9;
+  --border: #dbe2ea;
+  --border-strong: #bcc8d6;
+  --text: #16202b;
+  --muted: #5e6d7c;
+  --faint: #8896a4;
+  --accent: #2563eb;
+  --accent-soft: #e6edfd;
+  --data: #0b6f7e;
+  --data-soft: #ddf0f2;
+  --group: #6b3fa0;
+  --group-soft: #efe8f8;
+  --pass: #15784a;
+  --fail: #b42318;
+  --fail-soft: #fdeceb;
+  --warn: #93600f;
+  --shadow: 0 1px 2px rgba(22,32,43,.05), 0 8px 20px -14px rgba(22,32,43,.3);
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, "Segoe UI Variable Text", "Segoe UI", system-ui, Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #121a23; --panel: #0a0f15; --panel-line: #2b3947;
+    --surface: #1a232e; --surface-2: #212c38;
+    --border: #2a3644; --border-strong: #3c4d5f;
+    --text: #e4eaf0; --muted: #93a3b3; --faint: #6c7c8b;
+    --accent: #71a3ff; --accent-soft: #18263a;
+    --data: #52c6d4; --data-soft: #0d2b31;
+    --group: #b491e8; --group-soft: #241b38;
+    --pass: #48c686; --fail: #f0827a; --fail-soft: #2d1614; --warn: #d8a545;
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 24px -16px #000;
+  }
+}
+:root[data-theme="light"] {
+  --ground: #f6f8fb; --panel: #e7edf4; --panel-line: #c8d4e0;
+  --surface: #ffffff; --surface-2: #f2f5f9;
+  --border: #dbe2ea; --border-strong: #bcc8d6;
+  --text: #16202b; --muted: #5e6d7c; --faint: #8896a4;
+  --accent: #2563eb; --accent-soft: #e6edfd;
+  --data: #0b6f7e; --data-soft: #ddf0f2;
+  --group: #6b3fa0; --group-soft: #efe8f8;
+  --pass: #15784a; --fail: #b42318; --fail-soft: #fdeceb; --warn: #93600f;
+  --shadow: 0 1px 2px rgba(22,32,43,.05), 0 8px 20px -14px rgba(22,32,43,.3);
+}
+:root[data-theme="dark"] {
+  --ground: #121a23; --panel: #0a0f15; --panel-line: #2b3947;
+  --surface: #1a232e; --surface-2: #212c38;
+  --border: #2a3644; --border-strong: #3c4d5f;
+  --text: #e4eaf0; --muted: #93a3b3; --faint: #6c7c8b;
+  --accent: #71a3ff; --accent-soft: #18263a;
+  --data: #52c6d4; --data-soft: #0d2b31;
+  --group: #b491e8; --group-soft: #241b38;
+  --pass: #48c686; --fail: #f0827a; --fail-soft: #2d1614; --warn: #d8a545;
+  --shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 24px -16px #000;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--text);
+  font-family: var(--sans); font-size: 13.5px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.micro { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; font-weight: 650; color: var(--faint); }
+.spacer { flex: 1; }
+
+/* ---------- app chrome: this is its own route ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; gap: .9rem;
+  padding: 0 1.1rem; height: 46px;
+  background: var(--surface); border-bottom: 1px solid var(--panel-line);
+}
+.brand { font-size: 13px; font-weight: 700; letter-spacing: -.01em; margin: 0; }
+.tabs { display: flex; gap: .15rem; align-self: stretch; }
+.tab {
+  border: 0; background: none; cursor: pointer; color: var(--muted);
+  padding: 0 .7rem; font-size: 12.5px; font-weight: 600;
+  border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+.srcfile {
+  display: inline-flex; align-items: center; gap: .45rem;
+  font-family: var(--mono); font-size: 11.5px;
+  padding: .18rem .5rem; border: 1px solid var(--border); border-radius: 3px; background: var(--surface-2);
+}
+.srcfile .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--data); }
+.srcfile .n { color: var(--faint); }
+
+.wrap { display: grid; grid-template-columns: 330px minmax(0,1fr); align-items: start; }
+
+/* ---------- LEFT: model explorer ---------- */
+.explorer {
+  position: sticky; top: 46px; height: calc(100dvh - 46px); overflow-y: auto;
+  background: var(--panel); border-right: 2px solid var(--panel-line);
+  padding: .8rem .7rem 3rem; display: flex; flex-direction: column; gap: .65rem;
+}
+.explorer-intro { padding: 0 .2rem; }
+.explorer-intro h2 { font-size: 12px; margin: 0 0 .15rem; letter-spacing: .01em; }
+.explorer-intro p { margin: 0; font-size: 11.5px; color: var(--muted); }
+
+/* The rail is a fixed-height flex column that scrolls. Cards carry
+   overflow:hidden for their rounded corners, which kills a flex item's
+   automatic minimum size — without flex-shrink:0 they collapse to their
+   headers and clip their own content instead of the rail scrolling. */
+.explorer > * { flex-shrink: 0; }
+#schema { display: flex; flex-direction: column; gap: .65rem; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.card > header {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .38rem .6rem; background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.card > header .micro { color: var(--muted); }
+.card > header .tally {
+  font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+  font-variant-numeric: tabular-nums; margin-left: auto;
+}
+.card > .body { padding: .3rem; }
+.card.pset > header { background: var(--data-soft); border-bottom-color: transparent; }
+.card.pset > header .micro { color: var(--data); }
+.card.pset > header .psname { font-family: var(--mono); font-size: 11.5px; color: var(--data); font-weight: 600; }
+
+.row {
+  display: flex; align-items: center; gap: .5rem; width: 100%;
+  padding: .28rem .45rem; border: 0; background: none; text-align: left;
+  border-radius: 4px; cursor: pointer;
+}
+.row:hover { background: var(--surface-2); }
+.row[aria-selected="true"] { background: var(--data-soft); box-shadow: inset 2px 0 0 var(--data); }
+.row[aria-selected="true"] .row-name { color: var(--data); font-weight: 600; }
+.row.grp[aria-selected="true"] { background: var(--group-soft); box-shadow: inset 2px 0 0 var(--group); }
+.row.grp[aria-selected="true"] .row-name { color: var(--group); }
+.row-name { flex: 1; font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.row.grp .row-name { color: var(--group); }
+.row-meta { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree ul { position: relative; }
+.tree ul::before {
+  content: ""; position: absolute; inset-block: 0; left: 0; width: 1px;
+  background: var(--border);
+}
+.twist {
+  width: 11px; flex-shrink: 0; color: var(--faint); font-size: 8px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.twist:hover { color: var(--text); }
+.mini {
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--border);
+  padding: .02rem .28rem; border-radius: 2px;
+}
+
+.field {
+  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: .4rem;
+  width: 100%; padding: .24rem .45rem; border: 0; background: none;
+  text-align: left; cursor: pointer; border-radius: 4px;
+}
+.field:hover { background: var(--accent-soft); }
+.field:hover .plus { opacity: 1; }
+.field-name { font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.cov { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cov[data-low="1"] { color: var(--warn); font-weight: 600; }
+.plus { opacity: 0; color: var(--accent); font-size: 14px; line-height: 1; width: 12px; }
+.samples { margin: 0 0 .3rem 1rem; padding-left: .5rem; border-left: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .2rem; }
+.more { font-size: 10px; color: var(--faint); align-self: center; }
+
+/* ---------- RIGHT: rule stack ---------- */
+.stack { padding: 1.1rem 1.3rem 5rem; display: flex; flex-direction: column; gap: .7rem; min-width: 0; }
+.stack-head { display: flex; align-items: baseline; gap: .6rem; }
+.stack-head h2 { font-size: 14px; margin: 0; font-weight: 700; }
+.stack-head .micro { color: var(--muted); }
+
+.rule { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow); }
+.rule.is-active { border-color: var(--accent); }
+.rule-head { display: flex; align-items: center; gap: .5rem; padding: .5rem .6rem; }
+.disclose { border: 0; background: none; cursor: pointer; color: var(--muted); width: 18px; padding: 0; font-size: 10px; transition: transform .12s ease; }
+.rule.open .disclose { transform: rotate(90deg); }
+.rule-title {
+  flex: 1; min-width: 0; font-weight: 620; font-size: 13.5px;
+  border: 1px solid transparent; background: none; padding: .14rem .3rem; border-radius: 3px;
+}
+.rule-title:hover, .rule-title:focus { border-color: var(--border-strong); background: var(--ground); }
+
+.score { display: flex; align-items: center; gap: .5rem; }
+.bar { width: 76px; height: 6px; border-radius: 2px; overflow: hidden; background: var(--fail-soft); flex-shrink: 0; }
+.bar[data-empty="1"] { background: var(--border); }
+.bar > i { display: block; height: 100%; background: var(--pass); }
+.score-text { font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.score.all-pass .score-text { color: var(--pass); }
+.score.has-fail .score-text { color: var(--fail); }
+.score.empty .score-text { color: var(--faint); }
+
+.iconbtn { border: 1px solid transparent; background: none; cursor: pointer; color: var(--muted); padding: .16rem .34rem; border-radius: 3px; line-height: 1; }
+.iconbtn:hover { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+.iconbtn.danger:hover { color: var(--fail); border-color: var(--fail); background: var(--fail-soft); }
+
+.rule-body { display: none; padding: 0 .7rem .7rem 1.5rem; }
+.rule.open .rule-body { display: block; }
+.clause { padding: .55rem 0; border-top: 1px dashed var(--border); }
+.clause > .micro { display: block; margin-bottom: .35rem; }
+
+.chips { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-family: var(--mono); font-size: 11.5px;
+  background: var(--data-soft); color: var(--data);
+  padding: .15rem .2rem .15rem .45rem; border-radius: 3px; border: 1px solid transparent;
+}
+.chip.group { background: var(--group-soft); color: var(--group); border-color: color-mix(in srgb, var(--group) 30%, transparent); }
+.chip .x { border: 0; background: none; cursor: pointer; color: inherit; opacity: .55; padding: 0 .15rem; line-height: 1; }
+.chip .x:hover { opacity: 1; }
+.chip-count { color: var(--muted); font-size: 10.5px; }
+.linkbtn { border: 1px dashed var(--border-strong); background: var(--surface); cursor: pointer; color: var(--accent); font-size: 11.5px; padding: .16rem .45rem; border-radius: 3px; }
+.linkbtn:hover { background: var(--accent-soft); border-style: solid; }
+
+.cond {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+  padding: .38rem .4rem; border-radius: 4px; background: var(--surface-2);
+  border: 1px solid var(--border); margin-bottom: .3rem;
+}
+.cond.prohibited { background: var(--fail-soft); border-color: color-mix(in srgb, var(--fail) 28%, transparent); }
+.cond select, .cond input[type="text"] {
+  border: 1px solid var(--border-strong); background: var(--surface);
+  border-radius: 3px; padding: .16rem .3rem; font-size: 12px; max-width: 220px;
+}
+.cond select.tok, .cond input.tok { font-family: var(--mono); font-size: 11.5px; }
+.cond .glue { color: var(--faint); font-size: 11.5px; }
+.cond-score { margin-left: auto; display: flex; align-items: center; gap: .3rem; }
+.cond .iconbtn { padding: .1rem .28rem; }
+
+.values { flex-basis: 100%; margin-top: .3rem; padding: .4rem .5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+.values-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .3rem; }
+.vgrid { display: flex; flex-wrap: wrap; gap: .2rem .9rem; }
+.vopt { display: flex; align-items: center; gap: .35rem; font-family: var(--mono); font-size: 11.5px; cursor: pointer; }
+.vopt input { margin: 0; accent-color: var(--accent); }
+.vopt .n { color: var(--faint); font-size: 10.5px; font-family: var(--sans); }
+.vopt.absent .n { color: var(--warn); }
+
+.failing { margin-top: .4rem; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--surface); }
+.failing table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
+.failing th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); padding: .3rem .5rem; background: var(--surface-2); border-bottom: 1px solid var(--border); font-weight: 650; }
+.failing td { padding: .25rem .5rem; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+.failing tr:last-child td { border-bottom: 0; }
+.failing .miss { color: var(--warn); font-style: italic; }
+.scroller { overflow-x: auto; }
+.rule-foot { display: flex; align-items: center; gap: .6rem; padding-top: .5rem; border-top: 1px dashed var(--border); }
+.hint { font-size: 11.5px; color: var(--muted); margin: .1rem 0 .3rem; }
+
+.addrule { border: 1px dashed var(--border-strong); background: var(--surface); border-radius: 6px; padding: .55rem; cursor: pointer; color: var(--accent); font-weight: 600; font-size: 12.5px; }
+.addrule:hover { background: var(--accent-soft); border-style: solid; }
+
+.export { margin-top: 1.2rem; border-top: 1px solid var(--border); padding-top: .9rem; }
+.export-head { display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem; }
+.btn { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 4px; padding: .3rem .7rem; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.btn:hover { filter: brightness(1.07); }
+.btn.ghost { background: none; color: var(--accent); }
+.btn.ghost:hover { background: var(--accent-soft); filter: none; }
+pre.xml { margin: 0; padding: .7rem .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: auto; font-family: var(--mono); font-size: 11.5px; line-height: 1.55; max-height: 380px; }
+pre.xml .t { color: var(--accent); }
+pre.xml .a { color: var(--data); }
+pre.xml .v { color: var(--pass); }
+
+footer { grid-column: 1 / -1; border-top: 1px solid var(--border); padding: .9rem 1.3rem 2rem; color: var(--faint); font-size: 11.5px; }
+footer strong { color: var(--muted); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .wrap { grid-template-columns: 1fr; }
+  .explorer { position: static; height: auto; border-right: 0; border-bottom: 2px solid var(--panel-line); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="topbar">
+  <h1 class="brand">IFC Checker</h1>
+  <nav class="tabs">
+    <button class="tab" type="button">Validate</button>
+    <button class="tab" type="button" aria-current="page">Build rules</button>
+  </nav>
+  <span class="spacer"></span>
+  <span class="srcfile"><span class="dot"></span>Tower-A-MEP.ifc <span class="n num" id="elcount"></span></span>
+  <button class="btn ghost" id="btn-theme" type="button">Theme</button>
+</header>
+
+<div class="wrap">
+  <aside class="explorer">
+    <div class="explorer-intro">
+      <p>Everything here comes from this file. Pick a type or an inherited group, then click a field to add it as a condition.</p>
+    </div>
+
+    <section class="card">
+      <header><span class="micro">In your model</span><span class="tally" id="tally-model"></span></header>
+      <div class="body"><ul class="tree" role="tree" aria-label="Entity types and inherited groups" id="tree"></ul></div>
+    </section>
+
+    <div id="schema"></div>
+  </aside>
+
+  <main class="stack">
+    <div class="stack-head">
+      <h2>Rules</h2>
+      <span class="micro" id="rulecount"></span>
+    </div>
+    <div id="rules"></div>
+    <button class="addrule" id="btn-add-rule" type="button">+ New rule</button>
+
+    <section class="export">
+      <div class="export-head">
+        <span class="micro">Export</span>
+        <span class="spacer"></span>
+        <button class="btn ghost" id="btn-xml" type="button">Hide IDS XML</button>
+        <button class="btn" type="button">Download .ids</button>
+      </div>
+      <pre class="xml" id="xml"></pre>
+    </section>
+  </main>
+
+  <footer>
+    <strong>Interaction mockup.</strong> Synthetic model (1 499 elements, MEP-flavoured); pass/fail counts, coverage
+    percentages, value lists, inherited groups and XML are all computed live from it. Not wired to the real parser.
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   1. IFC type hierarchy (subset of IFC4) → inherited groups
+   ============================================================ */
+const IFC_TREE = {
+  IfcProduct: {
+    IfcElement: {
+      IfcBuildingElement: { IfcWall:{}, IfcDoor:{}, IfcWindow:{}, IfcSlab:{}, IfcBeam:{}, IfcColumn:{},
+        IfcRoof:{}, IfcStair:{}, IfcRamp:{}, IfcCovering:{}, IfcCurtainWall:{}, IfcRailing:{},
+        IfcPlate:{}, IfcMember:{}, IfcFooting:{}, IfcPile:{}, IfcChimney:{}, IfcShadingDevice:{} },
+      IfcDistributionElement: {
+        IfcDistributionFlowElement: {
+          IfcFlowSegment: { IfcDuctSegment:{}, IfcPipeSegment:{}, IfcCableSegment:{}, IfcCableCarrierSegment:{} },
+          IfcFlowFitting: { IfcDuctFitting:{}, IfcPipeFitting:{}, IfcCableFitting:{}, IfcCableCarrierFitting:{}, IfcJunctionBox:{} },
+          IfcFlowTerminal: { IfcAirTerminal:{}, IfcSanitaryTerminal:{}, IfcLightFixture:{}, IfcOutlet:{},
+            IfcWasteTerminal:{}, IfcFireSuppressionTerminal:{}, IfcSpaceHeater:{}, IfcStackTerminal:{},
+            IfcElectricAppliance:{}, IfcAudioVisualAppliance:{}, IfcCommunicationsAppliance:{}, IfcMedicalDevice:{} },
+          IfcFlowController: { IfcValve:{}, IfcDamper:{}, IfcSwitchingDevice:{}, IfcFlowMeter:{},
+            IfcProtectiveDevice:{}, IfcElectricDistributionBoard:{}, IfcAirTerminalBox:{} },
+          IfcFlowMovingDevice: { IfcFan:{}, IfcPump:{}, IfcCompressor:{} },
+          IfcFlowStorageDevice: { IfcTank:{}, IfcElectricFlowStorageDevice:{} },
+          IfcFlowTreatmentDevice: { IfcFilter:{}, IfcDuctSilencer:{}, IfcInterceptor:{} },
+          IfcEnergyConversionDevice: { IfcBoiler:{}, IfcChiller:{}, IfcCoil:{}, IfcHeatExchanger:{},
+            IfcAirToAirHeatRecovery:{}, IfcCooledBeam:{}, IfcHumidifier:{}, IfcUnitaryEquipment:{},
+            IfcEvaporator:{}, IfcCondenser:{}, IfcBurner:{}, IfcCoolingTower:{}, IfcElectricGenerator:{},
+            IfcElectricMotor:{}, IfcMotorConnection:{}, IfcSolarDevice:{}, IfcTransformer:{}, IfcTubeBundle:{}, IfcEngine:{} },
+        },
+        IfcDistributionControlElement: { IfcSensor:{}, IfcActuator:{}, IfcController:{}, IfcAlarm:{},
+          IfcFlowInstrument:{}, IfcProtectiveDeviceTrippingUnit:{}, IfcUnitaryControlElement:{} },
+      },
+      IfcFurnishingElement: { IfcFurniture:{}, IfcSystemFurnitureElement:{} },
+      IfcElementComponent: { IfcFastener:{}, IfcMechanicalFastener:{}, IfcDiscreteAccessory:{},
+        IfcBuildingElementPart:{}, IfcVibrationIsolator:{},
+        IfcReinforcingElement: { IfcReinforcingBar:{}, IfcReinforcingMesh:{}, IfcTendon:{} } },
+      IfcFeatureElement: { IfcOpeningElement:{}, IfcProjectionElement:{}, IfcVoidingFeature:{}, IfcSurfaceFeature:{} },
+      IfcElementAssembly:{}, IfcTransportElement:{}, IfcVirtualElement:{}, IfcGeographicElement:{}, IfcCivilElement:{},
+    },
+    IfcSpatialElement: {
+      IfcSpatialStructureElement: { IfcSite:{}, IfcBuilding:{}, IfcBuildingStorey:{}, IfcSpace:{} },
+      IfcSpatialZone:{},
+    },
+    IfcAnnotation:{}, IfcGrid:{}, IfcProxy:{}, IfcPort: { IfcDistributionPort:{} },
+  },
+};
+// Too abstract to be a useful applicability target — every product shares them.
+const TOO_ABSTRACT = new Set(["IfcProduct", "IfcObject", "IfcObjectDefinition", "IfcRoot"]);
+
+const ANCESTORS = new Map(); // concrete type -> [parent, grandparent, ...]
+const DEPTH = new Map();
+(function walk(node, trail) {
+  for (const [name, kids] of Object.entries(node)) {
+    ANCESTORS.set(name, trail);
+    DEPTH.set(name, trail.length);
+    walk(kids, [name, ...trail]);
+  }
+})(IFC_TREE, []);
+
+/* ============================================================
+   2. Synthetic model — stands in for NormalizedElement[]
+   ============================================================ */
+function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rand = rng(20260724);
+const pick = (a) => a[Math.floor(rand() * a.length)];
+const chance = (p) => rand() < p;
+
+const SPECS = [
+  { type: "IfcDuctSegment", n: 412, build: (i) => ({
+      name: `${pick(["Rect","Round","Oval"])} Duct ${pick([200,300,400,500,600])}x${pick([100,150,200,250])}`,
+      attributes: { Tag: chance(.96) ? `DS-${1000+i}` : null, Description: chance(.38) ? "Supply air branch" : null },
+      psets: { Pset_DuctSegmentTypeCommon: { Status: chance(.93) ? "New" : "Existing", Shape: pick(["Rectangular","Round","Oval"]) },
+               MEP_Data: { SystemAbbreviation: chance(.87) ? pick(["SA","RA","EA","OA","SM"]) : null,
+                           Insulation: chance(.71) ? pick(["None","25mm","50mm"]) : null,
+                           FlowRate: chance(.64) ? Math.round(rand()*900)/10 : null } } }) },
+  { type: "IfcPipeSegment", n: 388, build: (i) => ({
+      name: `Pipe DN${pick([15,20,25,32,40,50,65,80])}`,
+      attributes: { Tag: chance(.91) ? `PS-${2000+i}` : null, Description: chance(.3) ? "Chilled water" : null },
+      psets: { Pset_PipeSegmentTypeCommon: { Status: chance(.95) ? "New" : "Existing", Material: pick(["Steel","Copper","PVC-U","PE-X"]) },
+               MEP_Data: { SystemAbbreviation: chance(.94) ? pick(["CHWS","CHWR","HWS","HWR","DCW","DHW"]) : null,
+                           Insulation: chance(.55) ? pick(["None","19mm","32mm"]) : null } } }) },
+  { type: "IfcDuctFitting", n: 274, build: (i) => ({
+      name: `${pick(["Bend","Tee","Reducer","Transition"])} ${pick([200,300,400])}`,
+      attributes: { Tag: chance(.72) ? `DF-${3000+i}` : null },
+      psets: { Pset_DuctFittingTypeCommon: { Status: chance(.9) ? "New" : "Existing", Shape: pick(["Rectangular","Round"]) },
+               MEP_Data: { SystemAbbreviation: chance(.61) ? pick(["SA","RA","EA","OA"]) : null } } }) },
+  { type: "IfcAirTerminal", n: 96, build: (i) => ({
+      name: `${pick(["Swirl diffuser","Linear grille","Extract valve"])} ${pick([160,250,315])}`,
+      attributes: { Tag: chance(.99) ? `AT-${4000+i}` : null },
+      psets: { Pset_AirTerminalTypeCommon: { Status: "New", AirFlowType: pick(["Supply","Return","Exhaust"]), FaceType: pick(["Louvered","Perforated","Slotted"]) },
+               MEP_Data: { SystemAbbreviation: pick(["SA","RA","EA"]), FlowRate: Math.round(rand()*400)/10 } } }) },
+  { type: "IfcValve", n: 63, build: (i) => ({
+      name: `${pick(["Ball valve","Butterfly valve","Balancing valve"])} DN${pick([25,40,50,80])}`,
+      attributes: { Tag: chance(.84) ? `VL-${5000+i}` : null },
+      psets: { Pset_ValveTypeCommon: { Status: "New", ValvePattern: pick(["SinglePort","AngledTwoPort","StraightThreePort"]) },
+               MEP_Data: { SystemAbbreviation: chance(.79) ? pick(["CHWS","CHWR","HWS","DCW"]) : null } } }) },
+  { type: "IfcWall", n: 142, build: (i) => ({
+      name: `Basic Wall:${pick(["SW 100","CW 250","Part 140"])}:${6000+i}`,
+      attributes: { Tag: chance(.4) ? `W-${6000+i}` : null },
+      psets: { Pset_WallCommon: { Status: "New", IsExternal: chance(.3), LoadBearing: chance(.45),
+                                 FireRating: chance(.87) ? pick(["30","60","90","120"]) : null } } }) },
+  { type: "IfcDoor", n: 68, build: (i) => ({
+      name: `Single-Flush:${pick(["900x2100","1000x2100"])}:${7000+i}`,
+      attributes: { Tag: `D-${7000+i}` },
+      psets: { Pset_DoorCommon: { Status: "New", IsExternal: chance(.22), FireRating: chance(.66) ? pick(["30","60","EI30"]) : null } } }) },
+  { type: "IfcSpace", n: 56, build: (i) => ({
+      name: `${pick(["Office","Plant room","Corridor","Toilet","Meeting"])} ${100+i}`,
+      attributes: { LongName: chance(.8) ? pick(["Open plant area","Cellular office","Circulation"]) : null },
+      psets: { Pset_SpaceCommon: { Status: "New", IsExternal: false, GrossPlannedArea: Math.round(rand()*800)/10 } } }) },
+];
+
+const ELEMENTS = [];
+let gid = 0;
+for (const spec of SPECS) {
+  for (let i = 0; i < spec.n; i++) {
+    const raw = spec.build(i);
+    const attributes = { Name: raw.name, GlobalId: `0G${(gid++).toString(36).padStart(6,"0").toUpperCase()}` };
+    for (const [k, v] of Object.entries(raw.attributes)) if (v !== null) attributes[k] = v;
+    const propertySets = {};
+    for (const [ps, fields] of Object.entries(raw.psets)) {
+      const kept = {};
+      for (const [k, v] of Object.entries(fields)) if (v !== null) kept[k] = v;
+      if (Object.keys(kept).length) propertySets[ps] = kept;
+    }
+    ELEMENTS.push({ globalId: attributes.GlobalId, ifcType: spec.type, name: raw.name, attributes, propertySets });
+  }
+}
+
+const BY_TYPE = new Map();
+for (const el of ELEMENTS) {
+  if (!BY_TYPE.has(el.ifcType)) BY_TYPE.set(el.ifcType, []);
+  BY_TYPE.get(el.ifcType).push(el);
+}
+const ENTITY_TYPES = [...BY_TYPE.keys()].sort((a, b) => BY_TYPE.get(b).length - BY_TYPE.get(a).length);
+const countOf = (types) => types.reduce((n, t) => n + (BY_TYPE.get(t)?.length ?? 0), 0);
+
+/* ---- inherited groups actually worth offering ----
+   Keep a supertype only if it covers 2+ of the types found in this file.
+   When two supertypes cover the exact same set (IfcDistributionElement vs
+   IfcDistributionFlowElement here), keep only the most specific one — the
+   broader one tells the user nothing new. Anything at or above IfcProduct is
+   dropped outright: every product shares it, so it can never discriminate. */
+const GROUPS = (() => {
+  const cover = new Map();
+  for (const t of ENTITY_TYPES) {
+    for (const anc of ANCESTORS.get(t) ?? []) {
+      if (TOO_ABSTRACT.has(anc)) continue;
+      if (!cover.has(anc)) cover.set(anc, []);
+      cover.get(anc).push(t);
+    }
+  }
+  const byCoverage = new Map();
+  for (const [name, types] of cover) {
+    if (types.length < 2) continue;
+    const key = [...types].sort().join("|");
+    const prev = byCoverage.get(key);
+    if (!prev || DEPTH.get(name) > DEPTH.get(prev.name)) byCoverage.set(key, { name, types });
+  }
+  return [...byCoverage.values()]
+    .map((g) => ({ ...g, count: countOf(g.types) }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+})();
+const GROUP_BY_NAME = new Map(GROUPS.map((g) => [g.name, g]));
+const resolve = (name) => GROUP_BY_NAME.get(name)?.types ?? (BY_TYPE.has(name) ? [name] : []);
+const resolveAll = (names) => [...new Set(names.flatMap(resolve))];
+
+/* ---- one tree: qualifying groups as branches, found types as leaves ---- */
+const groupChain = (name) => (ANCESTORS.get(name) ?? []).filter((a) => GROUP_BY_NAME.has(a)).reverse();
+
+const TREE = (() => {
+  const root = new Map();
+  for (const t of ENTITY_TYPES) {
+    let level = root;
+    for (const g of groupChain(t)) {
+      if (!level.has(g)) level.set(g, { name: g, kind: "group", children: new Map() });
+      level = level.get(g).children;
+    }
+    level.set(t, { name: t, kind: "type", count: BY_TYPE.get(t).length, children: new Map() });
+  }
+  const finish = (node) => {
+    if (node.kind === "type") return { ...node, children: [], typeCount: 1 };
+    const children = [...node.children.values()].map(finish)
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return { name: node.name, kind: "group", children,
+      count: children.reduce((n, k) => n + k.count, 0),
+      typeCount: children.reduce((n, k) => n + k.typeCount, 0) };
+  };
+  return [...root.values()].map(finish).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+})();
+
+/* ---- field introspection ---- */
+function fieldsFor(names) {
+  const types = resolveAll(names);
+  const pool = types.length ? types.flatMap((t) => BY_TYPE.get(t) ?? []) : [];
+  const attrs = new Map(), psets = new Map();
+  for (const el of pool) {
+    for (const [k, v] of Object.entries(el.attributes)) {
+      if (!attrs.has(k)) attrs.set(k, { name: k, propertySet: null, hits: 0, values: new Map() });
+      const r = attrs.get(k); r.hits++; r.values.set(String(v), (r.values.get(String(v)) ?? 0) + 1);
+    }
+    for (const [ps, fields] of Object.entries(el.propertySets)) {
+      if (!psets.has(ps)) psets.set(ps, new Map());
+      const bag = psets.get(ps);
+      for (const [k, v] of Object.entries(fields)) {
+        if (!bag.has(k)) bag.set(k, { name: k, propertySet: ps, hits: 0, values: new Map() });
+        const r = bag.get(k); r.hits++; r.values.set(String(v), (r.values.get(String(v)) ?? 0) + 1);
+      }
+    }
+  }
+  const total = pool.length || 1;
+  const rank = (a, b) => b.hits - a.hits || a.name.localeCompare(b.name);
+  return {
+    total: pool.length,
+    attributes: [...attrs.values()].sort(rank).map((r) => ({ ...r, coverage: r.hits / total })),
+    propertySets: [...psets.entries()]
+      .map(([ps, bag]) => ({ name: ps, fields: [...bag.values()].sort(rank).map((r) => ({ ...r, coverage: r.hits / total })) }))
+      .sort((a, b) => b.fields[0].hits - a.fields[0].hits),
+  };
+}
+function distinctValues(names, cond) {
+  const src = fieldsFor(names);
+  const rec = cond.kind === "attribute"
+    ? src.attributes.find((f) => f.name === cond.name)
+    : src.propertySets.find((p) => p.name === cond.propertySet)?.fields.find((f) => f.name === cond.name);
+  return rec ? [...rec.values.entries()].sort((a, b) => b[1] - a[1]).map(([value, count]) => ({ value, count })) : [];
+}
+
+/* ============================================================
+   3. Rule drafts + live evaluation
+   ============================================================ */
+const OPERATORS = [
+  { id: "exists", label: "must be filled in" },
+  { id: "equals", label: "must be exactly" },
+  { id: "oneOf", label: "must be one of" },
+  { id: "contains", label: "must contain" },
+  { id: "startsWith", label: "must start with" },
+  { id: "endsWith", label: "must end with" },
+  { id: "matches", label: "must match pattern" },
+  { id: "notExists", label: "must NOT be filled in" },
+];
+const NEEDS_TEXT = new Set(["equals", "contains", "startsWith", "endsWith", "matches"]);
+
+let nextId = 1;
+const uid = () => `c${nextId++}`;
+
+let RULES = [
+  { id: uid(), name: "Every element carries a tag", open: true, showFails: false,
+    entityTypes: ["IfcElement"],
+    conditions: [{ id: uid(), kind: "attribute", propertySet: null, name: "Tag", op: "exists", values: [], text: "" }] },
+  { id: uid(), name: "Ducts and fittings carry a system code", open: true, showFails: false,
+    entityTypes: ["IfcDuctSegment", "IfcDuctFitting"],
+    conditions: [{ id: uid(), kind: "property", propertySet: "MEP_Data", name: "SystemAbbreviation",
+                   op: "oneOf", values: ["SA","RA","EA","OA"], text: "" }] },
+  { id: uid(), name: "Walls declare a fire rating", open: false, showFails: false,
+    entityTypes: ["IfcWall"],
+    conditions: [{ id: uid(), kind: "property", propertySet: "Pset_WallCommon", name: "FireRating",
+                   op: "oneOf", values: ["60","90","120"], text: "" }] },
+];
+let activeRuleId = RULES[0].id;
+let selection = { kind: "type", name: "IfcDuctSegment" };
+let expanded = new Set(groupChain("IfcDuctSegment"));
+let showXml = true;
+
+const readValue = (el, c) => c.kind === "attribute" ? (el.attributes[c.name] ?? null) : (el.propertySets[c.propertySet]?.[c.name] ?? null);
+function checkCondition(el, cond) {
+  const raw = readValue(el, cond);
+  const has = raw !== null && raw !== undefined && String(raw) !== "";
+  if (cond.op === "notExists") return !has;
+  if (!has) return false;
+  const s = String(raw);
+  switch (cond.op) {
+    case "exists": return true;
+    case "equals": return cond.text !== "" && s === cond.text;
+    case "oneOf": return cond.values.includes(s);
+    case "contains": return cond.text !== "" && s.includes(cond.text);
+    case "startsWith": return cond.text !== "" && s.startsWith(cond.text);
+    case "endsWith": return cond.text !== "" && s.endsWith(cond.text);
+    case "matches": { try { return new RegExp(`^(?:${cond.text})$`).test(s); } catch { return false; } }
+    default: return true;
+  }
+}
+function evaluate(rule) {
+  const pool = resolveAll(rule.entityTypes).flatMap((t) => BY_TYPE.get(t) ?? []);
+  const perCond = rule.conditions.map(() => 0);
+  const failures = [];
+  let passed = 0;
+  for (const el of pool) {
+    let all = true;
+    rule.conditions.forEach((cond, i) => {
+      if (checkCondition(el, cond)) perCond[i]++;
+      else { all = false; if (failures.length < 300) failures.push({ el, cond }); }
+    });
+    if (all && rule.conditions.length) passed++;
+  }
+  return { matched: pool.length, passed, perCond, failures };
+}
+
+/* ============================================================
+   4. Render
+   ============================================================ */
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const pct = (x) => `${Math.round(x * 100)}%`;
+const activeRule = () => RULES.find((r) => r.id === activeRuleId) ?? RULES[0];
+const selName = () => selection.name;
+
+function renderExplorer() {
+  document.getElementById("elcount").textContent = `· ${ELEMENTS.length.toLocaleString("en-GB")} elements`;
+  document.getElementById("tally-model").textContent =
+    `${ENTITY_TYPES.length} types · ${GROUPS.length} groups`;
+
+  const branch = (nodes, depth) => nodes.map((n) => {
+    const open = expanded.has(n.name);
+    const kids = n.children.length > 0;
+    return `<li role="treeitem" aria-selected="${selection.name === n.name}"${kids ? ` aria-expanded="${open}"` : ""}>
+      <button class="row${n.kind === "group" ? " grp" : ""}" type="button" data-sel="${n.kind}" data-name="${n.name}"
+              style="padding-left:${0.35 + depth * 0.62}rem"
+              title="${n.kind === "group" ? `${n.name} — covers ${n.typeCount} types, ${n.count} elements` : `${n.name} — ${n.count} elements`}">
+        <span class="twist"${kids ? ` data-twist="${n.name}"` : ""}>${kids ? (open ? "▼" : "▶") : ""}</span>
+        <span class="row-name">${n.name}</span>
+        <span class="row-meta">${n.kind === "group" ? `${n.typeCount}× ${n.count}` : n.count}</span>
+      </button>
+      ${kids && open ? `<ul role="group">${branch(n.children, depth + 1)}</ul>` : ""}
+    </li>`;
+  }).join("");
+  document.getElementById("tree").innerHTML = branch(TREE, 0);
+
+  const src = fieldsFor([selName()]);
+  const fieldRow = (f, kind) => {
+    const vals = [...f.values.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    return `<button class="field" type="button" data-kind="${kind}" data-ps="${f.propertySet ?? ""}" data-name="${esc(f.name)}">
+        <span class="field-name">${esc(f.name)}</span>
+        <span class="cov num" data-low="${f.coverage < 0.9 ? 1 : 0}">${pct(f.coverage)}</span>
+        <span class="plus">+</span>
+      </button>
+      <div class="samples">${vals.map((v) => `<span class="mini">${esc(v[0].length > 18 ? v[0].slice(0,17)+"…" : v[0])}</span>`).join("")}
+        ${f.values.size > 3 ? `<span class="more">+${f.values.size - 3}</span>` : ""}</div>`;
+  };
+
+  document.getElementById("schema").innerHTML = `
+    <section class="card">
+      <header><span class="micro">Attributes</span><span class="tally">${selName()} · ${src.total}${
+        GROUP_BY_NAME.has(selName()) ? ` across ${GROUP_BY_NAME.get(selName()).types.length} types` : ""}</span></header>
+      <div class="body">${src.attributes.map((f) => fieldRow(f, "attribute")).join("")}</div>
+    </section>
+    ${src.propertySets.map((ps) => `
+      <section class="card pset">
+        <header><span class="micro">Pset</span><span class="psname">${esc(ps.name)}</span></header>
+        <div class="body">${ps.fields.map((f) => fieldRow(f, "property")).join("")}</div>
+      </section>`).join("")}`;
+}
+
+function condMarkup(rule, cond, index, result) {
+  const src = fieldsFor(rule.entityTypes);
+  const psetOptions = src.propertySets.map((p) => p.name);
+  const nameOptions = cond.kind === "attribute"
+    ? src.attributes.map((f) => f.name)
+    : (src.propertySets.find((p) => p.name === cond.propertySet)?.fields ?? []).map((f) => f.name);
+  const opt = (list, cur) => list.map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("")
+    + (cur && !list.includes(cur) ? `<option value="${esc(cur)}" selected>${esc(cur)} (not in file)</option>` : "");
+
+  const hits = result.perCond[index];
+  const cls = result.matched === 0 ? "empty" : hits === result.matched ? "all-pass" : "has-fail";
+
+  let editor = "";
+  if (NEEDS_TEXT.has(cond.op)) {
+    const list = distinctValues(rule.entityTypes, cond).slice(0, 40);
+    editor = `<input class="tok" type="text" data-act="text" value="${esc(cond.text)}" list="dl-${cond.id}"
+        placeholder="${cond.op === "matches" ? "regex, e.g. [A-Z]{2}-\\d{4}" : "value"}" />
+      <datalist id="dl-${cond.id}">${list.map((v) => `<option value="${esc(v.value)}"></option>`).join("")}</datalist>`;
+  } else if (cond.op === "oneOf") {
+    const list = distinctValues(rule.entityTypes, cond);
+    const known = new Set(list.map((v) => v.value));
+    const extras = cond.values.filter((v) => !known.has(v)).map((v) => ({ value: v, count: 0 }));
+    editor = `<div class="values">
+        <div class="values-head"><span class="micro">Values found in this file</span><span class="cov num">${list.length} distinct</span></div>
+        <div class="vgrid">${[...list, ...extras].map((v) => `
+          <label class="vopt${v.count === 0 ? " absent" : ""}">
+            <input type="checkbox" data-act="value" value="${esc(v.value)}" ${cond.values.includes(v.value) ? "checked" : ""} />
+            <span>${esc(v.value)}</span><span class="n num">${v.count === 0 ? "not in file" : v.count}</span>
+          </label>`).join("")}</div>
+      </div>`;
+  }
+
+  return `<div class="cond${cond.op === "notExists" ? " prohibited" : ""}" data-cond="${cond.id}">
+      <select data-act="kind" aria-label="Condition kind">
+        <option value="property"${cond.kind === "property" ? " selected" : ""}>Property</option>
+        <option value="attribute"${cond.kind === "attribute" ? " selected" : ""}>Attribute</option>
+      </select>
+      ${cond.kind === "property"
+        ? `<select class="tok" data-act="pset" aria-label="Property set">${opt(psetOptions, cond.propertySet)}</select><span class="glue">·</span>`
+        : ""}
+      <select class="tok" data-act="name" aria-label="Name">${opt(nameOptions, cond.name)}</select>
+      <select data-act="op" aria-label="Operator">
+        ${OPERATORS.map((o) => `<option value="${o.id}"${o.id === cond.op ? " selected" : ""}>${o.label}</option>`).join("")}
+      </select>
+      ${editor}
+      <span class="cond-score score ${cls}">
+        <span class="score-text num">${hits}/${result.matched}</span>
+        <button class="iconbtn" type="button" data-act="dup-cond" title="Duplicate condition" aria-label="Duplicate condition">⧉</button>
+        <button class="iconbtn danger" type="button" data-act="del-cond" title="Remove condition" aria-label="Remove condition">✕</button>
+      </span>
+    </div>`;
+}
+
+function ruleMarkup(rule) {
+  const r = evaluate(rule);
+  const ratio = r.matched ? r.passed / r.matched : 0;
+  const cls = r.matched === 0 || !rule.conditions.length ? "empty" : r.passed === r.matched ? "all-pass" : "has-fail";
+  const fails = r.matched - r.passed;
+
+  return `<article class="rule${rule.open ? " open" : ""}${rule.id === activeRuleId ? " is-active" : ""}" data-rule="${rule.id}">
+    <div class="rule-head">
+      <button class="disclose" type="button" data-act="toggle" aria-label="Expand rule" aria-expanded="${rule.open}">▶</button>
+      <input class="rule-title" data-act="rename" value="${esc(rule.name)}" aria-label="Rule name" />
+      <span class="score ${cls}">
+        <span class="bar" data-empty="${r.matched ? 0 : 1}"><i style="width:${ratio * 100}%"></i></span>
+        <span class="score-text"><b>${r.passed}</b>/${r.matched}</span>
+      </span>
+      <button class="iconbtn" type="button" data-act="dup" title="Duplicate rule" aria-label="Duplicate rule">⧉</button>
+      <button class="iconbtn danger" type="button" data-act="del" title="Delete rule" aria-label="Delete rule">🗑</button>
+    </div>
+
+    <div class="rule-body">
+      <div class="clause">
+        <span class="micro">Applies to</span>
+        <div class="chips">
+          ${rule.entityTypes.map((t) => {
+            const g = GROUP_BY_NAME.get(t);
+            return `<span class="chip${g ? " group" : ""}" title="${g ? "covers " + g.types.join(", ") : t}">${t}
+              <span class="chip-count num">${g ? `${g.types.length}× ${g.count}` : (BY_TYPE.get(t)?.length ?? 0)}</span>
+              <button class="x" type="button" data-act="del-ent" data-ent="${t}" aria-label="Remove ${t}">✕</button></span>`;
+          }).join("")}
+          <select class="linkbtn" data-act="add-ent" aria-label="Add entity type or group">
+            <option value="">+ type…</option>
+            <optgroup label="Groups (inherited)">
+              ${GROUPS.filter((g) => !rule.entityTypes.includes(g.name))
+                .map((g) => `<option value="${g.name}">${g.name} — ${g.types.length} types, ${g.count}</option>`).join("")}
+            </optgroup>
+            <optgroup label="Entity types in this file">
+              ${ENTITY_TYPES.filter((t) => !rule.entityTypes.includes(t))
+                .map((t) => `<option value="${t}">${t} (${BY_TYPE.get(t).length})</option>`).join("")}
+            </optgroup>
+          </select>
+        </div>
+      </div>
+
+      <div class="clause">
+        <span class="micro">Must satisfy all of</span>
+        ${rule.conditions.map((c, i) => condMarkup(rule, c, i, r)).join("")
+          || `<p class="hint">No conditions yet — click a field in the left panel, or add one.</p>`}
+        <button class="linkbtn" type="button" data-act="add-cond">+ condition</button>
+      </div>
+
+      <div class="rule-foot">
+        <span class="score ${cls}"><span class="score-text">
+          ${!rule.conditions.length ? "Nothing checked yet"
+            : r.matched === 0 ? "No matching elements in this file"
+            : fails === 0 ? `All ${r.matched} pass` : `${fails} of ${r.matched} fail`}
+        </span></span>
+        ${fails > 0 ? `<button class="linkbtn" type="button" data-act="fails">${rule.showFails ? "Hide" : "Show"} failing elements</button>` : ""}
+      </div>
+
+      ${rule.showFails && fails > 0 ? `<div class="failing scroller"><table>
+          <thead><tr><th>GlobalId</th><th>Type</th><th>Name</th><th>Checked</th><th>Actual</th></tr></thead>
+          <tbody>${r.failures.slice(0, 12).map((f) => {
+            const v = readValue(f.el, f.cond);
+            return `<tr><td>${f.el.globalId}</td><td>${f.el.ifcType}</td>
+              <td>${esc(String(f.el.name).slice(0, 30))}</td>
+              <td>${f.cond.kind === "property" ? esc(f.cond.propertySet) + "." : ""}${esc(f.cond.name)}</td>
+              <td>${v === null || v === undefined ? '<span class="miss">not set</span>' : esc(String(v))}</td></tr>`;
+          }).join("")}</tbody></table>
+          ${r.failures.length > 12 ? `<div style="padding:.3rem .5rem;color:var(--faint);font-size:11px">+${r.failures.length - 12} more</div>` : ""}
+        </div>` : ""}
+    </div>
+  </article>`;
+}
+
+const rulesEl = document.getElementById("rules");
+function renderRules() {
+  document.getElementById("rulecount").textContent =
+    `${RULES.length} rule${RULES.length === 1 ? "" : "s"} · one <specification> each`;
+  rulesEl.innerHTML = RULES.map(ruleMarkup).join("");
+}
+
+/* Score-only refresh — keeps focus, caret and open dropdowns intact. */
+function refreshScores() {
+  for (const rule of RULES) {
+    const host = rulesEl.querySelector(`[data-rule="${rule.id}"]`);
+    if (!host) continue;
+    const r = evaluate(rule);
+    const fails = r.matched - r.passed;
+    const cls = r.matched === 0 || !rule.conditions.length ? "empty" : fails === 0 ? "all-pass" : "has-fail";
+
+    const head = host.querySelector(".rule-head .score");
+    head.className = `score ${cls}`;
+    head.querySelector(".bar").dataset.empty = r.matched ? "0" : "1";
+    head.querySelector(".bar > i").style.width = `${r.matched ? (r.passed / r.matched) * 100 : 0}%`;
+    head.querySelector(".score-text").innerHTML = `<b>${r.passed}</b>/${r.matched}`;
+
+    host.querySelectorAll(".cond").forEach((node, i) => {
+      const s = node.querySelector(".cond-score");
+      const hits = r.perCond[i];
+      s.className = `cond-score score ${r.matched === 0 ? "empty" : hits === r.matched ? "all-pass" : "has-fail"}`;
+      s.querySelector(".score-text").textContent = `${hits}/${r.matched}`;
+    });
+
+    const foot = host.querySelector(".rule-foot .score");
+    foot.className = `score ${cls}`;
+    foot.querySelector(".score-text").textContent = !rule.conditions.length ? "Nothing checked yet"
+      : r.matched === 0 ? "No matching elements in this file"
+      : fails === 0 ? `All ${r.matched} pass` : `${fails} of ${r.matched} fail`;
+  }
+  renderXml();
+}
+
+/* ---- IDS XML ---- */
+const RX = { contains: (t) => `.*${t}.*`, startsWith: (t) => `${t}.*`, endsWith: (t) => `.*${t}`, matches: (t) => t };
+function restrictionXml(cond) {
+  if (cond.op === "equals") return `\n        <value><simpleValue>${esc(cond.text)}</simpleValue></value>`;
+  if (cond.op === "oneOf")
+    return `\n        <value>\n          <xs:restriction base="xs:string">${
+      cond.values.map((v) => `\n            <xs:enumeration value="${esc(v)}" />`).join("")}\n          </xs:restriction>\n        </value>`;
+  if (RX[cond.op])
+    return `\n        <value>\n          <xs:restriction base="xs:string">\n            <xs:pattern value="${esc(RX[cond.op](cond.text))}" />\n          </xs:restriction>\n        </value>`;
+  return "";
+}
+function facetXml(cond) {
+  const card = cond.op === "notExists" ? ` cardinality="prohibited"` : "";
+  return cond.kind === "attribute"
+    ? `      <attribute${card}>\n        <name><simpleValue>${esc(cond.name)}</simpleValue></name>${restrictionXml(cond)}\n      </attribute>`
+    : `      <property dataType="IFCLABEL"${card}>\n        <propertySet><simpleValue>${esc(cond.propertySet)}</simpleValue></propertySet>\n        <baseName><simpleValue>${esc(cond.name)}</simpleValue></baseName>${restrictionXml(cond)}\n      </property>`;
+}
+function buildIdsXml() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<ids xmlns="http://standards.buildingsmart.org/IDS"
+     xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <info>
+    <title>Tower-A-MEP</title>
+    <date>2026-07-24</date>
+  </info>
+  <specifications>
+${RULES.map((rule) => `    <specification name="${esc(rule.name)}" ifcVersion="IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+${rule.entityTypes.map((t) => `        <entity><name><simpleValue>${t.toUpperCase()}</simpleValue></name></entity>`).join("\n")}
+      </applicability>
+      <requirements>
+${rule.conditions.map(facetXml).join("\n")}
+      </requirements>
+    </specification>`).join("\n")}
+  </specifications>
+</ids>`;
+}
+function renderXml() {
+  const pre = document.getElementById("xml");
+  pre.style.display = showXml ? "" : "none";
+  document.getElementById("btn-xml").textContent = showXml ? "Hide IDS XML" : "Show IDS XML";
+  if (!showXml) return;
+  pre.innerHTML = esc(buildIdsXml())
+    .replace(/(&lt;\/?)([\w:.]+)/g, '$1<span class="t">$2</span>')
+    .replace(/([\w:]+)=(&quot;.*?&quot;)/g, '<span class="a">$1</span>=<span class="v">$2</span>');
+}
+
+function render() { renderExplorer(); renderRules(); renderXml(); }
+
+/* ============================================================
+   5. Events
+   ============================================================ */
+const ruleFrom = (n) => RULES.find((r) => r.id === n.closest("[data-rule]")?.dataset.rule);
+const condFrom = (n, rule) => rule.conditions.find((c) => c.id === n.closest("[data-cond]")?.dataset.cond);
+
+function markActive(id) {
+  if (activeRuleId === id) return;
+  activeRuleId = id;
+  rulesEl.querySelectorAll("[data-rule]").forEach((n) => n.classList.toggle("is-active", n.dataset.rule === id));
+}
+function defaultCondition(rule, seed) {
+  if (seed) return { id: uid(), text: "", values: [], op: "exists", ...seed };
+  const src = fieldsFor(rule.entityTypes);
+  const ps = src.propertySets[0];
+  return ps
+    ? { id: uid(), kind: "property", propertySet: ps.name, name: ps.fields[0].name, op: "exists", values: [], text: "" }
+    : { id: uid(), kind: "attribute", propertySet: null, name: src.attributes[0]?.name ?? "Name", op: "exists", values: [], text: "" };
+}
+
+document.querySelector(".explorer").addEventListener("click", (e) => {
+  const twist = e.target.closest("[data-twist]");
+  if (twist) {
+    const name = twist.dataset.twist;
+    expanded.has(name) ? expanded.delete(name) : expanded.add(name);
+    renderExplorer();
+    return;
+  }
+  const row = e.target.closest("[data-sel]");
+  if (row) {
+    selection = { kind: row.dataset.sel, name: row.dataset.name };
+    // Selecting reveals where the node sits: open its ancestors, and open the
+    // node itself so a group's members are visible the moment you pick it.
+    for (const g of groupChain(selection.name)) expanded.add(g);
+    if (selection.kind === "group") expanded.add(selection.name);
+    render();
+    return;
+  }
+  const field = e.target.closest(".field");
+  if (!field) return;
+  const rule = activeRule();
+  if (!rule) return;
+  if (!rule.entityTypes.includes(selName())) rule.entityTypes.push(selName());
+  rule.conditions.push(defaultCondition(rule, {
+    kind: field.dataset.kind, propertySet: field.dataset.ps || null, name: field.dataset.name, op: "exists",
+  }));
+  rule.open = true;
+  render();
+});
+
+rulesEl.addEventListener("click", (e) => {
+  const rule = ruleFrom(e.target);
+  if (!rule) return;
+
+  // Form controls own their own clicks — re-rendering here is what broke the
+  // dropdowns: the <select> was destroyed before it could open.
+  if (e.target.closest("select, input, label, option")) { markActive(rule.id); return; }
+
+  const btn = e.target.closest("button[data-act]");
+  markActive(rule.id);
+  const act = btn?.dataset.act;
+
+  if (act === "dup") {
+    const copy = structuredClone(rule);
+    copy.id = uid(); copy.name = `${rule.name} (copy)`; copy.open = true; copy.showFails = false;
+    copy.conditions = copy.conditions.map((c) => ({ ...c, id: uid() }));
+    RULES.splice(RULES.indexOf(rule) + 1, 0, copy);
+    activeRuleId = copy.id;
+    render();
+    const input = rulesEl.querySelector(`[data-rule="${copy.id}"] .rule-title`);
+    input?.focus(); input?.select();
+    return;
+  }
+  if (act === "del") { RULES = RULES.filter((r) => r !== rule); render(); return; }
+  if (act === "del-ent") { rule.entityTypes = rule.entityTypes.filter((t) => t !== btn.dataset.ent); render(); return; }
+  if (act === "add-cond") { rule.conditions.push(defaultCondition(rule)); render(); return; }
+  if (act === "dup-cond") {
+    const c = condFrom(e.target, rule);
+    rule.conditions.splice(rule.conditions.indexOf(c) + 1, 0, { ...structuredClone(c), id: uid() });
+    render(); return;
+  }
+  if (act === "del-cond") {
+    const c = condFrom(e.target, rule);
+    rule.conditions = rule.conditions.filter((x) => x !== c);
+    render(); return;
+  }
+  if (act === "fails") { rule.showFails = !rule.showFails; render(); return; }
+  if (act === "toggle" || e.target.closest(".rule-head")) { rule.open = !rule.open; render(); }
+});
+
+rulesEl.addEventListener("change", (e) => {
+  const rule = ruleFrom(e.target);
+  if (!rule) return;
+  markActive(rule.id);
+  const act = e.target.dataset.act;
+  const cond = condFrom(e.target, rule);
+
+  if (act === "add-ent" && e.target.value) { rule.entityTypes.push(e.target.value); render(); return; }
+  if (act === "kind" && cond) {
+    cond.kind = e.target.value;
+    const src = fieldsFor(rule.entityTypes);
+    if (cond.kind === "property") {
+      const ps = src.propertySets[0];
+      cond.propertySet = ps?.name ?? null; cond.name = ps?.fields[0].name ?? "";
+    } else { cond.propertySet = null; cond.name = src.attributes[0]?.name ?? "Name"; }
+    cond.values = []; render(); return;
+  }
+  if (act === "pset" && cond) {
+    cond.propertySet = e.target.value;
+    cond.name = fieldsFor(rule.entityTypes).propertySets.find((p) => p.name === cond.propertySet)?.fields[0].name ?? "";
+    cond.values = []; render(); return;
+  }
+  if (act === "name" && cond) { cond.name = e.target.value; cond.values = []; render(); return; }
+  if (act === "op" && cond) { cond.op = e.target.value; render(); return; }
+  // Ticking an enum value can't change the value list itself — only the counts.
+  if (act === "value" && cond) {
+    cond.values = e.target.checked ? [...cond.values, e.target.value] : cond.values.filter((v) => v !== e.target.value);
+    refreshScores(); return;
+  }
+});
+
+rulesEl.addEventListener("input", (e) => {
+  const rule = ruleFrom(e.target);
+  if (!rule) return;
+  const act = e.target.dataset.act;
+  if (act === "rename") { rule.name = e.target.value; renderXml(); return; }
+  if (act === "text") {
+    const cond = condFrom(e.target, rule);
+    if (cond) { cond.text = e.target.value; refreshScores(); }
+  }
+});
+
+document.getElementById("btn-add-rule").addEventListener("click", () => {
+  const rule = { id: uid(), name: "New rule", open: true, showFails: false, entityTypes: [selName()], conditions: [] };
+  rule.conditions.push(defaultCondition(rule));
+  RULES.push(rule); activeRuleId = rule.id; render();
+  const input = rulesEl.querySelector(`[data-rule="${rule.id}"] .rule-title`);
+  input?.focus(); input?.select();
+});
+document.getElementById("btn-xml").addEventListener("click", () => { showXml = !showXml; renderXml(); });
+document.getElementById("btn-theme").addEventListener("click", () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme === "dark" || (!root.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+  root.dataset.theme = dark ? "light" : "dark";
+});
+
+render();
+</script>

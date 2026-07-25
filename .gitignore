@@ -4,3 +4,4 @@ dist/
 .env
 docker/pgdata/
 apps/web/public/wasm/
+.verify-output/
