@@ -1,0 +1,89 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('fixture-mep-systems.ifc','2026-07-25T00:00:00',(''),(''),'IFC QA Tool fixture','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0MEPq72Kn2gQBLPeGefPXe',$,'MEP Systems Project',$,$,$,$,(#8),#5);
+#5=IFCUNITASSIGNMENT((#6,#7));
+#6=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#7=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#8=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,#9,$);
+#9=IFCAXIS2PLACEMENT3D(#10,$,$);
+#10=IFCCARTESIANPOINT((0.0,0.0,0.0));
+#11=IFCSITE('1MEPKvz85AqQI7$4o09XlW',$,'MEP Site',$,$,#12,$,$,.ELEMENT.,$,$,$,$,$);
+#12=IFCLOCALPLACEMENT($,#9);
+#13=IFCBUILDING('2MEPce5uz1qOB7WEOWMYyg',$,'MEP Building',$,$,#12,$,$,.ELEMENT.,$,$,$);
+#14=IFCBUILDINGSTOREY('3MEPr2t7D6UwlEDlNjJKr1',$,'Level 1',$,$,#12,$,$,.ELEMENT.,0.0);
+#15=IFCBUILDINGSTOREY('3MEPr2t7D6UwlEDlNjJKr2',$,'Plant Level',$,$,#12,$,$,.ELEMENT.,3600.0);
+
+/* The concrete classes a Revit MEP export actually writes. A fixed allowlist
+   of 17 type names saw none of these; they are the reason the parsers now
+   enumerate the model instead. Every pair below makes its immediate supertype
+   cover two present types, so IfcFlowSegment / IfcFlowFitting / IfcFlowTerminal
+   / IfcFlowController / IfcDistributionControlElement all qualify as groups. */
+#20=IFCDUCTSEGMENT('1Mm2Bb3Cc4Dd5Ee6Ff7G01',$,'DS-001','Supply duct run',$,#12,$,'DS-001',.RIGIDSEGMENT.);
+#21=IFCDUCTSEGMENT('1Mm2Bb3Cc4Dd5Ee6Ff7G02',$,'DS-002','Return duct run',$,#12,$,'DS-002',.RIGIDSEGMENT.);
+#22=IFCPIPESEGMENT('1Mm2Bb3Cc4Dd5Ee6Ff7G03',$,'PS-001','Chilled water flow',$,#12,$,'PS-001',.RIGIDSEGMENT.);
+#23=IFCPIPESEGMENT('1Mm2Bb3Cc4Dd5Ee6Ff7G04',$,'PS-002','Chilled water return',$,#12,$,$,.RIGIDSEGMENT.);
+#24=IFCDUCTFITTING('1Mm2Bb3Cc4Dd5Ee6Ff7G05',$,'DF-001','Duct bend 90',$,#12,$,'DF-001',.BEND.);
+#25=IFCDUCTFITTING('1Mm2Bb3Cc4Dd5Ee6Ff7G06',$,'DF-002','Duct tee',$,#12,$,'DF-002',.JUNCTION.);
+#26=IFCPIPEFITTING('1Mm2Bb3Cc4Dd5Ee6Ff7G07',$,'PF-001','Pipe elbow',$,#12,$,'PF-001',.BEND.);
+#27=IFCVALVE('1Mm2Bb3Cc4Dd5Ee6Ff7G08',$,'V-001','Isolation valve',$,#12,$,'V-001',.ISOLATING.);
+#28=IFCVALVE('1Mm2Bb3Cc4Dd5Ee6Ff7G09',$,'V-002','Balancing valve',$,#12,$,$,.REGULATING.);
+#29=IFCDAMPER('1Mm2Bb3Cc4Dd5Ee6Ff7G10',$,'DM-001','Fire damper',$,#12,$,'DM-001',.FIREDAMPER.);
+#30=IFCAIRTERMINAL('1Mm2Bb3Cc4Dd5Ee6Ff7G11',$,'AT-001','Supply diffuser',$,#12,$,'AT-001',.DIFFUSER.);
+#31=IFCAIRTERMINAL('1Mm2Bb3Cc4Dd5Ee6Ff7G12',$,'AT-002','Extract grille',$,#12,$,'AT-002',.GRILLE.);
+#32=IFCSANITARYTERMINAL('1Mm2Bb3Cc4Dd5Ee6Ff7G13',$,'ST-001','Wash basin',$,#12,$,'ST-001',.SINK.);
+#33=IFCPUMP('1Mm2Bb3Cc4Dd5Ee6Ff7G14',$,'PU-001','Chilled water pump',$,#12,$,'PU-001',.CIRCULATOR.);
+#34=IFCSENSOR('1Mm2Bb3Cc4Dd5Ee6Ff7G15',$,'SN-001','Duct temperature sensor',$,#12,$,'SN-001',.TEMPERATURESENSOR.);
+#35=IFCACTUATOR('1Mm2Bb3Cc4Dd5Ee6Ff7G16',$,'AC-001','Damper actuator',$,#12,$,'AC-001',.ELECTRICACTUATOR.);
+
+/* Architectural, so IfcBuildingElement qualifies as a second top-level group
+   and IfcElement is not the only branch in the tree. */
+#40=IFCWALL('1Mm2Bb3Cc4Dd5Ee6Ff7G17',$,'W-001','Plant room wall',$,#12,$,'W-001',.STANDARD.);
+#41=IFCWALL('1Mm2Bb3Cc4Dd5Ee6Ff7G18',$,'W-002','Riser shaft wall',$,#12,$,'W-002',.STANDARD.);
+#42=IFCDOOR('1Mm2Bb3Cc4Dd5Ee6Ff7G19',$,'D-001','Plant room door',$,#12,$,'D-001',$);
+#43=IFCSPACE('1Mm2Bb3Cc4Dd5Ee6Ff7G20',$,'Plant 001','Plant room',$,#12,$,'Plant 001',.ELEMENT.,$,$);
+
+/* Deliberately present and deliberately not elements: the IfcFeatureElement
+   subtree sits under IfcElement but is geometry bookkeeping, ports are
+   connection points, and an annotation is a drawing artefact. None of these
+   may reach the element list. */
+#50=IFCOPENINGELEMENT('1Mm2Bb3Cc4Dd5Ee6Ff7G21',$,'OP-001','Duct penetration',$,#12,$,'OP-001',.OPENING.);
+#51=IFCOPENINGELEMENT('1Mm2Bb3Cc4Dd5Ee6Ff7G22',$,'OP-002','Pipe sleeve',$,#12,$,'OP-002',.OPENING.);
+#52=IFCDISTRIBUTIONPORT('1Mm2Bb3Cc4Dd5Ee6Ff7G23',$,'PORT-001',$,$,#12,$,.SINK.,$,$);
+#53=IFCDISTRIBUTIONPORT('1Mm2Bb3Cc4Dd5Ee6Ff7G24',$,'PORT-002',$,$,#12,$,.SOURCE.,$,$);
+#54=IFCANNOTATION('1Mm2Bb3Cc4Dd5Ee6Ff7G25',$,'Note-001','Plant room note',$,#12,$);
+#55=IFCRELVOIDSELEMENT('1Mm2Bb3Cc4Dd5Ee6Ff7G26',$,$,$,#40,#50);
+#56=IFCRELVOIDSELEMENT('1Mm2Bb3Cc4Dd5Ee6Ff7G27',$,$,$,#41,#51);
+
+/* Property sets. Coverage is partial on purpose: SystemAbbreviation is absent
+   on one duct and on both sanitary/control items, so no field reads 100%. */
+#60=IFCPROPERTYSINGLEVALUE('SystemAbbreviation',$,IFCLABEL('SA'),$);
+#61=IFCPROPERTYSINGLEVALUE('Insulation',$,IFCLABEL('25mm'),$);
+#62=IFCPROPERTYSET('0MEP8vE59Jw4qLKrVeS01',$,'Pset_MEPCommon',$,(#60,#61));
+#63=IFCRELDEFINESBYPROPERTIES('2MEP9wF60Kx5rMLsWfT01',$,$,$,(#20,#24,#25,#30,#31),#62);
+
+#64=IFCPROPERTYSINGLEVALUE('SystemAbbreviation',$,IFCLABEL('CHW'),$);
+#65=IFCPROPERTYSINGLEVALUE('Insulation',$,IFCLABEL('19mm'),$);
+#66=IFCPROPERTYSET('0MEP8vE59Jw4qLKrVeS02',$,'Pset_MEPCommon',$,(#64,#65));
+#67=IFCRELDEFINESBYPROPERTIES('2MEP9wF60Kx5rMLsWfT02',$,$,$,(#22,#23,#26,#27,#28,#33),#66);
+
+#68=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('120'),$);
+#69=IFCPROPERTYSET('0MEP8vE59Jw4qLKrVeS03',$,'Pset_DamperOccurrence',$,(#68));
+#70=IFCRELDEFINESBYPROPERTIES('2MEP9wF60Kx5rMLsWfT03',$,$,$,(#29),#69);
+
+#71=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.F.),$);
+#72=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('60'),$);
+#73=IFCPROPERTYSET('0MEP8vE59Jw4qLKrVeS04',$,'Pset_WallCommon',$,(#71,#72));
+#74=IFCRELDEFINESBYPROPERTIES('2MEP9wF60Kx5rMLsWfT04',$,$,$,(#40,#41),#73);
+
+#80=IFCRELAGGREGATES('3MEPO0xG71Ly6sNMtXgUV1',$,$,$,#1,(#11));
+#81=IFCRELAGGREGATES('4MEPP1yH82Mz7tONuYhVW1',$,$,$,#11,(#13));
+#82=IFCRELAGGREGATES('5MEPQ2zI93Na8uPOvZiWX1',$,$,$,#13,(#14,#15));
+#83=IFCRELCONTAINEDINSPATIALSTRUCTURE('6MEPR3AJ04Ob9vQPwAjXY1',$,$,$,(#20,#21,#24,#25,#29,#30,#31,#32,#34,#35,#42,#50,#52),#14);
+#84=IFCRELCONTAINEDINSPATIALSTRUCTURE('7MEPS4BK15Pc0wRQxBkYZ1',$,$,$,(#22,#23,#26,#27,#28,#33,#40,#41,#43,#51,#53,#54),#15);
+ENDSEC;
+END-ISO-10303-21;

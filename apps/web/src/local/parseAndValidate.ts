@@ -46,6 +46,21 @@ const PARSE_BY_ENGINE: Record<
   "ifc-lite": parseIfcLiteBuffer,
 };
 
+// The rule builder loads a file as a worked example: it needs the elements
+// themselves, not a pass/fail verdict against a rule set it does not have yet.
+export async function parseIfcFileOnly(
+  file: File,
+  engine: EngineId
+): Promise<{
+  elements: NormalizedElement[];
+  parseMs: number;
+  modelStructure: ModelStructureNode | null;
+}> {
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  const { elements, parseMs, modelStructure } = await PARSE_BY_ENGINE[engine](buffer);
+  return { elements, parseMs, modelStructure: modelStructure ?? null };
+}
+
 export async function parseAndValidateFile(
   file: File,
   idsXml: string,

@@ -1,0 +1,140 @@
+import { describe, expect, it } from "vitest";
+import { buildIdsXml, type ConditionDraft, type RuleDraft } from "@ifc-qa/ids-validator";
+import {
+  conditionProblem,
+  exportBlockers,
+  isRuleComplete,
+  patternError,
+  ruleProblems,
+} from "./completeness";
+
+const CONDITION: ConditionDraft = {
+  id: "c1",
+  kind: "property",
+  propertySet: "Pset_WallCommon",
+  name: "FireRating",
+  operator: "exists",
+  values: [],
+  text: "",
+};
+
+const RULE: RuleDraft = {
+  id: "r1",
+  name: "Walls declare a fire rating",
+  entityTypes: ["IfcWall"],
+  conditions: [{ ...CONDITION, operator: "oneOf", values: ["60", "90"] }],
+};
+
+describe("conditionProblem", () => {
+  it("rejects a oneOf with nothing ticked — the XML would accept every value", () => {
+    const empty: ConditionDraft = { ...CONDITION, operator: "oneOf", values: [] };
+
+    // Proof this is not a theoretical worry: what we would emit is an unrestricted xs:string.
+    const xml = buildIdsXml([{ ...RULE, conditions: [empty] }]);
+    expect(xml).toContain('<xs:restriction base="xs:string">');
+    expect(xml).not.toContain("<xs:enumeration");
+
+    expect(conditionProblem(empty)).toMatch(/Tick at least one value/);
+    expect(conditionProblem({ ...empty, values: ["60"] })).toBeNull();
+  });
+
+  it("rejects every text operator with an empty box, and only while it is empty", () => {
+    for (const operator of ["equals", "contains", "startsWith", "endsWith", "matches"] as const) {
+      expect(conditionProblem({ ...CONDITION, operator, text: "" })).toMatch(/Enter a value/);
+      expect(conditionProblem({ ...CONDITION, operator, text: "REI" })).toBeNull();
+    }
+  });
+
+  it("leaves operators that need no value alone", () => {
+    expect(conditionProblem({ ...CONDITION, operator: "exists" })).toBeNull();
+    expect(conditionProblem({ ...CONDITION, operator: "notExists" })).toBeNull();
+  });
+
+  it("folds an uncompilable pattern into the same report", () => {
+    expect(conditionProblem({ ...CONDITION, operator: "matches", text: "[A-Z" })).toMatch(
+      /Invalid pattern/
+    );
+  });
+});
+
+describe("patternError", () => {
+  it("only reports on a matches condition whose text cannot compile", () => {
+    expect(patternError({ ...CONDITION, operator: "matches", text: "[A-Z]+" })).toBeNull();
+    expect(patternError({ ...CONDITION, operator: "matches", text: "" })).toBeNull();
+    expect(patternError({ ...CONDITION, operator: "contains", text: "[" })).toBeNull();
+    expect(patternError({ ...CONDITION, operator: "matches", text: "[" })).toContain("[");
+  });
+});
+
+describe("ruleProblems", () => {
+  it("rejects a rule with no entity types — IDS requires an applicability facet", () => {
+    const stripped: RuleDraft = { ...RULE, entityTypes: [] };
+
+    // The document we would emit has an applicability element with no child at all.
+    expect(buildIdsXml([stripped])).toContain(
+      '<applicability minOccurs="1" maxOccurs="unbounded">\n      </applicability>'
+    );
+    expect(ruleProblems(stripped)).toEqual({
+      applicability: expect.stringMatching(/No element types/),
+      conditions: null,
+    });
+  });
+
+  it("rejects a rule with no conditions — the requirements block would be empty", () => {
+    const stripped: RuleDraft = { ...RULE, conditions: [] };
+
+    expect(buildIdsXml([stripped])).toContain("<requirements>\n      </requirements>");
+    expect(ruleProblems(stripped)).toEqual({
+      applicability: null,
+      conditions: expect.stringMatching(/No conditions/),
+    });
+  });
+
+  it("reports both when both are missing, and neither when the rule is whole", () => {
+    const both = ruleProblems({ ...RULE, entityTypes: [], conditions: [] });
+    expect(both.applicability).not.toBeNull();
+    expect(both.conditions).not.toBeNull();
+    expect(ruleProblems(RULE)).toEqual({ applicability: null, conditions: null });
+  });
+});
+
+describe("isRuleComplete", () => {
+  it("is false when any single condition is incomplete", () => {
+    expect(isRuleComplete(RULE)).toBe(true);
+    expect(
+      isRuleComplete({ ...RULE, conditions: [{ ...CONDITION, operator: "oneOf", values: [] }] })
+    ).toBe(false);
+  });
+});
+
+describe("exportBlockers", () => {
+  it("is empty only for a rule set whose XML means what the page shows", () => {
+    expect(exportBlockers([RULE])).toEqual([]);
+  });
+
+  it("names the rule and the field behind each problem", () => {
+    const [blocker] = exportBlockers([
+      { ...RULE, conditions: [{ ...CONDITION, operator: "contains", text: "" }] },
+    ]);
+
+    expect(blocker).toContain("Walls declare a fire rating");
+    expect(blocker).toContain("FireRating");
+    expect(blocker).toMatch(/Enter a value/);
+  });
+
+  it("blocks an empty rule set — an IDS document with no specification is not one", () => {
+    expect(exportBlockers([])).toEqual([expect.stringMatching(/No rules yet/)]);
+  });
+
+  it("reports every offending rule, not just the first", () => {
+    const blockers = exportBlockers([
+      { ...RULE, id: "a", name: "A", entityTypes: [] },
+      RULE,
+      { ...RULE, id: "b", name: "B", conditions: [{ ...CONDITION, operator: "oneOf", values: [] }] },
+    ]);
+
+    expect(blockers).toHaveLength(2);
+    expect(blockers[0]).toContain('"A"');
+    expect(blockers[1]).toContain('"B"');
+  });
+});

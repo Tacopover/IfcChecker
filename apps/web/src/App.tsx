@@ -1,5 +1,45 @@
+import { useState } from "react";
 import { IfcCheckerPage } from "./routes/IfcCheckerPage";
+import { RuleBuilderPage } from "./builder/RuleBuilderPage";
+
+type Tab = "validate" | "builder";
+
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: "validate", label: "Validate" },
+  { id: "builder", label: "Build rules" },
+];
 
 export function App() {
-  return <IfcCheckerPage />;
+  const [tab, setTab] = useState<Tab>("validate");
+
+  return (
+    <>
+      <header className="topbar">
+        <span className="brand">IFC Checker</span>
+        <nav className="tabs" aria-label="Pages">
+          {TABS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className="tab"
+              data-smoke-route={entry.id}
+              aria-current={tab === entry.id ? "page" : undefined}
+              onClick={() => setTab(entry.id)}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      {/* Both pages stay mounted: switching tabs must not throw away a parsed model or a
+          half-written rule set. */}
+      <div className="page-narrow" hidden={tab !== "validate"}>
+        <IfcCheckerPage />
+      </div>
+      <div hidden={tab !== "builder"}>
+        <RuleBuilderPage />
+      </div>
+    </>
+  );
 }

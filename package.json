@@ -9,6 +9,8 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",
+    "verify": "node scripts/verify.mjs",
+    "verify:visual": "node scripts/verify.mjs --visual",
     "db:generate": "pnpm --filter @ifc-qa/db run db:generate",
     "db:migrate": "pnpm --filter @ifc-qa/db run db:migrate"
   },
