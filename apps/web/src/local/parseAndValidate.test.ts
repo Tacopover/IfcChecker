@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { InvalidIdsRuleSetError, parseAndValidateFile, parseAndValidateFiles } from "./parseAndValidate.js";
+import {
+  InvalidIdsRuleSetError,
+  parseAndValidateFile,
+  parseAndValidateFiles,
+  parseIfcFileOnly,
+} from "./parseAndValidate.js";
 
 const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
   parseWebIfcBuffer: vi.fn(),
@@ -89,6 +94,44 @@ describe("parseAndValidateFile", () => {
     expect(outcome.parseMs).toBeNull();
     expect(outcome.results).toEqual([]);
     expect(outcome.modelStructure).toBeNull();
+  });
+});
+
+describe("parseIfcFileOnly", () => {
+  it("returns the parsed elements without touching the validator", async () => {
+    const modelStructure = {
+      expressId: 1,
+      ifcType: "IFCPROJECT",
+      name: "Fixture Project",
+      elementCounts: {},
+      children: [],
+    };
+    const elements = [
+      { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
+    ];
+    parseWebIfcBuffer.mockResolvedValueOnce({ elements, parseMs: 9, modelStructure });
+
+    const result = await parseIfcFileOnly(makeFile("model-a.ifc"), "web-ifc");
+
+    expect(result).toEqual({ elements, parseMs: 9, modelStructure });
+    expect(validateElements).not.toHaveBeenCalled();
+    expect(parseIdsXml).not.toHaveBeenCalled();
+  });
+
+  it("routes to the ifc-lite engine and normalises a missing model structure to null", async () => {
+    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 4 });
+
+    const result = await parseIfcFileOnly(makeFile("model-b.ifc"), "ifc-lite");
+
+    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(1);
+    expect(parseWebIfcBuffer).not.toHaveBeenCalled();
+    expect(result.modelStructure).toBeNull();
+  });
+
+  it("propagates parse failures instead of swallowing them into an outcome row", async () => {
+    parseWebIfcBuffer.mockRejectedValueOnce(new Error("unexpected EOF"));
+
+    await expect(parseIfcFileOnly(makeFile("corrupt.ifc"), "web-ifc")).rejects.toThrow("unexpected EOF");
   });
 });
 
