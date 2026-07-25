@@ -1,0 +1,98 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('fixture-mixed-disciplines.ifc','2026-07-25T00:00:00',(''),(''),'IFC QA Tool fixture','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0FMxV72Kn2gQBLPeGefPXe',$,'Mixed Disciplines Project',$,$,$,$,(#8),#5);
+#5=IFCUNITASSIGNMENT((#6,#7));
+#6=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#7=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#8=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,#9,$);
+#9=IFCAXIS2PLACEMENT3D(#10,$,$);
+#10=IFCCARTESIANPOINT((0.0,0.0,0.0));
+#11=IFCSITE('1PPvKvz85AqQI7$4o09XlW',$,'Mixed Site',$,$,#12,$,$,.ELEMENT.,$,$,$,$,$);
+#12=IFCLOCALPLACEMENT($,#9);
+#13=IFCBUILDING('2Rf9ce5uz1qOB7WEOWMYyg',$,'Mixed Building',$,$,#12,$,$,.ELEMENT.,$,$,$);
+#14=IFCBUILDINGSTOREY('3Kf5r2t7D6UwlEDlNjJKr1',$,'Level 1',$,$,#12,$,$,.ELEMENT.,0.0);
+#15=IFCBUILDINGSTOREY('3Kf5r2t7D6UwlEDlNjJKr2',$,'Level 2',$,$,#12,$,$,.ELEMENT.,3000.0);
+
+/* Architectural — three walls, two doors, two slabs.
+   Together these are the only IfcBuildingElement subtypes present. */
+#20=IFCWALL('1Aa2Bb3Cc4Dd5Ee6Ff7G01',$,'W-001','External wall north',$,#12,$,'W-001',.STANDARD.);
+#21=IFCWALL('1Aa2Bb3Cc4Dd5Ee6Ff7G02',$,'W-002','External wall south',$,#12,$,'W-002',.STANDARD.);
+#22=IFCWALL('1Aa2Bb3Cc4Dd5Ee6Ff7G03',$,'W-003','Internal partition',$,#12,$,$,.STANDARD.);
+#23=IFCDOOR('1Aa2Bb3Cc4Dd5Ee6Ff7G04',$,'D-001','Entrance door',$,#12,$,'D-001',$);
+#24=IFCDOOR('1Aa2Bb3Cc4Dd5Ee6Ff7G05',$,'D-002','Office door',$,#12,$,$,$);
+#25=IFCSLAB('1Aa2Bb3Cc4Dd5Ee6Ff7G06',$,'S-001','Level 1 floor',$,#12,$,'S-001',.FLOOR.);
+#26=IFCSLAB('1Aa2Bb3Cc4Dd5Ee6Ff7G07',$,'S-002','Level 2 floor',$,#12,$,'S-002',.FLOOR.);
+
+/* MEP — duct and pipe segments share IfcFlowSegment as a parent, while the
+   fitting and terminal sit directly under IfcDistributionFlowElement. This
+   makes IfcDistributionElement and IfcDistributionFlowElement cover an
+   identical set of present types, so only the more specific one should be
+   offered as a group. IfcFlowFitting and IfcFlowTerminal are additionally
+   names that exist as branches in the type hierarchy while being present
+   here as concrete leaf types. */
+#30=IFCDUCTSEGMENT('1Aa2Bb3Cc4Dd5Ee6Ff7G08',$,'DS-001','Supply duct',$,#12,$,'DS-001',$);
+#31=IFCDUCTSEGMENT('1Aa2Bb3Cc4Dd5Ee6Ff7G09',$,'DS-002','Supply duct branch',$,#12,$,'DS-002',$);
+#32=IFCDUCTSEGMENT('1Aa2Bb3Cc4Dd5Ee6Ff7G10',$,'DS-003','Return duct',$,#12,$,$,$);
+#33=IFCPIPESEGMENT('1Aa2Bb3Cc4Dd5Ee6Ff7G11',$,'PS-001','Chilled water flow',$,#12,$,'PS-001',$);
+#34=IFCPIPESEGMENT('1Aa2Bb3Cc4Dd5Ee6Ff7G12',$,'PS-002','Chilled water return',$,#12,$,'PS-002',$);
+#35=IFCFLOWFITTING('1Aa2Bb3Cc4Dd5Ee6Ff7G13',$,'FF-001','Duct bend',$,#12,$,'FF-001',$);
+#36=IFCFLOWFITTING('1Aa2Bb3Cc4Dd5Ee6Ff7G14',$,'FF-002','Duct tee',$,#12,$,'FF-002',$);
+#37=IFCFLOWTERMINAL('1Aa2Bb3Cc4Dd5Ee6Ff7G15',$,'FT-001','Supply diffuser',$,#12,$,'FT-001',$);
+#38=IFCFLOWTERMINAL('1Aa2Bb3Cc4Dd5Ee6Ff7G16',$,'FT-002','Extract grille',$,#12,$,$,$);
+
+/* Spatial — IfcSpace is an IfcSpatialElement, not an IfcElement, so it has
+   no qualifying group and belongs at the root of the model tree. */
+#40=IFCSPACE('1Aa2Bb3Cc4Dd5Ee6Ff7G17',$,'Office 101','Cellular office',$,#12,$,'Office 101',.ELEMENT.,$,$);
+#41=IFCSPACE('1Aa2Bb3Cc4Dd5Ee6Ff7G18',$,'Plant 001','Plant room',$,#12,$,'Plant 001',.ELEMENT.,$,$);
+
+/* Property sets. Coverage is deliberately partial: FireRating is absent on
+   one wall and one door, and SystemAbbreviation on one duct, so coverage
+   percentages and pass/fail counts are never uniformly 100%. */
+#50=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#51=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('60'),$);
+#52=IFCPROPERTYSET('0zP1M8vE59Jw4qLKrVeS01',$,'Pset_WallCommon',$,(#50,#51));
+#53=IFCRELDEFINESBYPROPERTIES('2yQ7N9wF60Kx5rMLsWfT01',$,$,$,(#20),#52);
+
+#54=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#55=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('90'),$);
+#56=IFCPROPERTYSET('0zP1M8vE59Jw4qLKrVeS02',$,'Pset_WallCommon',$,(#54,#55));
+#57=IFCRELDEFINESBYPROPERTIES('2yQ7N9wF60Kx5rMLsWfT02',$,$,$,(#21),#56);
+
+#58=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.F.),$);
+#59=IFCPROPERTYSET('0zP1M8vE59Jw4qLKrVeS03',$,'Pset_WallCommon',$,(#58));
+#60=IFCRELDEFINESBYPROPERTIES('2yQ7N9wF60Kx5rMLsWfT03',$,$,$,(#22),#59);
+
+#61=IFCPROPERTYSINGLEVALUE('FireRating',$,IFCLABEL('30'),$);
+#62=IFCPROPERTYSET('0zP1M8vE59Jw4qLKrVeS04',$,'Pset_DoorCommon',$,(#61));
+#63=IFCRELDEFINESBYPROPERTIES('2yQ7N9wF60Kx5rMLsWfT04',$,$,$,(#23),#62);
+
+#64=IFCPROPERTYSINGLEVALUE('SystemAbbreviation',$,IFCLABEL('SA'),$);
+#65=IFCPROPERTYSINGLEVALUE('Insulation',$,IFCLABEL('25mm'),$);
+#66=IFCPROPERTYSET('0zP1M8vE59Jw4qLKrVeS05',$,'MEP_Data',$,(#64,#65));
+#67=IFCRELDEFINESBYPROPERTIES('2yQ7N9wF60Kx5rMLsWfT05',$,$,$,(#30,#31),#66);
+
+#68=IFCPROPERTYSINGLEVALUE('SystemAbbreviation',$,IFCLABEL('RA'),$);
+#69=IFCPROPERTYSET('0zP1M8vE59Jw4qLKrVeS06',$,'MEP_Data',$,(#68));
+#70=IFCRELDEFINESBYPROPERTIES('2yQ7N9wF60Kx5rMLsWfT06',$,$,$,(#37,#38),#69);
+
+#71=IFCPROPERTYSINGLEVALUE('SystemAbbreviation',$,IFCLABEL('CHWS'),$);
+#72=IFCPROPERTYSINGLEVALUE('Insulation',$,IFCLABEL('19mm'),$);
+#73=IFCPROPERTYSET('0zP1M8vE59Jw4qLKrVeS07',$,'MEP_Data',$,(#71,#72));
+#74=IFCRELDEFINESBYPROPERTIES('2yQ7N9wF60Kx5rMLsWfT07',$,$,$,(#33,#34),#73);
+
+#75=IFCPROPERTYSINGLEVALUE('SystemAbbreviation',$,IFCLABEL('SA'),$);
+#76=IFCPROPERTYSET('0zP1M8vE59Jw4qLKrVeS08',$,'MEP_Data',$,(#75));
+#77=IFCRELDEFINESBYPROPERTIES('2yQ7N9wF60Kx5rMLsWfT08',$,$,$,(#35,#36),#76);
+
+#80=IFCRELAGGREGATES('3zR8O0xG71Ly6sNMtXgUV1',$,$,$,#1,(#11));
+#81=IFCRELAGGREGATES('4aS9P1yH82Mz7tONuYhVW1',$,$,$,#11,(#13));
+#82=IFCRELAGGREGATES('5bT0Q2zI93Na8uPOvZiWX1',$,$,$,#13,(#14,#15));
+#83=IFCRELCONTAINEDINSPATIALSTRUCTURE('6cU1R3AJ04Ob9vQPwAjXY1',$,$,$,(#20,#21,#22,#23,#24,#25,#30,#31,#32,#33,#34,#35,#36,#37,#38,#40,#41),#14);
+#84=IFCRELCONTAINEDINSPATIALSTRUCTURE('7dV2S4BK15Pc0wRQxBkYZ1',$,$,$,(#26),#15);
+ENDSEC;
+END-ISO-10303-21;
