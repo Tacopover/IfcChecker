@@ -10,7 +10,7 @@ export interface RuleEvaluation {
   matched: number;
   passed: number;
   perCondition: number[];
-  failures: Array<{ element: NormalizedElement; conditionIndex: number }>;
+  failures: Array<{ element: NormalizedElement; conditionIndex: number; message: string }>;
 }
 
 /**
@@ -42,11 +42,16 @@ export function evaluateRuleDraft(rule: RuleDraft, elements: NormalizedElement[]
     // A rule with no conditions checks nothing, so nothing can have passed it.
     let satisfiesAll = requirements.length > 0;
     for (let index = 0; index < requirements.length; index += 1) {
-      if (evaluateRequirement(element, requirements[index]).passed) {
+      const check = evaluateRequirement(element, requirements[index]);
+      if (check.passed) {
         perCondition[index] += 1;
       } else {
         satisfiesAll = false;
-        if (failures.length < MAX_COLLECTED_FAILURES) failures.push({ element, conditionIndex: index });
+        // The validator's own wording travels with the failure: "W-003" in an Actual column reads
+        // like a pass until something says which restriction it missed.
+        if (failures.length < MAX_COLLECTED_FAILURES) {
+          failures.push({ element, conditionIndex: index, message: check.message });
+        }
       }
     }
     if (satisfiesAll) passed += 1;

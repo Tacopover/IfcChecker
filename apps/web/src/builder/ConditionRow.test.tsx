@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ConditionDraft } from "@ifc-qa/ids-validator";
-import { ConditionRow, defaultConditionFor, patternError } from "./ConditionRow";
+import { ConditionRow, defaultConditionFor } from "./ConditionRow";
 import type { FieldsForResult } from "./introspect";
 
 const SOURCE: FieldsForResult = {
@@ -168,6 +168,36 @@ describe("ConditionRow", () => {
     expect(screen.queryByText(/Invalid pattern/)).not.toBeInTheDocument();
   });
 
+  it("says so when oneOf has nothing ticked, and stops once one is", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.selectOptions(screen.getByLabelText("Operator"), "oneOf");
+    expect(screen.getByText(/Tick at least one value/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: /60\s*5/ }));
+    expect(screen.queryByText(/Tick at least one value/)).not.toBeInTheDocument();
+  });
+
+  it("says so when an operator that needs text has an empty box", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...CONDITION, operator: "contains" }} />);
+
+    const input = screen.getByLabelText("Value");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText(/Enter a value/)).toBeInTheDocument();
+
+    await user.type(input, "REI");
+    expect(screen.queryByText(/Enter a value/)).not.toBeInTheDocument();
+  });
+
+  it("leaves an operator that needs no value unmarked", () => {
+    render(<Harness initial={{ ...CONDITION, operator: "notExists" }} />);
+
+    expect(screen.queryByText(/Enter a value/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tick at least one value/)).not.toBeInTheDocument();
+  });
+
   it("duplicates and deletes itself", async () => {
     const user = userEvent.setup();
     const onDuplicate = vi.fn();
@@ -179,15 +209,6 @@ describe("ConditionRow", () => {
 
     expect(onDuplicate).toHaveBeenCalledOnce();
     expect(onDelete).toHaveBeenCalledOnce();
-  });
-});
-
-describe("patternError", () => {
-  it("only reports on a matches condition whose text cannot compile", () => {
-    expect(patternError({ ...CONDITION, operator: "matches", text: "[A-Z]+" })).toBeNull();
-    expect(patternError({ ...CONDITION, operator: "matches", text: "" })).toBeNull();
-    expect(patternError({ ...CONDITION, operator: "contains", text: "[" })).toBeNull();
-    expect(patternError({ ...CONDITION, operator: "matches", text: "[" })).toContain("[");
   });
 });
 

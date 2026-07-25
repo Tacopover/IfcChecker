@@ -103,7 +103,9 @@ describe("evaluateRuleDraft — notExists is prohibited, not inverted-presence-o
 
     expect(evaluation.matched).toBe(4);
     expect(evaluation.passed).toBe(3);
-    expect(evaluation.failures).toEqual([{ element: walls[0], conditionIndex: 0 }]);
+    expect(evaluation.failures).toEqual([
+      { element: walls[0], conditionIndex: 0, message: expect.stringContaining("must not be filled in") },
+    ]);
   });
 
   it("is the exact complement of the same condition under exists", () => {
@@ -221,6 +223,20 @@ describe("evaluateRuleDraft — condition alignment", () => {
     // Only the first wall satisfies all three, yet every condition passes on most elements.
     expect(evaluation.passed).toBe(1);
     expect(evaluation.perCondition.every((count) => count > evaluation.passed)).toBe(true);
+  });
+});
+
+describe("evaluateRuleDraft — failure reasons", () => {
+  it("carries the validator's own wording, so a near-miss cannot read like a pass", () => {
+    const walls = [element("IFCWALL", { name: "W-003" })];
+    const { failures } = evaluateRuleDraft(
+      rule({ conditions: [condition({ operator: "oneOf", values: ["W-001", "W-002"] })] }),
+      walls
+    );
+
+    expect(failures[0].message).toBe(
+      'Attribute "Name" value "W-003" is not one of: W-001, W-002'
+    );
   });
 });
 

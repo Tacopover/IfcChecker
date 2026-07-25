@@ -25,7 +25,7 @@ export function readConditionValue(
 }
 
 export interface FailingElementsTableProps {
-  failures: Array<{ element: NormalizedElement; conditionIndex: number }>;
+  failures: Array<{ element: NormalizedElement; conditionIndex: number; message?: string }>;
   conditions: ConditionDraft[];
   limit?: number;
 }
@@ -62,9 +62,14 @@ export function FailingElementsTable({ failures, conditions, limit = 12 }: Faili
                 </td>
                 <td>
                   {value === null || value === undefined || String(value) === "" ? (
+                    // "not set" already is the reason; repeating the validator's wording here
+                    // would say the same thing twice.
                     <span className="miss">not set</span>
                   ) : (
-                    String(value)
+                    <>
+                      {String(value)}
+                      {failure.message && <span className="why">{failure.message}</span>}
+                    </>
                   )}
                 </td>
               </tr>

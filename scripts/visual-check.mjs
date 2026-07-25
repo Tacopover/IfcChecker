@@ -258,8 +258,10 @@ const MIME = {
   ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon",
   ".ifc": "application/octet-stream", ".ids": "application/xml",
 };
-let reportResult;
-const reported = new Promise((resolve) => { reportResult = resolve; });
+// One report per Chromium run. Runs are sequential, so a single slot is enough —
+// but it must be re-armed before each run, or every viewport after the first
+// would post into a promise that is already settled and assert nothing.
+let awaitingReport = null;
 
 const server = createServer((req, res) => {
   if (req.url.startsWith("/__tick")) {
@@ -272,7 +274,10 @@ const server = createServer((req, res) => {
     req.on("data", (chunk) => { body += chunk; });
     req.on("end", () => {
       res.writeHead(204).end();
-      try { reportResult(JSON.parse(body)); } catch { reportResult(null); }
+      const deliver = awaitingReport;
+      awaitingReport = null;
+      if (!deliver) return;
+      try { deliver(JSON.parse(body)); } catch { deliver(null); }
     });
     return;
   }
@@ -327,44 +332,66 @@ const VIEWPORTS = [
   { name: `${PREFIX}narrow`, size: "760,950" },
 ];
 
-const first = chromeRun([
-  `--window-size=${VIEWPORTS[0].size}`,
-  `--screenshot=${join(OUT, `render-${VIEWPORTS[0].name}.png`)}`,
-]);
-// Not unref'd: if Chromium dies before reporting, an unref'd timer lets the
-// event loop drain and Node exits 13 with no message at all.
-let timer;
-const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(undefined), 45000); });
-const result = await Promise.race([reported, timeout]);
-clearTimeout(timer);
-await first;
-
-if (!result) {
-  server.close();
-  console.error("browser check FAILED — the page never reported back within 45s.");
-  console.error("The app most likely threw before mounting; see .verify-output/render-desktop.png");
-  process.exit(1);
+async function renderAt(viewport) {
+  const reported = new Promise((resolve) => { awaitingReport = resolve; });
+  const run = chromeRun([
+    `--window-size=${viewport.size}`,
+    `--screenshot=${join(OUT, `render-${viewport.name}.png`)}`,
+  ]);
+  // Not unref'd: if Chromium dies before reporting, an unref'd timer lets the
+  // event loop drain and Node exits 13 with no message at all.
+  let timer;
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(undefined), 45000); });
+  const result = await Promise.race([reported, timeout]);
+  clearTimeout(timer);
+  awaitingReport = null;
+  await run;
+  return result;
 }
 
-for (const viewport of VIEWPORTS.slice(1)) {
-  await chromeRun([`--window-size=${viewport.size}`, `--screenshot=${join(OUT, `render-${viewport.name}.png`)}`]);
-}
-
+// The clip this gate exists to catch is viewport-dependent — a flex child
+// collapses where there is least room — so every viewport is asserted, not just
+// the one that happens to be listed first.
 const failures = [];
-if (!result.mounted) failures.push("app did not mount — #root is empty");
-if (result.errors.length) failures.push(`console/runtime errors:\n    ${result.errors.join("\n    ")}`);
-if (result.clipped.length) {
-  failures.push(
-    "content clipped by an overflow:hidden box (flex-collapse — give it flex-shrink:0 or let its container scroll):\n    " +
-      result.clipped.map((c) => `${c.el} hides ${c.hidden}px`).join("\n    ")
+let firstResult = null;
+
+for (const viewport of VIEWPORTS) {
+  const result = await renderAt(viewport);
+  if (!result) {
+    // Silence means the app threw before mounting, which no other viewport can
+    // tell us anything new about — stop rather than burn 45s twice more.
+    failures.push(`${viewport.name} (${viewport.size}): the page never reported back within 45s — it most likely threw before mounting; see .verify-output/render-${viewport.name}.png`);
+    console.log(`  ${viewport.name} (${viewport.size}): NO REPORT`);
+    break;
+  }
+  firstResult ??= result;
+
+  if (!result.mounted) failures.push(`${viewport.name}: app did not mount — #root is empty`);
+  if (result.errors.length) {
+    failures.push(`${viewport.name}: console/runtime errors:\n    ${result.errors.join("\n    ")}`);
+  }
+  if (result.clipped.length) {
+    failures.push(
+      `${viewport.name}: content clipped by an overflow:hidden box (flex-collapse — give it flex-shrink:0 or let its container scroll):\n    ` +
+        result.clipped.map((c) => `${c.el} hides ${c.hidden}px`).join("\n    ")
+    );
+  }
+  if (result.horizontalOverflow > 1) {
+    failures.push(`${viewport.name}: page scrolls sideways by ${result.horizontalOverflow}px`);
+  }
+
+  console.log(
+    `  ${viewport.name} (${viewport.size}): mounted ${result.mounted} · ${result.interactive} interactive` +
+      ` · ${result.clipped.length} clipped · sideways ${result.horizontalOverflow}px`
   );
 }
-if (result.horizontalOverflow > 1) failures.push(`page scrolls sideways by ${result.horizontalOverflow}px`);
 
-console.log(`  mounted: ${result.mounted} · interactive elements: ${result.interactive} · routes: ${result.routes.join(", ") || "none"}`);
-console.log(`  headings: ${result.headings.slice(0, 6).join(" | ") || "none"}`);
-if (result.scenario) console.log(`  scenario ${SCENARIO}: ${JSON.stringify(result.scenario)}`);
-if (result.probe) console.log(`  probe: ${JSON.stringify(result.probe, null, 2)}`);
+if (firstResult) {
+  console.log(`  routes: ${firstResult.routes.join(", ") || "none"}`);
+  console.log(`  headings: ${firstResult.headings.slice(0, 6).join(" | ") || "none"}`);
+  if (firstResult.scenario) console.log(`  scenario ${SCENARIO}: ${JSON.stringify(firstResult.scenario)}`);
+  if (firstResult.probe) console.log(`  probe: ${JSON.stringify(firstResult.probe, null, 2)}`);
+}
 console.log(`  screenshots: ${VIEWPORTS.map((v) => `.verify-output/render-${v.name}.png`).join(", ")}`);
 
 server.close();

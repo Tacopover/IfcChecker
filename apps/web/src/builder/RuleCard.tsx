@@ -4,6 +4,7 @@ import type { ConditionDraft, RuleDraft } from "@ifc-qa/ids-validator";
 import type { ModelIntrospection } from "./introspect.js";
 import { evaluateRuleDraft } from "./evaluateDraft.js";
 import { ConditionRow, defaultConditionFor } from "./ConditionRow.js";
+import { ruleProblems } from "./completeness.js";
 import { FailingElementsTable } from "./FailingElementsTable.js";
 import { nextDraftId } from "./draftIds.js";
 
@@ -54,6 +55,7 @@ export function RuleCard({
   const scoreClass =
     matched === 0 || rule.conditions.length === 0 ? "empty" : failing === 0 ? "all-pass" : "has-fail";
 
+  const problems = ruleProblems(rule);
   const groupByName = new Map(introspection.groups.map((group) => [group.name, group]));
   const countByType = new Map(introspection.entityTypes.map((entry) => [entry.name, entry.count]));
   const usedTypes = new Set(rule.entityTypes);
@@ -187,13 +189,14 @@ export function RuleCard({
                 </optgroup>
               </select>
             </div>
+            {problems.applicability && <p className="rule-error">{problems.applicability}</p>}
           </div>
 
           <div className="clause">
             <span className="micro">Must satisfy all of</span>
-            {rule.conditions.length === 0 ? (
-              <p className="hint">
-                No conditions yet — click a field in the left panel, or add one.
+            {problems.conditions ? (
+              <p className="rule-error">
+                {problems.conditions} Click a field in the left panel, or add one.
               </p>
             ) : (
               rule.conditions.map((condition, index) => (

@@ -55,6 +55,42 @@ describe("FailingElementsTable", () => {
     expect(screen.getByText("not set")).toBeInTheDocument();
   });
 
+  it("says why a value that looks plausible was rejected", () => {
+    render(
+      <FailingElementsTable
+        failures={[
+          {
+            element: element(),
+            conditionIndex: 0,
+            message: 'Property "FireRating" value "60" is not one of: 90, 120',
+          },
+        ]}
+        conditions={CONDITIONS}
+      />
+    );
+
+    // Without this the cell reads "60" and looks like a pass.
+    expect(screen.getByText(/is not one of: 90, 120/)).toBeInTheDocument();
+  });
+
+  it("does not repeat the reason when the value is simply absent", () => {
+    render(
+      <FailingElementsTable
+        failures={[
+          {
+            element: element({ propertySets: {} }),
+            conditionIndex: 0,
+            message: 'Property "FireRating" is missing in property set "Pset_WallCommon"',
+          },
+        ]}
+        conditions={CONDITIONS}
+      />
+    );
+
+    expect(screen.getByText("not set")).toBeInTheDocument();
+    expect(screen.queryByText(/is missing in property set/)).not.toBeInTheDocument();
+  });
+
   it("caps the rows it draws and says how many more there are", () => {
     const failures = Array.from({ length: 30 }, (_, index) => ({
       element: element({ globalId: `g${index}` }),

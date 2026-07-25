@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { buildIdsXml, type RuleDraft } from "@ifc-qa/ids-validator";
+import { exportBlockers } from "./completeness.js";
 
 // Tag names, then attribute="value" pairs — enough to read the structure at a glance without
 // pulling in a highlighter.
@@ -50,8 +51,10 @@ export interface IdsXmlPreviewProps {
 export function IdsXmlPreview({ rules, title }: IdsXmlPreviewProps) {
   const [visible, setVisible] = useState(true);
   const xml = useMemo(() => buildIdsXml(rules, { title }), [rules, title]);
+  const blockers = useMemo(() => exportBlockers(rules), [rules]);
 
   function handleDownload() {
+    if (blockers.length) return;
     const url = URL.createObjectURL(new Blob([xml], { type: "application/xml" }));
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -68,10 +71,30 @@ export function IdsXmlPreview({ rules, title }: IdsXmlPreviewProps) {
         <button type="button" className="btn ghost" onClick={() => setVisible((shown) => !shown)}>
           {visible ? "Hide IDS XML" : "Show IDS XML"}
         </button>
-        <button type="button" className="btn" onClick={handleDownload}>
+        <button
+          type="button"
+          className="btn"
+          disabled={blockers.length > 0}
+          title={blockers.length ? "Finish the rules below first" : undefined}
+          onClick={handleDownload}
+        >
           Download .ids
         </button>
       </div>
+      {/* The XML still renders — seeing what you are building is the point of the panel — but it
+          must never look like a document that is ready to hand to a checker. `status`, not `alert`:
+          this is the panel's standing state, and an assertive live region would interrupt a screen
+          reader on every keystroke that leaves it unfixed. */}
+      {blockers.length > 0 && (
+        <div className="export-blocked" role="status">
+          <strong>Not exportable yet.</strong> The preview below is not a valid IDS document:
+          <ul>
+            {blockers.map((blocker) => (
+              <li key={blocker}>{blocker}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {visible && (
         <pre className="xml" aria-label="IDS XML preview">
           {highlight(xml)}

@@ -76,4 +76,40 @@ describe("IdsXmlPreview", () => {
     expect(downloadName).toBe("Tower-A.ids");
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:ids");
   });
+
+  it("refuses to download a rule whose XML would not mean what the page shows", async () => {
+    const user = userEvent.setup();
+    const createObjectURL = vi.fn(() => "blob:ids");
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+
+    // oneOf with nothing ticked: an empty xs:restriction is an unrestricted string in XSD.
+    const incomplete: RuleDraft[] = [
+      { ...RULES[0], conditions: [{ ...RULES[0].conditions[0], values: [] }] },
+    ];
+    render(<IdsXmlPreview rules={incomplete} title="Tower-A.ifc" />);
+
+    const download = screen.getByRole("button", { name: "Download .ids" });
+    expect(download).toBeDisabled();
+    await user.click(download);
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("still previews the XML, under a warning that names what is wrong", () => {
+    const incomplete: RuleDraft[] = [{ ...RULES[0], entityTypes: [] }];
+    render(<IdsXmlPreview rules={incomplete} title="Tower-A.ifc" />);
+
+    expect(screen.getByLabelText("IDS XML preview")).toBeInTheDocument();
+    const warning = screen.getByRole("status");
+    expect(warning).toHaveTextContent("Not exportable yet");
+    expect(warning).toHaveTextContent(/No element types/);
+    expect(warning).toHaveTextContent("Walls declare a fire rating");
+  });
+
+  it("has nothing to export when there are no rules at all", () => {
+    render(<IdsXmlPreview rules={[]} title="Tower-A.ifc" />);
+
+    expect(screen.getByRole("button", { name: "Download .ids" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(/No rules yet/);
+  });
 });

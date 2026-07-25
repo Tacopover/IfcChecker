@@ -183,4 +183,23 @@ describe("RuleCard", () => {
       "No matching elements in this file"
     );
   });
+
+  it("flags a rule stripped of its last entity type — IDS has no applicability to write", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    expect(container.querySelector(".rule-error")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Remove IfcWall" }));
+
+    expect(screen.getByText(/No element types/)).toHaveClass("rule-error");
+  });
+
+  it("flags a rule with nothing to check rather than passing it off as a hint", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByRole("button", { name: "Remove condition" }));
+
+    expect(screen.getByText(/No conditions/)).toHaveClass("rule-error");
+  });
 });

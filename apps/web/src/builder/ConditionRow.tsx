@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { ConditionDraft, ConditionOperator } from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
 import { ValuePicker, type ObservedValue } from "./ValuePicker.js";
+import { conditionProblem, OPERATORS_NEEDING_TEXT } from "./completeness.js";
 import { nextDraftId } from "./draftIds.js";
 
 export const OPERATORS: Array<{ id: ConditionOperator; label: string }> = [
@@ -15,14 +16,6 @@ export const OPERATORS: Array<{ id: ConditionOperator; label: string }> = [
   { id: "notExists", label: "must NOT be filled in" },
 ];
 
-const NEEDS_TEXT = new Set<ConditionOperator>([
-  "equals",
-  "contains",
-  "startsWith",
-  "endsWith",
-  "matches",
-]);
-
 const MAX_SUGGESTIONS = 40;
 
 export function observedValuesFor(source: FieldsForResult, condition: ConditionDraft): ObservedValue[] {
@@ -33,20 +26,6 @@ export function observedValuesFor(source: FieldsForResult, condition: ConditionD
           .find((set) => set.name === condition.propertySet)
           ?.fields.find((entry) => entry.name === condition.name);
   return field?.values ?? [];
-}
-
-/**
- * The validator compiles a pattern it cannot parse into one that never matches, so an invalid regex
- * would silently fail every element with nothing on screen to explain it. The row has to say so.
- */
-export function patternError(condition: ConditionDraft): string | null {
-  if (condition.operator !== "matches" || condition.text === "") return null;
-  try {
-    new RegExp(`^(?:${condition.text})$`);
-    return null;
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
-  }
 }
 
 /** A fresh condition points at whatever the current selection actually carries, so it is never empty. */
@@ -102,7 +81,7 @@ export function ConditionRow({
   onDelete,
 }: ConditionRowProps) {
   const observed = useMemo(() => observedValuesFor(source, condition), [source, condition]);
-  const error = patternError(condition);
+  const error = conditionProblem(condition);
 
   const nameOptions =
     condition.kind === "attribute"
@@ -199,7 +178,7 @@ export function ConditionRow({
         ))}
       </select>
 
-      {NEEDS_TEXT.has(condition.operator) && (
+      {OPERATORS_NEEDING_TEXT.has(condition.operator) && (
         <>
           <input
             className="tok"
@@ -254,7 +233,7 @@ export function ConditionRow({
 
       {error && (
         <span className="cond-error" id={errorId}>
-          Invalid pattern — it can never match: {error}
+          {error}
         </span>
       )}
     </div>

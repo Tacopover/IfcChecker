@@ -1099,6 +1099,12 @@ caption {
   border-color: var(--fail);
 }
 
+.rule-error {
+  margin: 0.25rem 0 0.3rem;
+  font-size: 11.5px;
+  color: var(--fail);
+}
+
 .values {
   flex-basis: 100%;
   margin-top: 0.3rem;
@@ -1193,6 +1199,13 @@ caption {
   font-style: italic;
 }
 
+.failing .why {
+  display: block;
+  color: var(--fail);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 10.5px;
+}
+
 .failing-more {
   margin: 0;
   padding: 0.3rem 0.5rem;
@@ -1247,6 +1260,21 @@ caption {
   align-items: center;
   gap: 0.6rem;
   margin-bottom: 0.5rem;
+}
+
+.export-blocked {
+  margin-bottom: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--fail);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fail);
+  font-size: 11.5px;
+}
+
+.export-blocked ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
 }
 
 .btn {
