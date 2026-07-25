@@ -93,9 +93,9 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
         predefinedType: stripEnumDots(findAttr("PredefinedType")),
         name: name === "" ? null : name,
         attributes: {
-          tag: normalizePropertyValue(findAttr("Tag")),
-          description: normalizePropertyValue(findAttr("Description")),
-          objectType: normalizePropertyValue(findAttr("ObjectType")),
+          Tag: normalizePropertyValue(findAttr("Tag")),
+          Description: normalizePropertyValue(findAttr("Description")),
+          ObjectType: normalizePropertyValue(findAttr("ObjectType")),
         },
         propertySets,
       });

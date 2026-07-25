@@ -167,9 +167,9 @@ export async function parseWebIfcBuffer(
           predefinedType: stripEnumDots(line.PredefinedType),
           name: typeof name === "string" ? name : null,
           attributes: {
-            tag: normalizePropertyValue(line.Tag),
-            description: normalizePropertyValue(line.Description),
-            objectType: normalizePropertyValue(line.ObjectType),
+            Tag: normalizePropertyValue(line.Tag),
+            Description: normalizePropertyValue(line.Description),
+            ObjectType: normalizePropertyValue(line.ObjectType),
           },
           propertySets,
         });

@@ -16,8 +16,8 @@ describe("IfcLiteAdapter", () => {
     expect(wall.ifcType).toBe("IFCWALL");
     expect(wall.predefinedType).toBe("STANDARD");
     expect(wall.name).toBe("W-001");
-    expect(wall.attributes.tag).toBe("TAG-001");
-    expect(wall.attributes.description).toBe("Fixture wall for QA tool tests");
+    expect(wall.attributes.Tag).toBe("TAG-001");
+    expect(wall.attributes.Description).toBe("Fixture wall for QA tool tests");
     expect(wall.propertySets.Pset_WallCommon).toEqual({
       IsExternal: true,
       FireRating: "REI60",
