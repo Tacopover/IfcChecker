@@ -5,7 +5,15 @@
 // silently clipping it. This builds the app, loads it in headless Chromium and
 // asserts on the *rendered* result.
 //
-//   node scripts/visual-check.mjs [--keep]
+//   node scripts/visual-check.mjs [--keep] [--scenario <name>] [--probe <file.js>]
+//
+// With no --scenario the page is only opened (optionally on SMOKE_ROUTE) and
+// checked in its empty state — that is the fast default the gate runs. A
+// scenario drives the app first: `builder` feeds the rule builder a real IFC
+// fixture over this script's own static server, so the assertions below run
+// against a loaded model instead of a placeholder. --probe injects an extra
+// `async function probe(helpers)` whose return value is reported back, for
+// one-off investigation without editing this file.
 //
 // Skips cleanly (exit 0) when no Chromium is available, so it never blocks a
 // machine that cannot run one. Screenshots land in .verify-output/.
@@ -14,12 +22,24 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
-import { dirname, extname, join, normalize } from "node:path";
+import { dirname, extname, join, normalize, resolve } from "node:path";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, ".verify-output");
 const BUILD = join(OUT, "build");
+const FIXTURES = join(ROOT, "fixtures");
 const KEEP = process.argv.includes("--keep");
+
+function flag(name, fallback) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
+}
+
+const SCENARIO = flag("--scenario", process.env.SMOKE_SCENARIO ?? "");
+const PROBE_FILE = flag("--probe", process.env.SMOKE_PROBE ?? "");
+// Scenario work is real (fetch + parse), and --virtual-time-budget counts the
+// polling waits below against the same clock — the default is far too tight.
+const TIME_BUDGET = SCENARIO ? 60000 : 8000;
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_BIN,
@@ -72,6 +92,51 @@ window.__smokeErrors = [];
 })();
 </script>`;
 
+// Each scenario is a body for `async function scenario(h)`, evaluated in the
+// page. Anything it returns is reported back under `scenario`.
+const SCENARIOS = {
+  builder: `
+    h.click('[data-smoke-route="builder"]');
+    await h.waitFor(function () { return document.getElementById("builder-ifc-file"); }, "builder page");
+    document.querySelector('input[name="builder-engine"][value="ifc-lite"]').click();
+
+    var response = await fetch("/fixtures/ifc/mixed-disciplines.ifc");
+    if (!response.ok) throw new Error("fixture fetch failed: " + response.status);
+    var bytes = await response.arrayBuffer();
+
+    // A real <input type=file> only accepts a FileList, and only DataTransfer
+    // can mint one — assigning an array is silently ignored.
+    var input = document.getElementById("builder-ifc-file");
+    var transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], "mixed-disciplines.ifc", { type: "application/octet-stream" }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await h.waitFor(function () {
+      var button = h.button("Load model");
+      return button && !button.disabled ? button : null;
+    }, "enabled Load model button");
+    h.button("Load model").click();
+
+    await h.waitFor(function () { return document.querySelector(".tree [role=treeitem]"); }, "model tree");
+    return {
+      fixtureBytes: bytes.byteLength,
+      tally: h.text(".explorer .card header .tally"),
+      source: h.text(".srcfile"),
+      treeRoots: h.all(".tree > [role=treeitem] > .rowline .row-name").map(function (n) { return n.textContent; })
+    };
+  `,
+};
+
+if (SCENARIO && !SCENARIOS[SCENARIO]) {
+  console.error(`browser check FAILED — unknown scenario "${SCENARIO}" (have: ${Object.keys(SCENARIOS).join(", ")})`);
+  process.exit(1);
+}
+if (PROBE_FILE && !existsSync(resolve(PROBE_FILE))) {
+  console.error(`browser check FAILED — probe file not found: ${PROBE_FILE}`);
+  process.exit(1);
+}
+
 const ASSERT = `<script>
 (function () {
   function describe(el) {
@@ -108,26 +173,68 @@ const ASSERT = `<script>
     fetch("/__smoke", { method: "POST", body: JSON.stringify(result) });
   }
   var target = ${JSON.stringify(process.env.SMOKE_ROUTE ?? "")};
+
+  // --virtual-time-budget fast-forwards setTimeout, so a timer-based poll burns
+  // its whole budget in microseconds and never lets real work (parsing a file)
+  // run. Virtual time does pause on a pending network fetch, so the harness's
+  // own /__tick endpoint is what actually buys wall-clock time here.
+  function settle(ms) {
+    return fetch("/__tick?ms=" + (ms == null ? 40 : ms)).then(function () {});
+  }
+  var h = {
+    settle: settle,
+    all: function (selector) { return Array.prototype.slice.call(document.querySelectorAll(selector)); },
+    text: function (selector) { var el = document.querySelector(selector); return el ? el.textContent.trim() : null; },
+    button: function (label) {
+      return h.all("button").filter(function (b) { return b.textContent.trim().indexOf(label) === 0; })[0] || null;
+    },
+    click: function (selector) {
+      var el = document.querySelector(selector);
+      if (!el) throw new Error("nothing to click for " + selector);
+      el.click();
+      return el;
+    },
+    waitFor: async function (predicate, what) {
+      for (var tries = 0; tries < 200; tries++) {
+        var value = predicate();
+        if (value) return value;
+        await settle(25);
+      }
+      throw new Error("timed out waiting for " + (what || "condition"));
+    },
+  };
+
+  var scenario = ${SCENARIO ? `async function (h) {${SCENARIOS[SCENARIO]}}` : "null"};
+  var probe = ${PROBE_FILE ? readFileSync(resolve(PROBE_FILE), "utf8") : "null"};
+
   // This is a classic script, so it runs before the deferred module bundle —
   // and --virtual-time-budget fast-forwards timers, so a fixed delay would
   // expire before React ever mounts. Wait for load, then poll for the mount.
-  function start() {
-    var tries = 0;
-    (function attempt() {
-      var root = document.getElementById("root");
-      if ((root && root.children.length > 0) || ++tries > 100) {
-        if (target) {
-          var btn = document.querySelector('[data-smoke-route="' + target + '"]');
-          if (btn) btn.click();
-        }
-        // Not requestAnimationFrame: it does not reliably fire under
-        // --virtual-time-budget. Reading scrollHeight in collect() forces a
-        // synchronous layout, so a painted frame is not needed anyway.
-        setTimeout(function () { publish(collect()); }, 50);
-        return;
+  async function start() {
+    var report = {};
+    try {
+      await h.waitFor(function () {
+        var root = document.getElementById("root");
+        return root && root.children.length > 0;
+      }, "React mount");
+      if (target) {
+        var btn = document.querySelector('[data-smoke-route="' + target + '"]');
+        if (btn) btn.click();
       }
-      setTimeout(attempt, 50);
-    })();
+      if (scenario) report.scenario = (await scenario(h)) || true;
+      if (probe) report.probe = (await probe(h)) || true;
+    } catch (error) {
+      report.driverError = String((error && error.stack) || error);
+    }
+    // Not requestAnimationFrame: it does not reliably fire under
+    // --virtual-time-budget. Reading scrollHeight in collect() forces a
+    // synchronous layout, so a painted frame is not needed anyway.
+    await settle(50);
+    var result = collect();
+    result.scenario = report.scenario ?? null;
+    result.probe = report.probe ?? null;
+    if (report.driverError) result.errors = result.errors.concat(["scenario: " + report.driverError]);
+    publish(result);
   }
   if (document.readyState === "complete") start();
   else window.addEventListener("load", start);
@@ -138,7 +245,9 @@ const indexHtml = readFileSync(join(BUILD, "index.html"), "utf8");
 const smokePath = join(BUILD, "smoke.html");
 writeFileSync(
   smokePath,
-  indexHtml.replace(/<head(\s[^>]*)?>/i, (m) => m + CAPTURE).replace(/<\/body>/i, ASSERT + "</body>")
+  // Both replacements must use a function: a string replacement would treat
+  // `$$` / `$&` inside the injected script as substitution patterns.
+  indexHtml.replace(/<head(\s[^>]*)?>/i, (m) => m + CAPTURE).replace(/<\/body>/i, () => ASSERT + "</body>")
 );
 
 // The bundle is loaded as an ES module, which browsers refuse to fetch over
@@ -147,11 +256,17 @@ const MIME = {
   ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript",
   ".css": "text/css", ".json": "application/json", ".wasm": "application/wasm",
   ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon",
+  ".ifc": "application/octet-stream", ".ids": "application/xml",
 };
 let reportResult;
 const reported = new Promise((resolve) => { reportResult = resolve; });
 
 const server = createServer((req, res) => {
+  if (req.url.startsWith("/__tick")) {
+    const ms = Math.min(Number(new URL(req.url, "http://x").searchParams.get("ms")) || 40, 500);
+    setTimeout(() => res.writeHead(204).end(), ms);
+    return;
+  }
   if (req.method === "POST" && req.url === "/__smoke") {
     let body = "";
     req.on("data", (chunk) => { body += chunk; });
@@ -162,8 +277,14 @@ const server = createServer((req, res) => {
     return;
   }
   const requested = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^(\.\.[/\\])+/, "");
-  const filePath = join(BUILD, requested === "/" ? "index.html" : requested);
-  if (!filePath.startsWith(BUILD) || !existsSync(filePath)) {
+  // Test fixtures are not part of the build, but a scenario has to be able to
+  // hand the app a real file — so they are served alongside it.
+  const fromFixtures = requested.startsWith("/fixtures/");
+  const base = fromFixtures ? FIXTURES : BUILD;
+  const filePath = fromFixtures
+    ? join(FIXTURES, requested.slice("/fixtures".length))
+    : join(BUILD, requested === "/" ? "index.html" : requested);
+  if (!filePath.startsWith(base) || !existsSync(filePath)) {
     res.writeHead(404).end("not found");
     return;
   }
@@ -184,7 +305,7 @@ function chromeRun(extraArgs) {
       chrome,
       [
         "--headless", "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
-        "--virtual-time-budget=8000", "--run-all-compositor-stages-before-draw",
+        `--virtual-time-budget=${TIME_BUDGET}`, "--run-all-compositor-stages-before-draw",
         ...extraArgs,
         `${origin}/smoke.html`,
       ],
@@ -197,18 +318,25 @@ function chromeRun(extraArgs) {
   });
 }
 
+const PREFIX =
+  (SCENARIO ? `${SCENARIO}-` : "") +
+  (PROBE_FILE ? `${PROBE_FILE.split(/[\\/]/).pop().replace(/\.[^.]+$/, "")}-` : "");
 const VIEWPORTS = [
-  { name: "desktop", size: "1400,950" },
-  { name: "short", size: "1400,620" },
-  { name: "narrow", size: "760,950" },
+  { name: `${PREFIX}desktop`, size: "1400,950" },
+  { name: `${PREFIX}short`, size: "1400,620" },
+  { name: `${PREFIX}narrow`, size: "760,950" },
 ];
 
 const first = chromeRun([
   `--window-size=${VIEWPORTS[0].size}`,
   `--screenshot=${join(OUT, `render-${VIEWPORTS[0].name}.png`)}`,
 ]);
-const timeout = new Promise((resolve) => setTimeout(() => resolve(undefined), 45000).unref());
+// Not unref'd: if Chromium dies before reporting, an unref'd timer lets the
+// event loop drain and Node exits 13 with no message at all.
+let timer;
+const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(undefined), 45000); });
 const result = await Promise.race([reported, timeout]);
+clearTimeout(timer);
 await first;
 
 if (!result) {
@@ -235,6 +363,8 @@ if (result.horizontalOverflow > 1) failures.push(`page scrolls sideways by ${res
 
 console.log(`  mounted: ${result.mounted} · interactive elements: ${result.interactive} · routes: ${result.routes.join(", ") || "none"}`);
 console.log(`  headings: ${result.headings.slice(0, 6).join(" | ") || "none"}`);
+if (result.scenario) console.log(`  scenario ${SCENARIO}: ${JSON.stringify(result.scenario)}`);
+if (result.probe) console.log(`  probe: ${JSON.stringify(result.probe, null, 2)}`);
 console.log(`  screenshots: ${VIEWPORTS.map((v) => `.verify-output/render-${v.name}.png`).join(", ")}`);
 
 server.close();
