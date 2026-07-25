@@ -61,4 +61,31 @@ describe("parseWebIfcBuffer", () => {
     expect(storey?.elementCounts).toEqual({ IFCWALL: 1 });
     expect(storey?.children).toEqual([]);
   });
+
+  it("collects the concrete MEP classes a real export writes, not a fixed list of type names", async () => {
+    const raw = await readFile(fixturePath("mep-systems.ifc"));
+    const result = await parseWebIfcBuffer(raw);
+    const present = new Set(result.elements.map((element) => element.ifcType));
+
+    for (const type of ["IFCVALVE", "IFCAIRTERMINAL", "IFCDUCTFITTING", "IFCDAMPER", "IFCPIPEFITTING", "IFCSENSOR", "IFCACTUATOR", "IFCPUMP", "IFCSANITARYTERMINAL"]) {
+      expect(present).toContain(type);
+    }
+
+    const valve = result.elements.find((element) => element.globalId === "1Mm2Bb3Cc4Dd5Ee6Ff7G08");
+    expect(valve?.ifcType).toBe("IFCVALVE");
+    expect(valve?.predefinedType).toBe("ISOLATING");
+    expect(valve?.name).toBe("V-001");
+    expect(valve?.propertySets.Pset_MEPCommon).toEqual({ SystemAbbreviation: "CHW", Insulation: "19mm" });
+  });
+
+  it("leaves openings, ports and annotations out of the element list", async () => {
+    const raw = await readFile(fixturePath("mep-systems.ifc"));
+    const result = await parseWebIfcBuffer(raw);
+    const present = new Set(result.elements.map((element) => element.ifcType));
+
+    for (const type of ["IFCOPENINGELEMENT", "IFCDISTRIBUTIONPORT", "IFCANNOTATION", "IFCPROJECT", "IFCBUILDINGSTOREY"]) {
+      expect(present).not.toContain(type);
+    }
+    expect(result.unrecognizedTypes).toEqual([]);
+  });
 });

@@ -1,8 +1,8 @@
 import { IfcParser, extractPropertiesOnDemand, extractAllEntityAttributes, type IfcDataStore } from "@ifc-lite/parser";
 import { IfcTypeEnumToString, type SpatialNode } from "@ifc-lite/data";
 import type { ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
-import type { IfcParseResult } from "./types.js";
-import { ELEMENT_TYPE_NAMES } from "./element-types.js";
+import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
+import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
 import { normalizePropertyValue } from "./normalize-property-value.js";
 
@@ -61,7 +61,25 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
   const elements: NormalizedElement[] = [];
   const elementTypeByExpressId = new Map<number, string>();
 
-  for (const typeName of ELEMENT_TYPE_NAMES) {
+  // store.entityIndex.byType is keyed by the raw type name the file carries, so
+  // the model itself decides what is on offer here. Asking for a fixed list of
+  // names instead meant every concrete MEP class — IfcValve, IfcAirTerminal,
+  // IfcDuctFitting — silently produced nothing.
+  const unrecognized: UnrecognizedEntityType[] = [];
+  const keptTypeNames: string[] = [];
+  for (const [typeName, expressIds] of store.entityIndex.byType) {
+    const verdict = classifyEntityType(typeName);
+    if (verdict === "ignored") continue;
+    if (verdict === "unrecognized") unrecognized.push({ ifcType: typeName.toUpperCase(), count: expressIds.length });
+    else keptTypeNames.push(typeName.toUpperCase());
+  }
+  // Sorted so element order is a property of the model rather than of this
+  // engine's internal index order — the two adapters have to agree
+  // element-for-element, not just in aggregate.
+  keptTypeNames.sort();
+  unrecognized.sort((a, b) => a.ifcType.localeCompare(b.ifcType));
+
+  for (const typeName of keptTypeNames) {
     const expressIds = store.entityIndex.byType.get(typeName) ?? [];
 
     for (const expressId of expressIds) {
@@ -102,6 +120,7 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
     }
   }
 
+  warnAboutUnrecognizedTypes(unrecognized);
   const modelStructure = buildIfcLiteModelStructure(store, elementTypeByExpressId);
-  return { elements, parseMs: performance.now() - start, modelStructure };
+  return { elements, parseMs: performance.now() - start, modelStructure, unrecognizedTypes: unrecognized };
 }

@@ -5,6 +5,7 @@ import {
   canonicalIfcType,
   descendantsOf,
   isKnownIfcType,
+  isLegacyIfcType,
   isSubtypeOf,
 } from "./ifc-type-hierarchy.js";
 
@@ -61,8 +62,55 @@ describe("descendantsOf", () => {
   });
 
   it("returns an empty list for leaves and unknown types", () => {
-    expect(descendantsOf("IfcWall")).toEqual([]);
+    expect(descendantsOf("IfcValve")).toEqual([]);
     expect(descendantsOf("IfcMadeUpThing")).toEqual([]);
+  });
+
+  it("keeps the standard-case subtypes IFC4 declares under concrete elements", () => {
+    expect(descendantsOf("IfcWall")).toEqual(["IfcWallElementedCase", "IfcWallStandardCase"]);
+  });
+});
+
+describe("the concrete classes Revit exports", () => {
+  // The table used to be a hand-written 17-name subset, so an MEP model was
+  // largely invisible. These are the classes a real export actually carries.
+  const MEP: Array<[string, string]> = [
+    ["IfcValve", "IfcFlowController"],
+    ["IfcDamper", "IfcFlowController"],
+    ["IfcAirTerminal", "IfcFlowTerminal"],
+    ["IfcDuctFitting", "IfcFlowFitting"],
+    ["IfcPipeFitting", "IfcFlowFitting"],
+    ["IfcSensor", "IfcDistributionControlElement"],
+  ];
+
+  it.each(MEP)("%s sits under %s and under IfcElement", (type, parent) => {
+    expect(ancestorsOf(type)[0]).toBe(parent);
+    expect(isSubtypeOf(type, "IfcElement")).toBe(true);
+    expect(isSubtypeOf(type, "IfcDistributionFlowElement") || isSubtypeOf(type, "IfcDistributionControlElement")).toBe(
+      true
+    );
+  });
+
+  it("covers the whole IFC4 element subtree, not a curated slice of it", () => {
+    expect(descendantsOf("IfcElement").length).toBeGreaterThan(120);
+  });
+});
+
+describe("legacy IFC2X3 names", () => {
+  it("keeps names IFC4 dropped so a 2x3 export is not gutted", () => {
+    expect(isKnownIfcType("IfcElectricalElement")).toBe(true);
+    expect(isKnownIfcType("IfcEquipmentElement")).toBe(true);
+    expect(isSubtypeOf("IFCELECTRICALELEMENT", "IfcElement")).toBe(true);
+    expect(ancestorsOf("IfcElectricDistributionPoint")).toContain("IfcFlowController");
+  });
+
+  it("marks them as legacy, and current names as not", () => {
+    expect(isLegacyIfcType("IfcElectricalElement")).toBe(true);
+    expect(isLegacyIfcType("ifcequipmentelement")).toBe(true);
+    expect(isLegacyIfcType("IfcWall")).toBe(false);
+    // IfcWallStandardCase is deprecated in IFC4 but still declared there.
+    expect(isLegacyIfcType("IfcWallStandardCase")).toBe(false);
+    expect(isLegacyIfcType("IfcMadeUpThing")).toBe(false);
   });
 });
 

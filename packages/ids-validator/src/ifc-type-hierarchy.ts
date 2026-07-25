@@ -1,65 +1,27 @@
+import { IFC_LEGACY_TYPE_NAMES, IFC_PRODUCT_PARENTS } from "@ifc-qa/shared-types";
+
 export const IFC_SCHEMA = "IFC4" as const;
 
-interface IfcTreeNode {
-  [name: string]: IfcTreeNode;
-}
-
-const IFC_TREE: IfcTreeNode = {
-  IfcProduct: {
-    IfcElement: {
-      IfcBuildingElement: { IfcWall: {}, IfcDoor: {}, IfcWindow: {}, IfcSlab: {}, IfcBeam: {}, IfcColumn: {},
-        IfcRoof: {}, IfcStair: {}, IfcRamp: {}, IfcCovering: {}, IfcCurtainWall: {}, IfcRailing: {},
-        IfcPlate: {}, IfcMember: {}, IfcFooting: {}, IfcPile: {}, IfcChimney: {}, IfcShadingDevice: {} },
-      IfcDistributionElement: {
-        IfcDistributionFlowElement: {
-          IfcFlowSegment: { IfcDuctSegment: {}, IfcPipeSegment: {}, IfcCableSegment: {}, IfcCableCarrierSegment: {} },
-          IfcFlowFitting: { IfcDuctFitting: {}, IfcPipeFitting: {}, IfcCableFitting: {}, IfcCableCarrierFitting: {}, IfcJunctionBox: {} },
-          IfcFlowTerminal: { IfcAirTerminal: {}, IfcSanitaryTerminal: {}, IfcLightFixture: {}, IfcOutlet: {},
-            IfcWasteTerminal: {}, IfcFireSuppressionTerminal: {}, IfcSpaceHeater: {}, IfcStackTerminal: {},
-            IfcElectricAppliance: {}, IfcAudioVisualAppliance: {}, IfcCommunicationsAppliance: {}, IfcMedicalDevice: {} },
-          IfcFlowController: { IfcValve: {}, IfcDamper: {}, IfcSwitchingDevice: {}, IfcFlowMeter: {},
-            IfcProtectiveDevice: {}, IfcElectricDistributionBoard: {}, IfcAirTerminalBox: {} },
-          IfcFlowMovingDevice: { IfcFan: {}, IfcPump: {}, IfcCompressor: {} },
-          IfcFlowStorageDevice: { IfcTank: {}, IfcElectricFlowStorageDevice: {} },
-          IfcFlowTreatmentDevice: { IfcFilter: {}, IfcDuctSilencer: {}, IfcInterceptor: {} },
-          IfcEnergyConversionDevice: { IfcBoiler: {}, IfcChiller: {}, IfcCoil: {}, IfcHeatExchanger: {},
-            IfcAirToAirHeatRecovery: {}, IfcCooledBeam: {}, IfcHumidifier: {}, IfcUnitaryEquipment: {},
-            IfcEvaporator: {}, IfcCondenser: {}, IfcBurner: {}, IfcCoolingTower: {}, IfcElectricGenerator: {},
-            IfcElectricMotor: {}, IfcMotorConnection: {}, IfcSolarDevice: {}, IfcTransformer: {}, IfcTubeBundle: {}, IfcEngine: {} },
-        },
-        IfcDistributionControlElement: { IfcSensor: {}, IfcActuator: {}, IfcController: {}, IfcAlarm: {},
-          IfcFlowInstrument: {}, IfcProtectiveDeviceTrippingUnit: {}, IfcUnitaryControlElement: {} },
-      },
-      IfcFurnishingElement: { IfcFurniture: {}, IfcSystemFurnitureElement: {} },
-      IfcElementComponent: { IfcFastener: {}, IfcMechanicalFastener: {}, IfcDiscreteAccessory: {},
-        IfcBuildingElementPart: {}, IfcVibrationIsolator: {},
-        IfcReinforcingElement: { IfcReinforcingBar: {}, IfcReinforcingMesh: {}, IfcTendon: {} } },
-      IfcFeatureElement: { IfcOpeningElement: {}, IfcProjectionElement: {}, IfcVoidingFeature: {}, IfcSurfaceFeature: {} },
-      IfcElementAssembly: {}, IfcTransportElement: {}, IfcVirtualElement: {}, IfcGeographicElement: {}, IfcCivilElement: {},
-    },
-    IfcSpatialElement: {
-      IfcSpatialStructureElement: { IfcSite: {}, IfcBuilding: {}, IfcBuildingStorey: {}, IfcSpace: {} },
-      IfcSpatialZone: {},
-    },
-    IfcAnnotation: {}, IfcGrid: {}, IfcProxy: {}, IfcPort: { IfcDistributionPort: {} },
-  },
-};
-
+// matchesApplicability calls isSubtypeOf once per element per rule, so every
+// lookup here has to be a synchronous map hit. The chains are therefore
+// flattened once at module load from the generated parent map rather than
+// walked on demand — and the table has to be a committed artifact, since
+// @ifc-lite/data only exposes the schema asynchronously.
 const CANONICAL_BY_UPPER = new Map<string, string>();
 const ANCESTORS = new Map<string, string[]>();
 const DESCENDANTS = new Map<string, string[]>();
+const LEGACY = new Set<string>(IFC_LEGACY_TYPE_NAMES);
 
-(function walk(node: IfcTreeNode, trail: string[]): string[] {
-  const collected: string[] = [];
-  for (const [name, children] of Object.entries(node)) {
-    CANONICAL_BY_UPPER.set(name.toUpperCase(), name);
-    ANCESTORS.set(name, trail);
-    const subtypes = walk(children, [name, ...trail]);
-    DESCENDANTS.set(name, subtypes);
-    collected.push(name, ...subtypes);
-  }
-  return collected;
-})(IFC_TREE, []);
+for (const name of Object.keys(IFC_PRODUCT_PARENTS)) {
+  CANONICAL_BY_UPPER.set(name.toUpperCase(), name);
+  const parent = IFC_PRODUCT_PARENTS[name];
+  // The generated map is depth-first, so a parent's chain is always already
+  // resolved by the time its children are read.
+  const chain = parent === null ? [] : [parent, ...(ANCESTORS.get(parent) ?? [])];
+  ANCESTORS.set(name, chain);
+  DESCENDANTS.set(name, []);
+  for (const ancestor of chain) DESCENDANTS.get(ancestor)!.push(name);
+}
 
 export function canonicalIfcType(t: string): string | null {
   return CANONICAL_BY_UPPER.get(t.trim().toUpperCase()) ?? null;
@@ -67,6 +29,12 @@ export function canonicalIfcType(t: string): string | null {
 
 export function isKnownIfcType(t: string): boolean {
   return canonicalIfcType(t) !== null;
+}
+
+/** True for names IFC2X3 declared and IFC4 dropped, e.g. IfcElectricalElement. */
+export function isLegacyIfcType(t: string): boolean {
+  const canonical = canonicalIfcType(t);
+  return canonical !== null && LEGACY.has(canonical);
 }
 
 export function ancestorsOf(t: string): string[] {
