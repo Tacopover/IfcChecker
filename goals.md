@@ -123,40 +123,7 @@ Per 3d, including the loss report from 3b.
 
 ---
 
-## 4. A 3D viewer page
-
-**Why:** the tool can tell a user *that* an element fails a rule, but never *where* it is. A
-third page shows the loaded models in 3D: a model tree browsing all loaded files, a property
-browser for the selected element, section planes to clip the view, and hide/unhide/isolate at
-file and element level. Parsing stays as fast as it is now — geometry is opt-in in both
-engines and is only produced when this page asks for it.
-
-**Governing constraint:** models are federated across disciplines at up to 1.6 GB each, sharing
-an origin. The Validate page already parses one in ~120 s with ifc-lite.
-
-**Done when:**
-- Geometry is produced by `@ifc-lite/wasm` (already installed, a direct dependency of
-  `@ifc-lite/parser`). web-ifc's geometry path is not viable at this scale.
-- Elements carry an `expressId`, so an element record can be joined to a mesh. Both adapters
-  already have it and drop it.
-- The spatial structure carries element **ids**, not just per-type counts, so the tree can be
-  expanded down to individual elements.
-- Geometry loads per model on demand and can be unloaded — the always-mounted pattern in
-  `App.tsx` cannot extend to resident mesh buffers plus a live WebGL context.
-- Viewer state (selection, visibility, isolation, section planes) lives in plain modules under
-  vitest; `scripts/verify.mjs` gains SwiftShader flags and one `readPixels` smoke assertion.
-  Note the viewer must expose a deterministic render-one-frame hook — `requestAnimationFrame`
-  is starved under the harness's `--virtual-time-budget`.
-- Decided: whether the geometry pre-pass fuses with parsing (ifc-lite supports handing
-  `parseColumnar` a pre-built entity index) or runs as a separate second scan.
-- Decided: section plane vs box clip, capped vs open; picking by GPU colour-pick vs raycast;
-  default visibility for `IfcSpace` and `IfcOpeningElement`.
-
-**Size:** large.
-
----
-
-## 5. Navigate from a check result to its elements in the viewer
+## 4. Navigate from a check result to its elements in the viewer
 
 **Why:** a results table is a list of GlobalIds. Clicking a row should take the user to the
 elements that failed, isolated and framed, so a violation becomes something they can see.
@@ -170,9 +137,12 @@ elements that failed, isolated and framed, so a violation becomes something they
 - Decided: whether a row navigates to its one element or the table groups by rule so that
   clicking a rule shows every element failing it.
 - Handled honestly: a failing element with no geometry, and a clicked result whose model has
-  not had its geometry loaded yet.
+  not had its geometry loaded yet. The viewer already reports both
+  (`MeshMapping.geometrylessExpressIds`, and per-model load-on-demand), so this is about the
+  interaction rather than the data.
 
-**Size:** medium, and only after goal 4 — it shares goal 4's `expressId` prerequisite.
+**Size:** medium. The prerequisites are done: elements carry `expressId`, and the viewer's
+`isolateElements` + `frameBounds` are already the two operations this needs.
 
 ---
 
@@ -185,12 +155,19 @@ Not scheduled; each is self-contained.
   IDS. Matters as soon as numeric bounds are supported.
 - **Numeric bounds and length restrictions** are unsupported in both directions — the natural
   next facet capability after import, and the reason the item above will start to bite.
-- **`scripts/verify.mjs` runs the browser check without a scenario**, so the loaded-model path
-  is only covered when run by hand via `--scenario builder`. Adding it to the gate roughly
-  triples the browser stage; worth doing if a regression ever slips through the empty-state
-  check.
+- **The browser gate covers the viewer scenario but not the builder one.** `verify.mjs` runs
+  `visual-check.mjs` twice: once with no scenario, once with `--scenario viewer`. The
+  `builder` scenario still only runs by hand, so the rule-builder loaded-model path is
+  uncovered in the gate.
+- **The viewer has never been run against a real model.** Every measurement behind it comes
+  from a 2.4 KB fixture in a software renderer. Nothing is known about frame times, upload
+  cost, or memory at 1.6 GB, and the flat non-instanced path was chosen for federation
+  correctness rather than measured throughput.
+- **The section box is uncapped**, so a clipped solid reads as a hollow shell rather than a cut
+  face. Capping wants a stencil pass or generated cap geometry; the maths and the six planes
+  are already in place, so it is a renderer change only.
 - **Engine divergence on `IfcSpace`**: ifc-lite promotes it to a spatial tree node, web-ifc
-  leaves it in the storey's `elementCounts`. Pinned in a named `adapter-parity` test rather
+  leaves it in the storey's `elementIdsByType`. Pinned in a named `adapter-parity` test rather
   than hidden. A product decision about which is right.
 - **Theme toggle** from the approved mockup was never implemented; the app follows the OS
   preference only.
