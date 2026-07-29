@@ -213,29 +213,6 @@ table button:hover:not(:disabled) {
 
 /* --- Selected file list --- */
 
-ul[aria-label="Selected IFC files"] {
-  list-style: none;
-  margin: 0 0 0.75rem;
-  padding: 0;
-  max-width: 420px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-ul[aria-label="Selected IFC files"] li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.4rem 0.7rem;
-  font-size: 0.9rem;
-}
-
-ul[aria-label="Selected IFC files"] li:not(:last-child) {
-  border-bottom: 1px solid var(--border);
-}
-
 button.remove-file {
   padding: 0;
   margin: 0;
@@ -534,6 +511,10 @@ caption {
 .empty-state p {
   margin: 0;
   color: var(--muted);
+}
+
+.empty-state .btn {
+  margin-top: 1rem;
 }
 
 .wrap {

@@ -1,23 +1,20 @@
 import { Fragment, useRef, useState, type ChangeEvent } from "react";
-import type { EngineId } from "@ifc-qa/shared-types";
-import { parseAndValidateFiles, type LocalFileOutcome, type ParseProgress } from "../local/parseAndValidate.js";
+import type { ElementResult, EngineId } from "@ifc-qa/shared-types";
+import { parseFile, validateParsedModels, type ParseProgress } from "../local/parseAndValidate.js";
+import { useLoadedModels } from "../state/loadedModels.js";
 import { IssueTable } from "../components/IssueTable";
 import { ModelStructureTree } from "../components/ModelStructureTree";
 
-const MAX_FILES = 20;
-
-function fileKey(file: File): string {
-  return `${file.name}:${file.size}:${file.lastModified}`;
-}
-
 export function IfcCheckerPage() {
+  const { models, addFiles, applyParseOutcome, removeModel, clearModels } = useLoadedModels();
+
   const [engine, setEngine] = useState<EngineId | "">("");
   const [idsFile, setIdsFile] = useState<File | null>(null);
-  const [ifcFiles, setIfcFiles] = useState<File[]>([]);
-  const [outcomes, setOutcomes] = useState<LocalFileOutcome[] | null>(null);
+  const [results, setResults] = useState<Array<ElementResult & { fileName: string }> | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
-  const [isRunning, setIsRunning] = useState(false);
-  const [runError, setRunError] = useState<string | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ParseProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -28,84 +25,117 @@ export function IfcCheckerPage() {
   // doesn't need remounting.
   const [resetKey, setResetKey] = useState(0);
 
-  const tooManyFiles = ifcFiles.length > MAX_FILES;
-  const canRun = engine !== "" && idsFile !== null && ifcFiles.length > 0 && !tooManyFiles && !isRunning;
+  // A model already parsed by a different engine counts as unparsed: switching
+  // engine has to mean something, and the table must never claim results the
+  // selected engine didn't produce.
+  const unparsed = engine === "" ? [] : models.filter((model) => model.status !== "succeeded" || model.engine !== engine);
+  const parsed = models.filter((model) => model.status === "succeeded");
 
-  const missingRequirements: string[] = [];
-  if (engine === "") missingRequirements.push("select an engine");
-  if (idsFile === null) missingRequirements.push("choose an IDS rule set file");
-  if (ifcFiles.length === 0) missingRequirements.push("choose at least one IFC file");
+  const canParse = engine !== "" && unparsed.length > 0 && !isParsing;
+  const canCheck = idsFile !== null && parsed.length > 0 && !isParsing && !isChecking;
+
+  const parseRequirements: string[] = [];
+  if (engine === "") parseRequirements.push("select an engine");
+  if (models.length === 0) parseRequirements.push("choose at least one IFC file");
+
+  const checkRequirements: string[] = [];
+  if (parsed.length === 0) checkRequirements.push("parse at least one IFC file");
+  if (idsFile === null) checkRequirements.push("choose an IDS rule set file");
+
+  // Results describe the file set as it was when Check ran; any change to that
+  // set makes them a claim about something the user is no longer looking at.
+  function dropStaleResults() {
+    setResults(null);
+    setCheckError(null);
+  }
 
   function handleIfcFilesChange(event: ChangeEvent<HTMLInputElement>) {
-    const newFiles = Array.from(event.target.files ?? []);
-    setIfcFiles((prev) => {
-      const existingKeys = new Set(prev.map(fileKey));
-      return [...prev, ...newFiles.filter((file) => !existingKeys.has(fileKey(file)))];
-    });
+    addFiles(Array.from(event.target.files ?? []));
+    dropStaleResults();
     // Clear the input so picking files again adds to the list instead of
     // being a no-op (the browser won't fire onChange for a repeat selection).
     event.target.value = "";
   }
 
   function handleRemoveIfcFile(key: string) {
-    setIfcFiles((prev) => prev.filter((file) => fileKey(file) !== key));
+    removeModel(key);
+    dropStaleResults();
   }
 
-  function toggleStructureExpanded(fileName: string) {
+  function toggleStructureExpanded(key: string) {
     setExpandedFiles((prev) => {
       const next = new Set(prev);
-      if (next.has(fileName)) {
-        next.delete(fileName);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(fileName);
+        next.add(key);
       }
       return next;
     });
   }
 
-  async function handleRun() {
-    if (!canRun) return;
-    setIsRunning(true);
-    setRunError(null);
-    setProgress(null);
-    setElapsedSeconds(0);
+  async function handleParse() {
+    // canParse carries the engine !== "" check, which narrows it for parseFile below.
+    if (!canParse) return;
+    setIsParsing(true);
+    dropStaleResults();
+    setExpandedFiles(new Set());
+    const targets = unparsed;
     try {
-      const idsXml = await idsFile.text();
-      const results = await parseAndValidateFiles(ifcFiles, idsXml, engine, (nextProgress) => {
+      // Sequential, not Promise.all: each file spins up its own WASM engine
+      // instance (see parseWebIfcBuffer/parseIfcLiteBuffer); running many of
+      // those concurrently in one tab risks memory pressure on a large batch
+      // (files run to 2GB, and the batch size is the user's to choose).
+      for (const [index, model] of targets.entries()) {
         clearInterval(tickIntervalRef.current);
-        setProgress(nextProgress);
+        setProgress({ fileName: model.fileName, index: index + 1, total: targets.length });
         setElapsedSeconds(0);
         tickIntervalRef.current = setInterval(() => setElapsedSeconds((seconds) => seconds + 1), 1000);
-      });
-      setOutcomes(results);
-      setExpandedFiles(new Set());
-    } catch (error) {
-      setOutcomes(null);
-      setRunError(error instanceof Error ? error.message : String(error));
+        applyParseOutcome(model.key, await parseFile(model.file, engine));
+      }
     } finally {
       clearInterval(tickIntervalRef.current);
-      setIsRunning(false);
+      setIsParsing(false);
       setProgress(null);
       setElapsedSeconds(0);
+    }
+  }
+
+  async function handleCheck() {
+    if (!canCheck) return;
+    setIsChecking(true);
+    setCheckError(null);
+    try {
+      const idsXml = await idsFile.text();
+      setResults(validateParsedModels(parsed, idsXml));
+    } catch (error) {
+      setResults(null);
+      setCheckError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsChecking(false);
     }
   }
 
   function handleReset() {
     setEngine("");
     setIdsFile(null);
-    setIfcFiles([]);
-    setOutcomes(null);
-    setRunError(null);
+    clearModels();
+    setResults(null);
+    setCheckError(null);
     setExpandedFiles(new Set());
     setResetKey((key) => key + 1);
   }
-
-  const allResults = outcomes?.flatMap((outcome) => outcome.results) ?? [];
 
   return (
     <section>
       <h1>Ifc Checker</h1>
       <p>Parse and validate IFC files entirely in your browser — no server, no upload.</p>
+
+      <h2>1. Load your IFC files</h2>
+      <p>
+        Parse them once here. Checking them against a rule set, or building one in the rule builder,
+        then works from what is already in memory.
+      </p>
 
       <fieldset>
         <legend>Engine</legend>
@@ -131,119 +161,122 @@ export function IfcCheckerPage() {
         </label>
       </fieldset>
 
+      <label htmlFor="local-ifc-files">IFC files</label>
+      <input id="local-ifc-files" type="file" multiple accept=".ifc" onChange={handleIfcFilesChange} />
+
+      {models.length > 0 && (
+        <table>
+          <caption>IFC files</caption>
+          <thead>
+            <tr>
+              <th>File</th>
+              <th>Status</th>
+              <th>Parse time (ms)</th>
+              <th>Elements</th>
+              <th>Error</th>
+              <th>Structure</th>
+              <th>Remove</th>
+            </tr>
+          </thead>
+          <tbody>
+            {models.map((model) => {
+              const isExpanded = expandedFiles.has(model.key);
+              return (
+                <Fragment key={model.key}>
+                  <tr>
+                    <td>{model.fileName}</td>
+                    <td>{model.status}</td>
+                    <td>{model.parseMs !== null ? Math.round(model.parseMs) : "—"}</td>
+                    <td>{model.status === "succeeded" ? model.elements.length : "—"}</td>
+                    <td>{model.errorMessage ?? ""}</td>
+                    <td>
+                      {model.modelStructure && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          aria-expanded={isExpanded}
+                          onClick={() => toggleStructureExpanded(model.key)}
+                        >
+                          {isExpanded
+                            ? `Hide structure for ${model.fileName}`
+                            : `Show structure for ${model.fileName}`}
+                        </button>
+                      )}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="remove-file"
+                        aria-label={`Remove ${model.fileName}`}
+                        disabled={isParsing}
+                        onClick={() => handleRemoveIfcFile(model.key)}
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                  {isExpanded && model.modelStructure && (
+                    <tr>
+                      <td colSpan={7}>
+                        <ModelStructureTree node={model.modelStructure} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      <button type="button" disabled={!canParse} onClick={handleParse}>
+        {isParsing ? "Parsing..." : "Parse files"}
+      </button>{" "}
+      <button type="button" className="secondary" disabled={isParsing} onClick={handleReset}>
+        Reset
+      </button>
+
+      {!isParsing && parseRequirements.length > 0 && <p>To parse: {parseRequirements.join(", ")}.</p>}
+      {!isParsing && parseRequirements.length === 0 && unparsed.length === 0 && (
+        <p>
+          All {parsed.length} {parsed.length === 1 ? "file is" : "files are"} parsed with {engine}.
+        </p>
+      )}
+
+      {isParsing && progress && (
+        <p role="status">
+          Parsing {progress.index} of {progress.total}: {progress.fileName}… ({elapsedSeconds}s elapsed)
+        </p>
+      )}
+
+      <h2>2. Check them against a rule set</h2>
+
       <label htmlFor="local-ids-file">IDS rule set (XML)</label>
       <input
         key={`ids-${resetKey}`}
         id="local-ids-file"
         type="file"
         accept=".xml"
-        onChange={(e) => setIdsFile(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          setIdsFile(e.target.files?.[0] ?? null);
+          dropStaleResults();
+        }}
       />
 
-      <label htmlFor="local-ifc-files">IFC files (up to {MAX_FILES})</label>
-      <input id="local-ifc-files" type="file" multiple accept=".ifc" onChange={handleIfcFilesChange} />
-      {tooManyFiles && (
-        <p role="alert">
-          Select up to {MAX_FILES} files ({ifcFiles.length} selected).
-        </p>
-      )}
-
-      {ifcFiles.length > 0 && (
-        <ul aria-label="Selected IFC files">
-          {ifcFiles.map((file) => {
-            const key = fileKey(file);
-            return (
-              <li key={key}>
-                <span>{file.name}</span>
-                <button
-                  type="button"
-                  className="remove-file"
-                  aria-label={`Remove ${file.name}`}
-                  onClick={() => handleRemoveIfcFile(key)}
-                >
-                  ×
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <button type="button" disabled={!canRun} onClick={handleRun}>
-        {isRunning ? "Parsing..." : "Parse & validate"}
-      </button>{" "}
-      <button type="button" className="secondary" disabled={isRunning} onClick={handleReset}>
-        Reset
+      <button type="button" disabled={!canCheck} onClick={handleCheck}>
+        {isChecking ? "Checking..." : "Check files"}
       </button>
 
-      {!canRun && !isRunning && !tooManyFiles && missingRequirements.length > 0 && (
-        <p>To run: {missingRequirements.join(", ")}.</p>
+      {!canCheck && !isChecking && checkRequirements.length > 0 && (
+        <p>To check: {checkRequirements.join(", ")}.</p>
       )}
 
-      {isRunning && progress && (
-        <p role="status">
-          Parsing {progress.index} of {progress.total}: {progress.fileName}… ({elapsedSeconds}s elapsed)
-        </p>
-      )}
+      {checkError && <p role="alert">{checkError}</p>}
 
-      {runError && <p role="alert">{runError}</p>}
-
-      {outcomes && (
+      {results && (
         <>
-          <h2>File results</h2>
-          <table>
-            <caption>File results</caption>
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Status</th>
-                <th>Parse time (ms)</th>
-                <th>Elements</th>
-                <th>Error</th>
-                <th>Structure</th>
-              </tr>
-            </thead>
-            <tbody>
-              {outcomes.map((outcome) => {
-                const isExpanded = expandedFiles.has(outcome.fileName);
-                return (
-                  <Fragment key={outcome.fileName}>
-                    <tr>
-                      <td>{outcome.fileName}</td>
-                      <td>{outcome.status}</td>
-                      <td>{outcome.parseMs !== null ? Math.round(outcome.parseMs) : "—"}</td>
-                      <td>{outcome.elementCount}</td>
-                      <td>{outcome.errorMessage ?? ""}</td>
-                      <td>
-                        {outcome.modelStructure && (
-                          <button
-                            type="button"
-                            className="secondary"
-                            aria-expanded={isExpanded}
-                            onClick={() => toggleStructureExpanded(outcome.fileName)}
-                          >
-                            {isExpanded
-                              ? `Hide structure for ${outcome.fileName}`
-                              : `Show structure for ${outcome.fileName}`}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                    {isExpanded && outcome.modelStructure && (
-                      <tr>
-                        <td colSpan={6}>
-                          <ModelStructureTree node={outcome.modelStructure} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-
           <h2>Issues</h2>
-          <IssueTable results={allResults} />
+          <IssueTable results={results} />
         </>
       )}
     </section>

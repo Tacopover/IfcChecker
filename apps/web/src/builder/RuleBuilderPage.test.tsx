@@ -1,12 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import { RuleBuilderPage, pathToNode } from "./RuleBuilderPage";
+import {
+  LoadedModelsProvider,
+  modelKey,
+  useLoadedModels,
+  type ParseOutcome,
+} from "../state/loadedModels";
 import type { TreeNode } from "./introspect";
-
-const { parseIfcFileOnly } = vi.hoisted(() => ({ parseIfcFileOnly: vi.fn() }));
-vi.mock("../local/parseAndValidate.js", () => ({ parseIfcFileOnly }));
 
 function wall(index: number, fireRating: string | null): NormalizedElement {
   return {
@@ -32,40 +36,119 @@ function door(index: number): NormalizedElement {
   };
 }
 
+function slab(index: number): NormalizedElement {
+  return {
+    globalId: `s${index}`,
+    ifcType: "IFCSLAB",
+    predefinedType: null,
+    name: `Slab ${index}`,
+    attributes: {},
+    propertySets: { Pset_SlabCommon: { IsExternal: "true" } },
+  };
+}
+
 const ELEMENTS = [wall(1, "60"), wall(2, "90"), wall(3, null), door(1), door(2)];
 
-beforeEach(() => {
-  vi.resetAllMocks();
-  parseIfcFileOnly.mockResolvedValue({ elements: ELEMENTS, parseMs: 12, modelStructure: null });
-});
+interface SeedModel {
+  fileName: string;
+  elements?: NormalizedElement[];
+  status?: ParseOutcome["status"];
+}
 
-async function loadModel(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("radio", { name: "ifc-lite" }));
-  await user.upload(
-    screen.getByLabelText("IFC file (one worked example)"),
-    new File(["ISO-10303-21;"], "tower.ifc")
+/** Fills the shared store the way the validate page would, so the builder has files to pick from. */
+function Seed({ models, files }: { models: SeedModel[]; files: File[] }) {
+  const { addFiles, applyParseOutcome } = useLoadedModels();
+  useEffect(() => {
+    addFiles(files);
+    for (const [index, model] of models.entries()) {
+      const failed = model.status === "failed";
+      applyParseOutcome(modelKey(files[index]), {
+        status: failed ? "failed" : "succeeded",
+        engine: "ifc-lite",
+        parseMs: failed ? null : 12,
+        errorMessage: failed ? "unexpected end of file" : null,
+        elements: failed ? [] : (model.elements ?? ELEMENTS),
+        modelStructure: null,
+      });
+    }
+    // Seeding once, on mount: re-running would re-add files the test then works against.
+  }, []);
+  return null;
+}
+
+/** Returns the store keys by file name — the <option> values the picker is driven by. */
+function renderBuilder(models: SeedModel[] = [], onGoToFiles?: () => void) {
+  const files = models.map((model) => new File(["ISO-10303-21;"], model.fileName));
+  const result = render(
+    <LoadedModelsProvider>
+      <Seed models={models} files={files} />
+      <RuleBuilderPage onGoToFiles={onGoToFiles} />
+    </LoadedModelsProvider>
   );
-  await user.click(screen.getByRole("button", { name: "Load model" }));
+  return {
+    ...result,
+    keys: Object.fromEntries(files.map((file) => [file.name, modelKey(file)])) as Record<string, string>,
+  };
 }
 
 describe("RuleBuilderPage", () => {
-  it("cannot load until an engine and a file are chosen", async () => {
+  it("sends the user to the validate page when nothing has been parsed yet", async () => {
+    const onGoToFiles = vi.fn();
     const user = userEvent.setup();
-    render(<RuleBuilderPage />);
+    renderBuilder([], onGoToFiles);
 
-    expect(screen.getByRole("button", { name: "Load model" })).toBeDisabled();
     expect(screen.getByRole("heading", { name: "Build rules from a real file" })).toBeInTheDocument();
+    expect(screen.getByLabelText("IFC file (one worked example)")).toBeDisabled();
+    expect(screen.getByRole("option", { name: "No parsed files yet" })).toBeInTheDocument();
 
-    await loadModel(user);
+    await user.click(screen.getByRole("button", { name: "Load IFC files" }));
+    expect(onGoToFiles).toHaveBeenCalled();
+  });
 
+  it("offers the files already parsed on the validate page, and works from the first one", async () => {
+    const { keys, container } = renderBuilder([
+      { fileName: "tower.ifc" },
+      { fileName: "annex.ifc", elements: [slab(1)] },
+    ]);
+
+    const picker = await screen.findByLabelText("IFC file (one worked example)");
+    expect(within(picker).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "tower.ifc",
+      "annex.ifc",
+    ]);
+    expect(picker).toHaveValue(keys["tower.ifc"]);
+    expect(container.querySelector(".srcfile")).toHaveTextContent("tower.ifc· 5 elements · 12 ms · ifc-lite");
     expect(await screen.findByRole("tree")).toBeInTheDocument();
-    expect(parseIfcFileOnly).toHaveBeenCalledWith(expect.any(File), "ifc-lite");
+  });
+
+  it("leaves out files that failed to parse — there is nothing to build rules from", async () => {
+    renderBuilder([{ fileName: "corrupt.ifc", status: "failed" }, { fileName: "tower.ifc" }]);
+
+    const picker = await screen.findByLabelText("IFC file (one worked example)");
+    expect(within(picker).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "tower.ifc",
+    ]);
+  });
+
+  it("re-aims the explorer at the file the user switches to", async () => {
+    const user = userEvent.setup();
+    const { keys } = renderBuilder([
+      { fileName: "tower.ifc" },
+      { fileName: "annex.ifc", elements: [slab(1), slab(2)] },
+    ]);
+
+    const tree = await screen.findByRole("tree");
+    expect(within(tree).getByRole("button", { name: /IfcWall\s*3/ })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("IFC file (one worked example)"), keys["annex.ifc"]);
+
+    expect(within(screen.getByRole("tree")).getByRole("button", { name: /IfcSlab\s*2/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /IfcWall\s*3/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Pset_SlabCommon")).toBeInTheDocument();
   });
 
   it("shows the file's entity types and inherited groups, with counts", async () => {
-    const user = userEvent.setup();
-    render(<RuleBuilderPage />);
-    await loadModel(user);
+    renderBuilder([{ fileName: "tower.ifc" }]);
 
     const tree = await screen.findByRole("tree");
     expect(within(tree).getByRole("button", { name: /IfcBuildingElement\s*2× 5/ })).toBeInTheDocument();
@@ -74,9 +157,7 @@ describe("RuleBuilderPage", () => {
   });
 
   it("shows coverage and sample values for the selection, amber under 90%", async () => {
-    const user = userEvent.setup();
-    const { container } = render(<RuleBuilderPage />);
-    await loadModel(user);
+    const { container } = renderBuilder([{ fileName: "tower.ifc" }]);
 
     await screen.findByRole("tree");
     const fireRating = screen.getByRole("button", { name: /FireRating/ });
@@ -88,8 +169,7 @@ describe("RuleBuilderPage", () => {
 
   it("adds a condition — and the selected type — to the active rule when a field is clicked", async () => {
     const user = userEvent.setup();
-    render(<RuleBuilderPage />);
-    await loadModel(user);
+    renderBuilder([{ fileName: "tower.ifc" }]);
     await screen.findByRole("tree");
 
     await user.click(screen.getByRole("button", { name: /FireRating/ }));
@@ -103,8 +183,7 @@ describe("RuleBuilderPage", () => {
 
   it("selecting a group expands it and re-aims the schema cards at all its types", async () => {
     const user = userEvent.setup();
-    render(<RuleBuilderPage />);
-    await loadModel(user);
+    renderBuilder([{ fileName: "tower.ifc" }]);
     await screen.findByRole("tree");
 
     await user.click(screen.getByRole("button", { name: /IfcBuildingElement\s*2× 5/ }));
@@ -116,8 +195,7 @@ describe("RuleBuilderPage", () => {
 
   it("starts a rule from the New rule button and exports it as IDS XML", async () => {
     const user = userEvent.setup();
-    render(<RuleBuilderPage />);
-    await loadModel(user);
+    renderBuilder([{ fileName: "tower.ifc" }]);
     await screen.findByRole("tree");
 
     await user.click(screen.getByRole("button", { name: "+ New rule" }));
@@ -131,8 +209,7 @@ describe("RuleBuilderPage", () => {
 
   it("duplicates a whole rule", async () => {
     const user = userEvent.setup();
-    render(<RuleBuilderPage />);
-    await loadModel(user);
+    renderBuilder([{ fileName: "tower.ifc" }]);
     await screen.findByRole("tree");
     await user.click(screen.getByRole("button", { name: "+ New rule" }));
 
@@ -140,23 +217,6 @@ describe("RuleBuilderPage", () => {
 
     expect(screen.getAllByLabelText("Rule name").map((input) => (input as HTMLInputElement).value))
       .toEqual(["New rule", "New rule (copy)"]);
-  });
-
-  it("reports a failed parse without breaking the page", async () => {
-    const user = userEvent.setup();
-    parseIfcFileOnly.mockRejectedValueOnce(new Error("unexpected end of file"));
-    render(<RuleBuilderPage />);
-
-    await loadModel(user);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("unexpected end of file");
-    expect(screen.getByRole("heading", { name: "Build rules from a real file" })).toBeInTheDocument();
-
-    parseIfcFileOnly.mockResolvedValue({ elements: ELEMENTS, parseMs: 9, modelStructure: null });
-    await user.click(screen.getByRole("button", { name: "Load model" }));
-
-    expect(await screen.findByRole("tree")).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 

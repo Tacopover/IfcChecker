@@ -1,19 +1,13 @@
-import { Fragment, useMemo, useRef, useState, type ChangeEvent } from "react";
-import type { EngineId, NormalizedElement } from "@ifc-qa/shared-types";
+import { Fragment, useMemo, useState, type ChangeEvent } from "react";
+import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ConditionDraft, RuleDraft } from "@ifc-qa/ids-validator";
-import { parseIfcFileOnly } from "../local/parseAndValidate.js";
+import { useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
 import { ModelTree } from "./ModelTree.js";
 import { RuleCard } from "./RuleCard.js";
 import { IdsXmlPreview } from "./IdsXmlPreview.js";
 import { defaultConditionFor } from "./ConditionRow.js";
 import { nextDraftId } from "./draftIds.js";
-
-interface LoadedModel {
-  fileName: string;
-  elements: NormalizedElement[];
-  parseMs: number;
-}
 
 const SAMPLE_VALUES = 3;
 const SAMPLE_LENGTH = 18;
@@ -122,62 +116,64 @@ function SchemaCards({ source, selectionName, groupTypeCount, onAddField }: Sche
   );
 }
 
-export function RuleBuilderPage() {
-  const [engine, setEngine] = useState<EngineId | "">("");
-  const [file, setFile] = useState<File | null>(null);
-  const [model, setModel] = useState<LoadedModel | null>(null);
-  const [isParsing, setIsParsing] = useState(false);
-  const [parseError, setParseError] = useState<string | null>(null);
+export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = {}) {
+  const { models } = useLoadedModels();
+  const [modelKey, setModelKey] = useState<string | null>(null);
 
   const [selection, setSelection] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  // null until the user opens or closes something themselves — until then the tree
+  // shows whatever it takes to reveal the current selection, for whichever file is picked.
+  const [expandedOverride, setExpanded] = useState<ReadonlySet<string> | null>(null);
 
   const [rules, setRules] = useState<RuleDraft[]>([]);
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
   const [openRuleIds, setOpenRuleIds] = useState<ReadonlySet<string>>(new Set());
   const [failureRuleIds, setFailureRuleIds] = useState<ReadonlySet<string>>(new Set());
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Only a parsed model can be a worked example — the rest of the page reads its elements.
+  const parsedModels = models.filter((entry) => entry.status === "succeeded");
+  // Falling back to the first model rather than holding a dangling key: the chosen file can be
+  // removed on the validate page, and the builder must not go blank while a usable model is loaded.
+  const model = parsedModels.find((entry) => entry.key === modelKey) ?? parsedModels[0] ?? null;
 
   // Introspection walks every element; it must survive keystrokes elsewhere on the page.
   const introspection = useMemo(() => introspectModel(model?.elements ?? NO_ELEMENTS), [model]);
-  const selectionName = selection ?? introspection.entityTypes[0]?.name ?? null;
+  // A selection made against a previous model may name a type this one doesn't have.
+  const known = useMemo(
+    () =>
+      new Set([
+        ...introspection.entityTypes.map((entry) => entry.name),
+        ...introspection.groups.map((group) => group.name),
+      ]),
+    [introspection]
+  );
+  const selectionName =
+    selection && known.has(selection) ? selection : (introspection.entityTypes[0]?.name ?? null);
   const selectionSource = useMemo(
     () => (selectionName ? introspection.fieldsFor([selectionName]) : null),
     [introspection, selectionName]
   );
   const selectedGroup = introspection.groups.find((group) => group.name === selectionName) ?? null;
 
-  async function handleLoad() {
-    if (!file || engine === "" || isParsing) return;
-    setIsParsing(true);
-    setParseError(null);
-    try {
-      const parsed = await parseIfcFileOnly(file, engine);
-      const loaded = { fileName: file.name, elements: parsed.elements, parseMs: parsed.parseMs };
-      const fresh = introspectModel(loaded.elements);
-      const first = fresh.entityTypes[0]?.name ?? null;
-      setModel(loaded);
-      setSelection(first);
-      setExpanded(new Set(first ? (pathToNode(fresh.tree, first) ?? []) : []));
-    } catch (error) {
-      // The previously loaded model (and any rules built against it) stays put — a failed parse
-      // must cost the user nothing but the attempt.
-      setParseError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsParsing(false);
-    }
-  }
+  const defaultExpanded = useMemo(
+    () => new Set(selectionName ? (pathToNode(introspection.tree, selectionName) ?? []) : []),
+    [introspection, selectionName]
+  );
+  const expanded = expandedOverride ?? defaultExpanded;
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    setFile(event.target.files?.[0] ?? null);
-    setParseError(null);
+  function handleModelChange(event: ChangeEvent<HTMLSelectElement>) {
+    const next = parsedModels.find((entry) => entry.key === event.target.value);
+    if (!next) return;
+    setModelKey(next.key);
+    // Back to defaults: the new file's first type, and the ancestors that reveal it.
+    setSelection(null);
+    setExpanded(null);
   }
 
   function handleSelect(node: TreeNode) {
     setSelection(node.name);
     setExpanded((previous) => {
-      const next = new Set(previous);
+      const next = new Set(previous ?? defaultExpanded);
       for (const ancestor of pathToNode(introspection.tree, node.name) ?? []) next.add(ancestor);
       // Opening the node itself means a group shows its members the moment it is picked.
       if (node.kind === "group") next.add(node.name);
@@ -187,7 +183,7 @@ export function RuleBuilderPage() {
 
   function handleToggle(name: string) {
     setExpanded((previous) => {
-      const next = new Set(previous);
+      const next = new Set(previous ?? defaultExpanded);
       if (next.has(name)) next.delete(name);
       else next.add(name);
       return next;
@@ -282,72 +278,53 @@ export function RuleBuilderPage() {
     });
   }
 
-  const canLoad = file !== null && engine !== "" && !isParsing;
-
   return (
     <div className="builder">
       <div className="loadbar">
-        <fieldset>
-          <legend>Engine</legend>
-          <label>
-            <input
-              type="radio"
-              name="builder-engine"
-              value="web-ifc"
-              checked={engine === "web-ifc"}
-              onChange={() => setEngine("web-ifc")}
-            />
-            web-ifc
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="builder-engine"
-              value="ifc-lite"
-              checked={engine === "ifc-lite"}
-              onChange={() => setEngine("ifc-lite")}
-            />
-            ifc-lite
-          </label>
-        </fieldset>
-
         <div className="loadfile">
-          <label htmlFor="builder-ifc-file">IFC file (one worked example)</label>
-          <input
-            ref={fileInputRef}
-            id="builder-ifc-file"
-            type="file"
-            accept=".ifc"
-            onChange={handleFileChange}
-          />
+          <label htmlFor="builder-model">IFC file (one worked example)</label>
+          <select
+            id="builder-model"
+            value={model?.key ?? ""}
+            disabled={parsedModels.length === 0}
+            onChange={handleModelChange}
+          >
+            {parsedModels.length === 0 ? (
+              <option value="">No parsed files yet</option>
+            ) : (
+              parsedModels.map((entry) => (
+                <option key={entry.key} value={entry.key}>
+                  {entry.fileName}
+                </option>
+              ))
+            )}
+          </select>
         </div>
-
-        <button type="button" className="btn" disabled={!canLoad} onClick={handleLoad}>
-          {isParsing ? "Parsing…" : "Load model"}
-        </button>
 
         {model && (
           <span className="srcfile">
             <span className="dot" />
             {model.fileName}
             <span className="n num">
-              · {model.elements.length} elements · {Math.round(model.parseMs)} ms
+              · {model.elements.length} elements · {Math.round(model.parseMs ?? 0)} ms · {model.engine}
             </span>
           </span>
         )}
       </div>
 
-      {isParsing && <p role="status">Parsing {file?.name}… this can take a while on a large file.</p>}
-      {parseError && <p role="alert">Could not read that file: {parseError}</p>}
-
       {!model || !selectionSource || selectionName === null ? (
         <div className="empty-state">
           <h2>Build rules from a real file</h2>
           <p>
-            Pick an engine and one IFC file, then load it. Everything offered here — types, property
-            sets, values — comes from that file, so the rules you write are rules it can actually be
-            judged against.
+            Everything offered here — types, property sets, values — comes from one of your own IFC
+            files, so the rules you write are rules it can actually be judged against. Load and parse
+            your files first, then pick one above.
           </p>
+          {onGoToFiles && (
+            <button type="button" className="btn" onClick={onGoToFiles}>
+              Load IFC files
+            </button>
+          )}
         </div>
       ) : (
         <div className="wrap">

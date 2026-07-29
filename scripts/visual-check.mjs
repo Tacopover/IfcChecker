@@ -95,10 +95,12 @@ window.__smokeErrors = [];
 // Each scenario is a body for `async function scenario(h)`, evaluated in the
 // page. Anything it returns is reported back under `scenario`.
 const SCENARIOS = {
+  // Walks the real flow end to end: files are loaded and parsed on the validate
+  // page, and the builder then picks one of them out of the shared store.
   builder: `
-    h.click('[data-smoke-route="builder"]');
-    await h.waitFor(function () { return document.getElementById("builder-ifc-file"); }, "builder page");
-    document.querySelector('input[name="builder-engine"][value="ifc-lite"]').click();
+    h.click('[data-smoke-route="validate"]');
+    await h.waitFor(function () { return document.getElementById("local-ifc-files"); }, "validate page");
+    document.querySelector('input[name="local-engine"][value="ifc-lite"]').click();
 
     var response = await fetch("/fixtures/ifc/mixed-disciplines.ifc");
     if (!response.ok) throw new Error("fixture fetch failed: " + response.status);
@@ -106,21 +108,33 @@ const SCENARIOS = {
 
     // A real <input type=file> only accepts a FileList, and only DataTransfer
     // can mint one — assigning an array is silently ignored.
-    var input = document.getElementById("builder-ifc-file");
+    var input = document.getElementById("local-ifc-files");
     var transfer = new DataTransfer();
     transfer.items.add(new File([bytes], "mixed-disciplines.ifc", { type: "application/octet-stream" }));
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
 
     await h.waitFor(function () {
-      var button = h.button("Load model");
+      var button = h.button("Parse files");
       return button && !button.disabled ? button : null;
-    }, "enabled Load model button");
-    h.button("Load model").click();
+    }, "enabled Parse files button");
+    h.button("Parse files").click();
+
+    await h.waitFor(function () {
+      var cells = h.all("table td");
+      return cells.some(function (cell) { return cell.textContent === "succeeded"; });
+    }, "parsed file row");
+
+    h.click('[data-smoke-route="builder"]');
+    var picker = await h.waitFor(function () {
+      var select = document.getElementById("builder-model");
+      return select && !select.disabled ? select : null;
+    }, "builder model picker");
 
     await h.waitFor(function () { return document.querySelector(".tree [role=treeitem]"); }, "model tree");
     return {
       fixtureBytes: bytes.byteLength,
+      picked: picker.options[picker.selectedIndex].textContent,
       tally: h.text(".explorer .card header .tally"),
       source: h.text(".srcfile"),
       treeRoots: h.all(".tree > [role=treeitem] > .rowline .row-name").map(function (n) { return n.textContent; })

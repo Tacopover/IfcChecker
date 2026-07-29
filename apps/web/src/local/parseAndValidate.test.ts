@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  InvalidIdsRuleSetError,
-  parseAndValidateFile,
-  parseAndValidateFiles,
-  parseIfcFileOnly,
-} from "./parseAndValidate.js";
+import { InvalidIdsRuleSetError, parseFile, validateParsedModels } from "./parseAndValidate.js";
 
 const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
   parseWebIfcBuffer: vi.fn(),
@@ -22,83 +17,16 @@ function makeFile(name: string, content = "ISO-10303-21;") {
   return new File([content], name);
 }
 
-// Every existing test below passes a real (if trivial) rule set through
-// idsXml, so parseIdsXml's pre-check should see at least one specification
-// unless a test deliberately overrides it to assert the empty-rule-set path.
+// Every test below passes a real (if trivial) rule set through idsXml, so
+// parseIdsXml's pre-check should see at least one specification unless a test
+// deliberately overrides it to assert the empty-rule-set path.
 beforeEach(() => {
   vi.clearAllMocks();
   parseIdsXml.mockReturnValue([{ name: "fake-spec", applicabilityEntityNames: [], requirements: [] }]);
 });
 
-describe("parseAndValidateFile", () => {
-  it("parses with the selected engine and maps violations to ElementResult rows tagged with the file name", async () => {
-    const modelStructure = {
-      expressId: 1,
-      ifcType: "IFCPROJECT",
-      name: "Fixture Project",
-      elementCounts: {},
-      children: [],
-    };
-    parseWebIfcBuffer.mockResolvedValueOnce({
-      elements: [{ globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} }],
-      parseMs: 12,
-      modelStructure,
-    });
-    validateElements.mockReturnValueOnce([
-      { elementGlobalId: "g1", elementType: "IFCWALL", ruleId: "naming-prefix", severity: "error", message: "Name must start with 'W-'" },
-    ]);
-
-    const outcome = await parseAndValidateFile(makeFile("model-a.ifc"), "<ids/>", "web-ifc");
-
-    expect(parseWebIfcBuffer).toHaveBeenCalledTimes(1);
-    expect(parseIfcLiteBuffer).not.toHaveBeenCalled();
-    expect(validateElements).toHaveBeenCalledWith(
-      [expect.objectContaining({ globalId: "g1" })],
-      "<ids/>"
-    );
-
-    expect(outcome.status).toBe("succeeded");
-    expect(outcome.fileName).toBe("model-a.ifc");
-    expect(outcome.parseMs).toBe(12);
-    expect(outcome.elementCount).toBe(1);
-    expect(outcome.results).toEqual([
-      expect.objectContaining({
-        fileName: "model-a.ifc",
-        elementGlobalId: "g1",
-        elementType: "IFCWALL",
-        ruleId: "naming-prefix",
-        severity: "error",
-        message: "Name must start with 'W-'",
-      }),
-    ]);
-    expect(outcome.modelStructure).toEqual(modelStructure);
-  });
-
-  it("routes to the ifc-lite engine when selected", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 4 });
-    validateElements.mockReturnValueOnce([]);
-
-    const outcome = await parseAndValidateFile(makeFile("model-b.ifc"), "<ids/>", "ifc-lite");
-
-    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(1);
-    expect(outcome.results).toEqual([]);
-  });
-
-  it("marks the file failed and records the error message when parsing throws, without crashing", async () => {
-    parseWebIfcBuffer.mockRejectedValueOnce(new Error("unexpected EOF"));
-
-    const outcome = await parseAndValidateFile(makeFile("corrupt.ifc"), "<ids/>", "web-ifc");
-
-    expect(outcome.status).toBe("failed");
-    expect(outcome.errorMessage).toBe("unexpected EOF");
-    expect(outcome.parseMs).toBeNull();
-    expect(outcome.results).toEqual([]);
-    expect(outcome.modelStructure).toBeNull();
-  });
-});
-
-describe("parseIfcFileOnly", () => {
-  it("returns the parsed elements without touching the validator", async () => {
+describe("parseFile", () => {
+  it("returns the parsed elements and the engine that produced them, without touching the validator", async () => {
     const modelStructure = {
       expressId: 1,
       ifcType: "IFCPROJECT",
@@ -111,9 +39,16 @@ describe("parseIfcFileOnly", () => {
     ];
     parseWebIfcBuffer.mockResolvedValueOnce({ elements, parseMs: 9, modelStructure });
 
-    const result = await parseIfcFileOnly(makeFile("model-a.ifc"), "web-ifc");
+    const outcome = await parseFile(makeFile("model-a.ifc"), "web-ifc");
 
-    expect(result).toEqual({ elements, parseMs: 9, modelStructure });
+    expect(outcome).toEqual({
+      status: "succeeded",
+      engine: "web-ifc",
+      parseMs: 9,
+      errorMessage: null,
+      elements,
+      modelStructure,
+    });
     expect(validateElements).not.toHaveBeenCalled();
     expect(parseIdsXml).not.toHaveBeenCalled();
   });
@@ -121,68 +56,79 @@ describe("parseIfcFileOnly", () => {
   it("routes to the ifc-lite engine and normalises a missing model structure to null", async () => {
     parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 4 });
 
-    const result = await parseIfcFileOnly(makeFile("model-b.ifc"), "ifc-lite");
+    const outcome = await parseFile(makeFile("model-b.ifc"), "ifc-lite");
 
     expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(1);
     expect(parseWebIfcBuffer).not.toHaveBeenCalled();
-    expect(result.modelStructure).toBeNull();
+    expect(outcome.modelStructure).toBeNull();
   });
 
-  it("propagates parse failures instead of swallowing them into an outcome row", async () => {
+  it("records a parse failure as an outcome instead of throwing, so one bad file doesn't sink a batch", async () => {
     parseWebIfcBuffer.mockRejectedValueOnce(new Error("unexpected EOF"));
 
-    await expect(parseIfcFileOnly(makeFile("corrupt.ifc"), "web-ifc")).rejects.toThrow("unexpected EOF");
+    const outcome = await parseFile(makeFile("corrupt.ifc"), "web-ifc");
+
+    expect(outcome.status).toBe("failed");
+    expect(outcome.errorMessage).toBe("unexpected EOF");
+    expect(outcome.parseMs).toBeNull();
+    expect(outcome.elements).toEqual([]);
+    expect(outcome.modelStructure).toBeNull();
   });
 });
 
-describe("parseAndValidateFiles", () => {
-  it("processes every file independently, one failure not blocking the rest", async () => {
-    parseWebIfcBuffer
-      .mockResolvedValueOnce({ elements: [], parseMs: 3 })
-      .mockRejectedValueOnce(new Error("bad file"))
-      .mockResolvedValueOnce({ elements: [], parseMs: 7 });
-    validateElements.mockReturnValue([]);
+describe("validateParsedModels", () => {
+  it("maps violations to ElementResult rows tagged with the file they came from", () => {
+    validateElements.mockReturnValueOnce([
+      { elementGlobalId: "g1", elementType: "IFCWALL", ruleId: "naming-prefix", severity: "error", message: "Name must start with 'W-'" },
+    ]);
 
-    const outcomes = await parseAndValidateFiles(
-      [makeFile("a.ifc"), makeFile("b.ifc"), makeFile("c.ifc")],
-      "<ids/>",
-      "web-ifc"
+    const elements = [
+      { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
+    ];
+    const results = validateParsedModels([{ fileName: "model-a.ifc", elements }], "<ids/>");
+
+    expect(validateElements).toHaveBeenCalledWith(elements, "<ids/>");
+    expect(results).toEqual([
+      expect.objectContaining({
+        fileName: "model-a.ifc",
+        fileJobId: "model-a.ifc",
+        elementGlobalId: "g1",
+        elementType: "IFCWALL",
+        ruleId: "naming-prefix",
+        severity: "error",
+        message: "Name must start with 'W-'",
+      }),
+    ]);
+  });
+
+  it("re-checks already-parsed elements from every model, never re-reading the files", () => {
+    validateElements
+      .mockReturnValueOnce([
+        { elementGlobalId: "g1", elementType: "IFCWALL", ruleId: "r1", severity: "error", message: "no" },
+      ])
+      .mockReturnValueOnce([
+        { elementGlobalId: "g2", elementType: "IFCDOOR", ruleId: "r2", severity: "warning", message: "hm" },
+      ]);
+
+    const results = validateParsedModels(
+      [
+        { fileName: "a.ifc", elements: [] },
+        { fileName: "b.ifc", elements: [] },
+      ],
+      "<ids/>"
     );
 
-    expect(outcomes.map((o) => o.status)).toEqual(["succeeded", "failed", "succeeded"]);
-    expect(outcomes.map((o) => o.fileName)).toEqual(["a.ifc", "b.ifc", "c.ifc"]);
+    expect(results.map((result) => result.fileName)).toEqual(["a.ifc", "b.ifc"]);
+    expect(parseWebIfcBuffer).not.toHaveBeenCalled();
+    expect(parseIfcLiteBuffer).not.toHaveBeenCalled();
   });
 
-  it("rejects with InvalidIdsRuleSetError instead of silently reporting zero issues when the IDS file has no specifications", async () => {
+  it("throws InvalidIdsRuleSetError instead of silently reporting zero issues when the IDS file has no specifications", () => {
     parseIdsXml.mockReturnValue([]);
 
-    await expect(
-      parseAndValidateFiles([makeFile("a.ifc")], "<not-really-ids/>", "web-ifc")
-    ).rejects.toThrow(InvalidIdsRuleSetError);
-
-    expect(parseWebIfcBuffer).not.toHaveBeenCalled();
-  });
-
-  it("reports progress for each file before it starts parsing, in order", async () => {
-    parseWebIfcBuffer
-      .mockResolvedValueOnce({ elements: [], parseMs: 3 })
-      .mockResolvedValueOnce({ elements: [], parseMs: 7 });
-    validateElements.mockReturnValue([]);
-
-    const onProgress = vi.fn();
-    await parseAndValidateFiles([makeFile("a.ifc"), makeFile("b.ifc")], "<ids/>", "web-ifc", onProgress);
-
-    expect(onProgress).toHaveBeenNthCalledWith(1, { fileName: "a.ifc", index: 1, total: 2 });
-    expect(onProgress).toHaveBeenNthCalledWith(2, { fileName: "b.ifc", index: 2, total: 2 });
-  });
-
-  it("still reports progress for a file that goes on to fail", async () => {
-    parseWebIfcBuffer.mockRejectedValueOnce(new Error("bad file"));
-
-    const onProgress = vi.fn();
-    const outcomes = await parseAndValidateFiles([makeFile("a.ifc")], "<ids/>", "web-ifc", onProgress);
-
-    expect(onProgress).toHaveBeenCalledWith({ fileName: "a.ifc", index: 1, total: 1 });
-    expect(outcomes[0].status).toBe("failed");
+    expect(() => validateParsedModels([{ fileName: "a.ifc", elements: [] }], "<not-really-ids/>")).toThrow(
+      InvalidIdsRuleSetError
+    );
+    expect(validateElements).not.toHaveBeenCalled();
   });
 });

@@ -24,6 +24,17 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "Ifc Checker" })).toBeInTheDocument();
   });
 
+  it("sends a builder user with no parsed files back to the page that loads them", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Build rules" }));
+    await user.click(screen.getByRole("button", { name: "Load IFC files" }));
+
+    expect(screen.getByRole("heading", { name: "Ifc Checker" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/IFC files/)).toBeInTheDocument();
+  });
+
   it("labels both tabs for the browser smoke check", () => {
     render(<App />);
 

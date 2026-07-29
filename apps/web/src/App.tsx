@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { IfcCheckerPage } from "./routes/IfcCheckerPage";
 import { RuleBuilderPage } from "./builder/RuleBuilderPage";
+import { LoadedModelsProvider } from "./state/loadedModels";
 
 type Tab = "validate" | "builder";
 
@@ -13,7 +14,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>("validate");
 
   return (
-    <>
+    <LoadedModelsProvider>
       <header className="topbar">
         <span className="brand">IFC Checker</span>
         <nav className="tabs" aria-label="Pages">
@@ -33,13 +34,13 @@ export function App() {
       </header>
 
       {/* Both pages stay mounted: switching tabs must not throw away a parsed model or a
-          half-written rule set. */}
+          half-written rule set. The files themselves live above both, in LoadedModelsProvider. */}
       <div className="page-narrow" hidden={tab !== "validate"}>
         <IfcCheckerPage />
       </div>
       <div hidden={tab !== "builder"}>
-        <RuleBuilderPage />
+        <RuleBuilderPage onGoToFiles={() => setTab("validate")} />
       </div>
-    </>
+    </LoadedModelsProvider>
   );
 }
