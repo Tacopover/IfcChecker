@@ -13,8 +13,11 @@ interface RailProps {
   onSelect: (node: ViewerTreeNode) => void;
   onIsolate: (node: ViewerTreeNode) => void;
   onHide: (node: ViewerTreeNode) => void;
+  onShow: (node: ViewerTreeNode) => void;
   onLoadModel: (modelKey: string) => void;
   onUnloadModel: (modelKey: string) => void;
+  onToggleModel: (modelKey: string) => void;
+  hiddenModelKeys: ReadonlySet<string>;
 }
 
 function TreeRow({
@@ -26,8 +29,11 @@ function TreeRow({
   onSelect,
   onIsolate,
   onHide,
+  onShow,
   onLoadModel,
   onUnloadModel,
+  onToggleModel,
+  hiddenModelKeys,
 }: RailProps & { node: ViewerTreeNode; depth: number }) {
   // Models and the top of a spatial tree open by default; long element lists
   // stay shut, because a storey can hold thousands of rows.
@@ -60,14 +66,27 @@ function TreeRow({
         </button>
 
         {node.kind === "model" ? (
-          <button
-            type="button"
-            className="viewer-tree-action"
-            disabled={isBusy}
-            onClick={() => (isLoaded ? onUnloadModel(node.modelKey) : onLoadModel(node.modelKey))}
-          >
-            {isBusy ? "Loading…" : isLoaded ? "Unload" : "Load 3D"}
-          </button>
+          <>
+            {/* Hiding a file is not unloading it: hiding is instant and
+                reversible, unloading gives the mesh buffers back and costs
+                another full geometry pass to undo. */}
+            <button
+              type="button"
+              className="viewer-tree-action"
+              disabled={!isLoaded}
+              onClick={() => onToggleModel(node.modelKey)}
+            >
+              {hiddenModelKeys.has(node.modelKey) ? "Show" : "Hide"}
+            </button>
+            <button
+              type="button"
+              className="viewer-tree-action"
+              disabled={isBusy}
+              onClick={() => (isLoaded ? onUnloadModel(node.modelKey) : onLoadModel(node.modelKey))}
+            >
+              {isBusy ? "Loading…" : isLoaded ? "Unload" : "Load 3D"}
+            </button>
+          </>
         ) : (
           <>
             <button type="button" className="viewer-tree-action" onClick={() => onIsolate(node)}>
@@ -75,6 +94,9 @@ function TreeRow({
             </button>
             <button type="button" className="viewer-tree-action" onClick={() => onHide(node)}>
               Hide
+            </button>
+            <button type="button" className="viewer-tree-action" onClick={() => onShow(node)}>
+              Show
             </button>
           </>
         )}
@@ -94,8 +116,11 @@ function TreeRow({
               onSelect={onSelect}
               onIsolate={onIsolate}
               onHide={onHide}
+              onShow={onShow}
               onLoadModel={onLoadModel}
               onUnloadModel={onUnloadModel}
+              onToggleModel={onToggleModel}
+              hiddenModelKeys={hiddenModelKeys}
             />
           ))}
         </ul>

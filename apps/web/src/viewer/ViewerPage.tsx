@@ -30,6 +30,8 @@ import {
   isolateElements,
   isVisible as isElementVisible,
   showEverything,
+  showElements,
+  toggleModel,
   type ElementRef,
 } from "./visibility.js";
 
@@ -209,6 +211,11 @@ export function ViewerPage() {
     [refsFor]
   );
 
+  const onShow = useCallback(
+    (node: ViewerTreeNode) => setVisibility((current) => showElements(current, refsFor(node))),
+    [refsFor]
+  );
+
   const onSelectNode = useCallback((node: ViewerTreeNode) => {
     if (node.expressId === null || node.kind !== "element") return;
     setSelection({ modelKey: node.modelKey, expressId: node.expressId });
@@ -241,8 +248,11 @@ export function ViewerPage() {
           onSelect={onSelectNode}
           onIsolate={onIsolate}
           onHide={onHide}
+          onShow={onShow}
           onLoadModel={loadModel}
           onUnloadModel={unloadModel}
+          onToggleModel={(modelKey) => setVisibility((current) => toggleModel(current, modelKey))}
+          hiddenModelKeys={visibility.hiddenModels}
         />
       </aside>
 
@@ -304,23 +314,25 @@ export function ViewerPage() {
 
         {section?.enabled && (
           <div className="viewer-section-controls">
-            {SECTION_AXES.map((axis: SectionAxis) => (
-              <label key={axis}>
-                {axis.toUpperCase()} max
-                <input
-                  type="range"
-                  min={allBounds.min[axis]}
-                  max={allBounds.max[axis]}
-                  step={(allBounds.max[axis] - allBounds.min[axis]) / 200 || 0.01}
-                  value={section.bounds.max[axis]}
-                  onChange={(event) =>
-                    setSection((current) =>
-                      current ? moveSectionFace(current, axis, "max", Number(event.target.value)) : current
-                    )
-                  }
-                />
-              </label>
-            ))}
+            {SECTION_AXES.flatMap((axis: SectionAxis) =>
+              (["min", "max"] as const).map((side) => (
+                <label key={`${axis}-${side}`}>
+                  {axis.toUpperCase()} {side}
+                  <input
+                    type="range"
+                    min={allBounds.min[axis]}
+                    max={allBounds.max[axis]}
+                    step={(allBounds.max[axis] - allBounds.min[axis]) / 200 || 0.01}
+                    value={section.bounds[side][axis]}
+                    onChange={(event) =>
+                      setSection((current) =>
+                        current ? moveSectionFace(current, axis, side, Number(event.target.value)) : current
+                      )
+                    }
+                  />
+                </label>
+              ))
+            )}
           </div>
         )}
       </section>
