@@ -34,12 +34,12 @@ same way MEP models were before the allowlist was removed.
 ## 2. Surface unrecognised entity types in the app
 
 **Why:** parsing now reports types it does not recognise on `IfcParseResult.unrecognizedTypes`
-and logs one `console.warn`, but `parseIfcFileOnly` does not forward it and no UI shows it. A
+and logs one `console.warn`, but `parseFile` does not forward it and no UI shows it. A
 user whose model contains an unknown class sees a smaller number with no explanation — the
 exact silent failure the allowlist removal was meant to end, surviving one layer up.
 
 **Done when:**
-- `parseIfcFileOnly` forwards `unrecognizedTypes`, and the rule builder shows them near the
+- `parseFile` forwards `unrecognizedTypes`, and the rule builder shows them near the
   model summary — visible, not buried, and not styled as an error, since an unrecognised
   class is usually a schema-version gap rather than a broken file.
 - The Validate page reports the same, since it under-counts identically.
@@ -120,6 +120,59 @@ Round-trip tested per the contract from 3c, against the real-world files gathere
 Per 3d, including the loss report from 3b.
 
 **Size:** large — treat 3a–3d as one scoping pass to review before any code is written.
+
+---
+
+## 4. A 3D viewer page
+
+**Why:** the tool can tell a user *that* an element fails a rule, but never *where* it is. A
+third page shows the loaded models in 3D: a model tree browsing all loaded files, a property
+browser for the selected element, section planes to clip the view, and hide/unhide/isolate at
+file and element level. Parsing stays as fast as it is now — geometry is opt-in in both
+engines and is only produced when this page asks for it.
+
+**Governing constraint:** models are federated across disciplines at up to 1.6 GB each, sharing
+an origin. The Validate page already parses one in ~120 s with ifc-lite.
+
+**Done when:**
+- Geometry is produced by `@ifc-lite/wasm` (already installed, a direct dependency of
+  `@ifc-lite/parser`). web-ifc's geometry path is not viable at this scale.
+- Elements carry an `expressId`, so an element record can be joined to a mesh. Both adapters
+  already have it and drop it.
+- The spatial structure carries element **ids**, not just per-type counts, so the tree can be
+  expanded down to individual elements.
+- Geometry loads per model on demand and can be unloaded — the always-mounted pattern in
+  `App.tsx` cannot extend to resident mesh buffers plus a live WebGL context.
+- Viewer state (selection, visibility, isolation, section planes) lives in plain modules under
+  vitest; `scripts/verify.mjs` gains SwiftShader flags and one `readPixels` smoke assertion.
+  Note the viewer must expose a deterministic render-one-frame hook — `requestAnimationFrame`
+  is starved under the harness's `--virtual-time-budget`.
+- Decided: whether the geometry pre-pass fuses with parsing (ifc-lite supports handing
+  `parseColumnar` a pre-built entity index) or runs as a separate second scan.
+- Decided: section plane vs box clip, capped vs open; picking by GPU colour-pick vs raycast;
+  default visibility for `IfcSpace` and `IfcOpeningElement`.
+
+**Size:** large.
+
+---
+
+## 5. Navigate from a check result to its elements in the viewer
+
+**Why:** a results table is a list of GlobalIds. Clicking a row should take the user to the
+elements that failed, isolated and framed, so a violation becomes something they can see.
+
+**Done when:**
+- Clicking a row in the Validate page's issue table isolates the failing elements in the viewer
+  and zooms to fit, with a visible un-isolate / reset control.
+- Results carry the `LoadedModel` key rather than the file name — two files named `Model.ifc`
+  must not navigate into the wrong model.
+- Failing elements only; the validator needs no change, since that is exactly what it returns.
+- Decided: whether a row navigates to its one element or the table groups by rule so that
+  clicking a rule shows every element failing it.
+- Handled honestly: a failing element with no geometry, and a clicked result whose model has
+  not had its geometry loaded yet.
+
+**Size:** medium, and only after goal 4 — it shares goal 4's `expressId` prerequisite.
 
 ---
 
