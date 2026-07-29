@@ -7,6 +7,7 @@ class FakeAdapter implements IfcParserAdapter {
       elements: [
         {
           globalId: "g1",
+          expressId: 1,
           ifcType: "IFCWALL",
           predefinedType: null,
           name: filePath,

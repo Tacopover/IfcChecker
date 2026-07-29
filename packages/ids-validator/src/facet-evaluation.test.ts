@@ -6,6 +6,7 @@ import type { ParsedAttributeFacet, ParsedPropertyFacet } from "./parse-ids.js";
 function makeElement(overrides: Partial<NormalizedElement>): NormalizedElement {
   return {
     globalId: "g1",
+    expressId: 1,
     ifcType: "IFCWALL",
     predefinedType: null,
     name: null,

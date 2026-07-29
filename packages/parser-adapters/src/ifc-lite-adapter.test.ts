@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { IfcLiteAdapter, parseIfcLiteBuffer } from "./ifc-lite-adapter.js";
+import { elementCountsOf } from "@ifc-qa/shared-types";
 import { fixturePath } from "./fixture-path.js";
 
 describe("IfcLiteAdapter", () => {
@@ -58,7 +59,7 @@ describe("parseIfcLiteBuffer", () => {
     const storey = building?.children[0];
     expect(storey?.ifcType).toBe("IFCBUILDINGSTOREY");
     expect(storey?.name).toBe("Level 1");
-    expect(storey?.elementCounts).toEqual({ IFCWALL: 1 });
+    expect(elementCountsOf(storey!)).toEqual({ IFCWALL: 1 });
     expect(storey?.children).toEqual([]);
   });
 

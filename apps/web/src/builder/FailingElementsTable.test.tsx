@@ -7,6 +7,7 @@ import { FailingElementsTable, readConditionValue } from "./FailingElementsTable
 function element(overrides: Partial<NormalizedElement> = {}): NormalizedElement {
   return {
     globalId: "g1",
+    expressId: 1,
     ifcType: "IFCWALL",
     predefinedType: null,
     name: "Basic Wall",

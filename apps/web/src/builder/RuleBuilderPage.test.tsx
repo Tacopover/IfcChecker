@@ -15,6 +15,7 @@ import type { TreeNode } from "./introspect";
 function wall(index: number, fireRating: string | null): NormalizedElement {
   return {
     globalId: `w${index}`,
+    expressId: 100 + index,
     ifcType: "IFCWALL",
     predefinedType: null,
     name: `Wall ${index}`,
@@ -28,6 +29,7 @@ function wall(index: number, fireRating: string | null): NormalizedElement {
 function door(index: number): NormalizedElement {
   return {
     globalId: `d${index}`,
+    expressId: 200 + index,
     ifcType: "IFCDOOR",
     predefinedType: null,
     name: `Door ${index}`,
@@ -39,6 +41,7 @@ function door(index: number): NormalizedElement {
 function slab(index: number): NormalizedElement {
   return {
     globalId: `s${index}`,
+    expressId: 300 + index,
     ifcType: "IFCSLAB",
     predefinedType: null,
     name: `Slab ${index}`,

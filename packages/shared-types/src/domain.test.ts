@@ -10,6 +10,7 @@ describe("NormalizedElementSchema", () => {
   it("accepts a well-formed element", () => {
     const parsed = NormalizedElementSchema.parse({
       globalId: "1abc2defGHI3jkl4mno5pq",
+      expressId: 42,
       ifcType: "IFCWALL",
       predefinedType: "STANDARD",
       name: "Wall-01",
@@ -45,25 +46,25 @@ describe("ModelStructureNodeSchema", () => {
       expressId: 1,
       ifcType: "IFCPROJECT",
       name: "Fixture Project",
-      elementCounts: {},
+      elementIdsByType: {},
       children: [
         {
           expressId: 11,
           ifcType: "IFCSITE",
           name: "Fixture Site",
-          elementCounts: {},
+          elementIdsByType: {},
           children: [
             {
               expressId: 13,
               ifcType: "IFCBUILDING",
               name: "Fixture Building",
-              elementCounts: {},
+              elementIdsByType: {},
               children: [
                 {
                   expressId: 14,
                   ifcType: "IFCBUILDINGSTOREY",
                   name: "Level 1",
-                  elementCounts: { IFCWALL: 1 },
+                  elementIdsByType: { IFCWALL: [101] },
                   children: [],
                 },
               ],
@@ -73,7 +74,7 @@ describe("ModelStructureNodeSchema", () => {
       ],
     });
 
-    expect(parsed.children[0].children[0].children[0].elementCounts).toEqual({ IFCWALL: 1 });
+    expect(parsed.children[0].children[0].children[0].elementIdsByType).toEqual({ IFCWALL: [101] });
   });
 
   it("rejects a node missing its children array", () => {
@@ -81,7 +82,7 @@ describe("ModelStructureNodeSchema", () => {
       expressId: 1,
       ifcType: "IFCPROJECT",
       name: null,
-      elementCounts: {},
+      elementIdsByType: {},
     });
     expect(result.success).toBe(false);
   });

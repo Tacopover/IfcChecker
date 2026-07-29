@@ -1,6 +1,7 @@
 [
   {
     "globalId": "2b3C4d5E6f7G8h9I0jKlmn",
+    "expressId": 100,
     "ifcType": "IFCWALL",
     "predefinedType": "STANDARD",
     "name": "Wall-1",
@@ -13,6 +14,7 @@
   },
   {
     "globalId": "3c4D5e6F7g8H9i0J1kLmno",
+    "expressId": 101,
     "ifcType": "IFCWALL",
     "predefinedType": "STANDARD",
     "name": "W-002",

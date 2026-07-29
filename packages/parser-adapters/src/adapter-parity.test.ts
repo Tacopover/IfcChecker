@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { elementCountsOf } from "@ifc-qa/shared-types";
 import { WebIfcAdapter } from "./web-ifc-adapter.js";
 import { IfcLiteAdapter } from "./ifc-lite-adapter.js";
 import { fixturePath } from "./fixture-path.js";
@@ -29,7 +30,7 @@ describe("adapter parity", () => {
 
     function shape(node: typeof webIfcResult.modelStructure): unknown {
       if (!node) return null;
-      return { ifcType: node.ifcType, name: node.name, elementCounts: node.elementCounts, children: node.children.map(shape) };
+      return { ifcType: node.ifcType, name: node.name, elementIdsByType: node.elementIdsByType, children: node.children.map(shape) };
     }
 
     expect(shape(ifcLiteResult.modelStructure)).toEqual(shape(webIfcResult.modelStructure));
@@ -42,7 +43,7 @@ describe("adapter parity", () => {
 
     function shape(node: typeof webIfcResult.modelStructure): unknown {
       if (!node) return null;
-      return { ifcType: node.ifcType, name: node.name, elementCounts: node.elementCounts, children: node.children.map(shape) };
+      return { ifcType: node.ifcType, name: node.name, elementIdsByType: node.elementIdsByType, children: node.children.map(shape) };
     }
 
     const webIfcShape = shape(webIfcResult.modelStructure);
@@ -50,8 +51,8 @@ describe("adapter parity", () => {
 
     const building = (webIfcResult.modelStructure?.children[0]?.children[0]) ?? null;
     expect(building?.children.map((storey) => storey.name)).toEqual(["Level 1", "Level 2"]);
-    expect(building?.children[0].elementCounts).toEqual({ IFCWALL: 2, IFCDOOR: 1 });
-    expect(building?.children[1].elementCounts).toEqual({ IFCWALL: 1 });
+    expect(elementCountsOf(building!.children[0])).toEqual({ IFCWALL: 2, IFCDOOR: 1 });
+    expect(elementCountsOf(building!.children[1])).toEqual({ IFCWALL: 1 });
   });
 
   // Both engines now enumerate the model instead of iterating one shared list
@@ -67,6 +68,23 @@ describe("adapter parity", () => {
     expect(webIfcResult.unrecognizedTypes).toEqual([]);
   });
 
+  // The viewer keys every mesh by expressId while every check result is keyed
+  // by GlobalId, so the whole mesh-to-element join rests on the two engines
+  // numbering STEP lines the same way. That is a property of the file format
+  // rather than of either library, which is exactly why it is worth measuring
+  // rather than assuming.
+  it("both engines assign the same expressId to the same element", async () => {
+    const path = fixturePath("mep-systems.ifc");
+    const byGlobalId = (result: { elements: Array<{ globalId: string; expressId: number }> }) =>
+      new Map(result.elements.map((element) => [element.globalId, element.expressId]));
+
+    const fromWebIfc = byGlobalId(await new WebIfcAdapter().parse(path));
+    const fromIfcLite = byGlobalId(await new IfcLiteAdapter().parse(path));
+
+    expect(fromIfcLite.size).toBeGreaterThan(0);
+    expect([...fromIfcLite]).toEqual([...fromWebIfc]);
+  });
+
   it("both engines agree on the per-storey counts of a full MEP model", async () => {
     const path = fixturePath("mep-systems.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);
@@ -77,7 +95,7 @@ describe("adapter parity", () => {
     const countsByStorey = (result: typeof webIfcResult) =>
       (result.modelStructure?.children[0]?.children[0]?.children ?? []).map((storey) => [
         storey.name,
-        Object.fromEntries(Object.entries(storey.elementCounts).filter(([type]) => type !== "IFCSPACE")),
+        Object.fromEntries(Object.entries(elementCountsOf(storey)).filter(([type]) => type !== "IFCSPACE")),
       ]);
 
     expect(countsByStorey(ifcLiteResult)).toEqual(countsByStorey(webIfcResult));
@@ -101,6 +119,25 @@ describe("adapter parity", () => {
     ]);
   });
 
+  // The only fixture carrying actual shape representations — every other file
+  // here is representation-free, so nothing else can exercise the geometry
+  // pipeline. The viewer's tests key off these express ids, so pin them.
+  it("reads the geometry fixture's two walls at the express ids the viewer expects", async () => {
+    const path = fixturePath("two-walls-geometry.ifc");
+    const fromWebIfc = await new WebIfcAdapter().parse(path);
+    const fromIfcLite = await new IfcLiteAdapter().parse(path);
+
+    expect(fromIfcLite.elements).toEqual(fromWebIfc.elements);
+    expect(fromWebIfc.elements.map((element) => [element.expressId, element.ifcType, element.name])).toEqual([
+      [100, "IFCWALL", "Wall A"],
+      [200, "IFCWALL", "Wall B"],
+    ]);
+
+    const storey = fromWebIfc.modelStructure?.children[0]?.children[0]?.children[0];
+    expect(storey?.name).toBe("Level 1");
+    expect(storey?.elementIdsByType).toEqual({ IFCWALL: [100, 200] });
+  });
+
   // Pre-existing engine divergence, unrelated to which elements are collected:
   // @ifc-lite/parser's spatialHierarchy promotes an IfcSpace to a node of the
   // tree, while web-ifc-buffer walks only Project/Site/Building/Storey and so
@@ -115,9 +152,9 @@ describe("adapter parity", () => {
     const fromIfcLite = plantLevel(await new IfcLiteAdapter().parse(path));
 
     expect(fromWebIfc.children).toEqual([]);
-    expect(fromWebIfc.elementCounts.IFCSPACE).toBe(1);
+    expect(fromWebIfc.elementIdsByType.IFCSPACE).toHaveLength(1);
 
     expect(fromIfcLite.children.map((child: { ifcType: string }) => child.ifcType)).toEqual(["IFCSPACE"]);
-    expect(fromIfcLite.elementCounts.IFCSPACE).toBeUndefined();
+    expect(fromIfcLite.elementIdsByType.IFCSPACE).toBeUndefined();
   });
 });

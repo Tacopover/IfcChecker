@@ -31,11 +31,11 @@ describe("parseFile", () => {
       expressId: 1,
       ifcType: "IFCPROJECT",
       name: "Fixture Project",
-      elementCounts: {},
+      elementIdsByType: {},
       children: [],
     };
     const elements = [
-      { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
+      { globalId: "g1", expressId: 1, ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
     ];
     parseWebIfcBuffer.mockResolvedValueOnce({ elements, parseMs: 9, modelStructure });
 
@@ -83,7 +83,7 @@ describe("validateParsedModels", () => {
     ]);
 
     const elements = [
-      { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
+      { globalId: "g1", expressId: 1, ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
     ];
     const results = validateParsedModels([{ fileName: "model-a.ifc", elements }], "<ids/>");
 

@@ -35,6 +35,7 @@ const IDS_XML = `<?xml version="1.0" encoding="utf-8"?>
 function makeElement(overrides: Partial<NormalizedElement>): NormalizedElement {
   return {
     globalId: "g1",
+    expressId: 1,
     ifcType: "IFCWALL",
     predefinedType: null,
     name: null,

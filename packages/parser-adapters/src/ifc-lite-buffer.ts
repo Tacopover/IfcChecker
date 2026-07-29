@@ -20,18 +20,19 @@ function toModelStructureNode(
   node: SpatialNode,
   elementTypeByExpressId: Map<number, string>
 ): ModelStructureNode {
-  const elementCounts: Record<string, number> = {};
+  const elementIdsByType: Record<string, number[]> = {};
   for (const expressId of node.elements) {
     const ifcType = elementTypeByExpressId.get(expressId);
     if (!ifcType) continue;
-    elementCounts[ifcType] = (elementCounts[ifcType] ?? 0) + 1;
+    (elementIdsByType[ifcType] ??= []).push(expressId);
   }
+  for (const ids of Object.values(elementIdsByType)) ids.sort((a, b) => a - b);
 
   return {
     expressId: node.expressId,
     ifcType: IfcTypeEnumToString(node.type).toUpperCase(),
     name: node.name !== "" ? node.name : null,
-    elementCounts,
+    elementIdsByType,
     children: node.children.map((child) => toModelStructureNode(child, elementTypeByExpressId)),
   };
 }
@@ -107,6 +108,7 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
 
       elements.push({
         globalId: store.entities.getGlobalId(expressId),
+        expressId,
         ifcType: typeName,
         predefinedType: stripEnumDots(findAttr("PredefinedType")),
         name: name === "" ? null : name,
