@@ -140,6 +140,111 @@ const SCENARIOS = {
       treeRoots: h.all(".tree > [role=treeitem] > .rowline .row-name").map(function (n) { return n.textContent; })
     };
   `,
+
+  // Proves the 3D page actually drew something: parse the one fixture that
+  // carries shape representations, load its geometry, draw a single
+  // deterministic frame, and read the pixel back. Nothing here waits on a
+  // render loop converging — under --virtual-time-budget it never would.
+  viewer: `
+    h.click('[data-smoke-route="validate"]');
+    await h.waitFor(function () { return document.getElementById("local-ifc-files"); }, "validate page");
+    document.querySelector('input[name="local-engine"][value="ifc-lite"]').click();
+
+    var response = await fetch("/fixtures/ifc/two-walls-geometry.ifc");
+    if (!response.ok) throw new Error("fixture fetch failed: " + response.status);
+    var bytes = new Uint8Array(await response.arrayBuffer());
+
+    var input = document.getElementById("local-ifc-files");
+    var transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], "two-walls-geometry.ifc", { type: "application/octet-stream" }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await h.waitFor(function () {
+      var button = h.button("Parse files");
+      return button && !button.disabled ? button : null;
+    }, "enabled Parse files button");
+    h.button("Parse files").click();
+
+    await h.waitFor(function () {
+      return h.all("table td").some(function (cell) { return cell.textContent === "succeeded"; });
+    }, "parsed file row");
+
+    h.click('[data-smoke-route="viewer"]');
+    var canvas = await h.waitFor(function () {
+      return document.querySelector("[data-smoke-viewer-canvas]");
+    }, "viewer canvas");
+
+    var gl = canvas.getContext("webgl2");
+    if (!gl) throw new Error("no webgl2 context — SwiftShader flags missing?");
+
+    h.button("Load 3D").click();
+    await h.waitFor(function () {
+      var handle = window.__viewer && window.__viewer.current;
+      return handle && handle.batchCount() > 0 ? handle : null;
+    }, "uploaded geometry");
+
+    var handle = window.__viewer.current;
+    handle.renderFrame();
+
+    // Read inside the same turn as the draw: preserveDrawingBuffer is on under
+    // the harness, but a pixel read from a different frame still comes back zero.
+    // A grid rather than one pixel: the two fixture walls are thin and stand
+    // apart, so the exact centre can land between them or on an antialiased
+    // edge. The pick buffer is not multisampled, so an edge pixel that reads as
+    // partly lit in the main buffer is plain background there.
+    var background = handle.readPixel(1, 1);
+    if (!background) throw new Error("readPixel returned nothing");
+    var backgroundSum = background[0] + background[1] + background[2];
+
+    var rect = canvas.getBoundingClientRect();
+    var brightest = background;
+    var brightestSum = backgroundSum;
+    var hit = null;
+
+    for (var fx = 2; fx <= 8; fx++) {
+      for (var fy = 2; fy <= 8; fy++) {
+        var px = Math.floor((canvas.width * fx) / 10);
+        var py = Math.floor((canvas.height * fy) / 10);
+
+        var pixel = handle.readPixel(px, py);
+        if (pixel && pixel[0] + pixel[1] + pixel[2] > brightestSum) {
+          brightest = pixel;
+          brightestSum = pixel[0] + pixel[1] + pixel[2];
+        }
+
+        if (!hit) {
+          hit = handle.pick(
+            rect.left + (px * rect.width) / canvas.width,
+            rect.top + (py * rect.height) / canvas.height
+          );
+        }
+      }
+    }
+
+    if (brightestSum <= backgroundSum) {
+      throw new Error(
+        "nothing was drawn — brightest sample " + brightest.join(",") +
+        " is no brighter than background " + background.join(",")
+      );
+    }
+
+    // The colour-pick pass is the other thing no unit test reaches: it takes a
+    // real framebuffer read to prove an express id survived the round trip.
+    if (!hit) throw new Error("colour-pick found nothing anywhere a wall was drawn");
+    if (hit.expressId !== 100 && hit.expressId !== 200) {
+      throw new Error("colour-pick resolved to express id " + hit.expressId + ", not a fixture wall");
+    }
+
+    return {
+      canvasSize: canvas.width + "x" + canvas.height,
+      webglVersion: gl.getParameter(gl.VERSION),
+      batches: handle.batchCount(),
+      backgroundPixel: background,
+      brightestPixel: brightest,
+      picked: hit
+    };
+  `,
 };
 
 if (SCENARIO && !SCENARIOS[SCENARIO]) {
@@ -324,6 +429,11 @@ function chromeRun(extraArgs) {
       chrome,
       [
         "--headless", "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
+        // Software WebGL. With --disable-gpu alone getContext("webgl2") returns
+        // null, so the viewer page throws on mount, __smokeErrors catches it and
+        // the gate fails every run. Measured in Chrome for Testing 149: these
+        // three give working WebGL 2.0 and readPixels returns exact colours.
+        "--enable-unsafe-swiftshader", "--use-gl=angle", "--use-angle=swiftshader",
         `--virtual-time-budget=${TIME_BUDGET}`, "--run-all-compositor-stages-before-draw",
         ...extraArgs,
         `${origin}/smoke.html`,

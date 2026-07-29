@@ -35,16 +35,40 @@ describe("App", () => {
     expect(screen.getByLabelText(/IFC files/)).toBeInTheDocument();
   });
 
-  it("labels both tabs for the browser smoke check", () => {
+  it("labels every tab for the browser smoke check", () => {
     render(<App />);
 
-    expect(screen.getByRole("button", { name: "Validate" })).toHaveAttribute(
-      "data-smoke-route",
-      "validate"
-    );
-    expect(screen.getByRole("button", { name: "Build rules" })).toHaveAttribute(
-      "data-smoke-route",
-      "builder"
-    );
+    for (const [label, route] of [
+      ["Validate", "validate"],
+      ["Build rules", "builder"],
+      ["3D view", "viewer"],
+    ]) {
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute("data-smoke-route", route);
+    }
+  });
+
+  // The other two pages stay mounted so switching tabs never discards work.
+  // The viewer cannot: it holds mesh buffers and a live WebGL context, and
+  // several federated 1.6 GB models will not fit alongside each other.
+  it("mounts the viewer only while its tab is open, and unmounts it on leaving", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.queryByRole("heading", { name: "Models" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "3D view" }));
+    expect(screen.getByRole("heading", { name: "Models" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Validate" }));
+    expect(screen.queryByRole("heading", { name: "Models" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ifc Checker" })).toBeInTheDocument();
+  });
+
+  it("tells a viewer user with no parsed files where to get them", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "3D view" }));
+    expect(screen.getByText(/parse a file on the Validate page first/i)).toBeInTheDocument();
   });
 });

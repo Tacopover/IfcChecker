@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { IfcCheckerPage } from "./routes/IfcCheckerPage";
 import { RuleBuilderPage } from "./builder/RuleBuilderPage";
+import { ViewerPage } from "./viewer/ViewerPage";
 import { LoadedModelsProvider } from "./state/loadedModels";
 
-type Tab = "validate" | "builder";
+type Tab = "validate" | "builder" | "viewer";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "validate", label: "Validate" },
   { id: "builder", label: "Build rules" },
+  { id: "viewer", label: "3D view" },
 ];
 
 export function App() {
@@ -41,6 +43,11 @@ export function App() {
       <div hidden={tab !== "builder"}>
         <RuleBuilderPage onGoToFiles={() => setTab("validate")} />
       </div>
+
+      {/* The viewer is the exception: it holds mesh buffers and a live WebGL
+          context, and several federated 1.6 GB models cannot all stay resident.
+          Leaving the tab gives the geometry back. */}
+      {tab === "viewer" && <ViewerPage />}
     </LoadedModelsProvider>
   );
 }

@@ -20,7 +20,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@types/node": "^22.10.1"
+      "@types/node": "^22.10.1",
+      "@ifc-lite/wasm": "4.1.4"
     }
   }
 }

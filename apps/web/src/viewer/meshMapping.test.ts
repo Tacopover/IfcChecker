@@ -83,14 +83,13 @@ describe("meshBounds", () => {
   it("offsets the captured object-space AABB by the mesh origin", () => {
     const bounds = meshBounds(
       mesh(100, {
-        localBounds: new Float32Array([0, 0, -0.2, 4, 3, 0]),
+        localBounds: { min: [0, 0, -0.2], max: [4, 3, 0] },
         origin: [10, 1, 2],
       })
     );
     expect(bounds.min.x).toBe(10);
     expect(bounds.min.y).toBe(1);
-    // Float32 storage, so the AABB comes back a hair off the authored -0.2.
-    expect(bounds.min.z).toBeCloseTo(1.8, 6);
+    expect(bounds.min.z).toBeCloseTo(1.8, 9);
     expect(bounds.max).toEqual({ x: 14, y: 4, z: 2 });
   });
 
@@ -105,8 +104,8 @@ describe("boundsOfElements", () => {
   it("unions every mesh of every requested element", () => {
     const mapping = mapMeshesToElements(
       [
-        mesh(100, { localBounds: new Float32Array([0, 0, 0, 1, 1, 1]) }),
-        mesh(200, { localBounds: new Float32Array([0, 0, 0, 1, 1, 1]), origin: [5, 0, 0] }),
+        mesh(100, { localBounds: { min: [0, 0, 0], max: [1, 1, 1] } }),
+        mesh(200, { localBounds: { min: [0, 0, 0], max: [1, 1, 1] }, origin: [5, 0, 0] }),
       ],
       [element(100), element(200)]
     );
@@ -120,7 +119,7 @@ describe("boundsOfElements", () => {
   // elements happens to be a non-renderable type.
   it("ignores elements with no geometry rather than pulling the box to the origin", () => {
     const mapping = mapMeshesToElements(
-      [mesh(200, { localBounds: new Float32Array([0, 0, 0, 1, 1, 1]), origin: [5, 0, 0] })],
+      [mesh(200, { localBounds: { min: [0, 0, 0], max: [1, 1, 1] }, origin: [5, 0, 0] })],
       [element(100), element(200)]
     );
 

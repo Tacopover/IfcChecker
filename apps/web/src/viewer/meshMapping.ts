@@ -17,8 +17,8 @@ export interface ViewerMesh {
   color: readonly [number, number, number, number];
   /** World offset the positions are relative to (RTC / per-element local frame). */
   origin: readonly [number, number, number];
-  /** Object-space AABB `[minX,minY,minZ,maxX,maxY,maxZ]` when the pipeline captured one. */
-  localBounds?: Float32Array;
+  /** Object-space AABB, when the pipeline captured one. */
+  localBounds?: { min: readonly [number, number, number]; max: readonly [number, number, number] };
 }
 
 export interface MeshMapping {
@@ -74,11 +74,11 @@ export function mapMeshesToElements(
 export function meshBounds(mesh: ViewerMesh): Bounds {
   const [ox, oy, oz] = mesh.origin;
 
-  if (mesh.localBounds && mesh.localBounds.length === 6) {
-    const [minX, minY, minZ, maxX, maxY, maxZ] = mesh.localBounds;
+  if (mesh.localBounds) {
+    const { min, max } = mesh.localBounds;
     return {
-      min: { x: minX + ox, y: minY + oy, z: minZ + oz },
-      max: { x: maxX + ox, y: maxY + oy, z: maxZ + oz },
+      min: { x: min[0] + ox, y: min[1] + oy, z: min[2] + oz },
+      max: { x: max[0] + ox, y: max[1] + oy, z: max[2] + oz },
     };
   }
 

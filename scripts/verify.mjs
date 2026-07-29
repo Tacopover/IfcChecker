@@ -39,6 +39,10 @@ const stages = [];
 if (!FAST) stages.push(["build + typecheck", "corepack", ["pnpm", "-r", "run", "build"]]);
 stages.push(["unit + component tests", "corepack", ["pnpm", "-r", "run", "test"]]);
 if (VISUAL) stages.push(["browser render check", process.execPath, ["scripts/visual-check.mjs"]]);
+// The 3D page is the one thing no unit test can cover: whether a frame was
+// actually drawn. It gets its own run because it needs a scenario — parse a
+// file, load its geometry, draw one frame, read the pixel back.
+if (VISUAL) stages.push(["browser viewer check", process.execPath, ["scripts/visual-check.mjs", "--scenario", "viewer"]]);
 
 const results = [];
 for (const [label, command, commandArgs] of stages) {
