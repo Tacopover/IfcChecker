@@ -137,6 +137,22 @@ export async function parseWebIfcBuffer(
       }
     }
 
+    // Element expressId -> the type object it is an occurrence of, from every
+    // IFCRELDEFINESBYTYPE. A property the model states once on the type is
+    // reachable only through this relationship: nothing points an
+    // IFCRELDEFINESBYPROPERTIES at the instance for it, so an adapter that
+    // reads instance relationships alone sees the type's properties as absent.
+    const typeIdByElement = new Map<number, number>();
+    const typeRelLineIds = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCRELDEFINESBYTYPE);
+    for (let i = 0; i < typeRelLineIds.size(); i++) {
+      const rel = ifcApi.GetLine(modelID, typeRelLineIds.get(i)) as WebIfcLine;
+      const typeId = rel.RelatingType?.value;
+      if (typeId === undefined) continue;
+      for (const ref of rel.RelatedObjects ?? []) {
+        if (typeof ref?.value === "number") typeIdByElement.set(ref.value, typeId);
+      }
+    }
+
     // One property set is typically shared by many elements, so reading and
     // flattening it once per definition rather than once per element saves the
     // dominant remaining cost.
@@ -147,8 +163,13 @@ export async function parseWebIfcBuffer(
 
       const propSet = ifcApi.GetLine(modelID, defId, true) as WebIfcLine;
       const psetName = normalizePropertyValue(propSet.Name);
+      // HasProperties is what makes a definition an IfcPropertySet. A type's
+      // HasPropertySets list may also hold IfcElementQuantity, which carries
+      // Quantities instead; without this guard those arrive as a named set with
+      // no properties in it. Quantities are not read at either level today.
+      const isPropertySet = Array.isArray(propSet.HasProperties);
       let entry: [string, Record<string, string | number | boolean | null>] | null = null;
-      if (typeof psetName === "string") {
+      if (typeof psetName === "string" && isPropertySet) {
         const props: Record<string, string | number | boolean | null> = {};
         for (const prop of propSet.HasProperties ?? []) {
           const propName = normalizePropertyValue(prop.Name);
@@ -159,6 +180,28 @@ export async function parseWebIfcBuffer(
       }
       propertySetCache.set(defId, entry);
       return entry;
+    }
+
+    // A type object holds its sets two ways: inline on IfcTypeObject.
+    // HasPropertySets, and — IFC4 only — via an IFCRELDEFINESBYPROPERTIES aimed
+    // at the type, which the instance-level sweep above already collected under
+    // the type's own expressId. Read once per type, not once per occurrence.
+    const typePropertySetsCache = new Map<number, Array<[string, Record<string, string | number | boolean | null>]>>();
+    function readTypePropertySets(typeId: number) {
+      const cached = typePropertySetsCache.get(typeId);
+      if (cached !== undefined) return cached;
+
+      const typeLine = ifcApi.GetLine(modelID, typeId) as WebIfcLine;
+      const defIds = [
+        ...(typeLine.HasPropertySets ?? []).map((ref: WebIfcLine) => ref?.value),
+        ...(propertyDefsByElement.get(typeId) ?? []),
+      ].filter((id: unknown): id is number => typeof id === "number");
+
+      const entries = defIds
+        .map(readPropertySet)
+        .filter((entry): entry is [string, Record<string, string | number | boolean | null>] => entry !== null);
+      typePropertySetsCache.set(typeId, entries);
+      return entries;
     }
 
     // Ask the model what it contains rather than asking for a fixed list of
@@ -207,12 +250,22 @@ export async function parseWebIfcBuffer(
         elementTypeByExpressId.set(expressID, typeName);
         const line = ifcApi.GetLine(modelID, expressID) as WebIfcLine;
 
+        // Type first, instance second: IFC overrides per *property*, not per
+        // set, so a set named on both levels ends up the union of the two with
+        // the occurrence's own value winning on any shared key. Replacing the
+        // set wholesale instead would keep hiding every type-only property in
+        // it. Copied, not aliased: the caches exist to avoid re-reading a line,
+        // and elements must not share a mutable bag with each other.
         const propertySets: Record<string, Record<string, string | number | boolean | null>> = {};
+        const typeId = typeIdByElement.get(expressID);
+        if (typeId !== undefined) {
+          for (const [setName, props] of readTypePropertySets(typeId)) {
+            propertySets[setName] = { ...propertySets[setName], ...props };
+          }
+        }
         for (const defId of propertyDefsByElement.get(expressID) ?? []) {
           const entry = readPropertySet(defId);
-          // Copied, not aliased: the cache exists to avoid re-reading the line,
-          // and elements must not share a mutable bag with each other.
-          if (entry) propertySets[entry[0]] = { ...entry[1] };
+          if (entry) propertySets[entry[0]] = { ...propertySets[entry[0]], ...entry[1] };
         }
 
         const globalId = normalizePropertyValue(line.GlobalId);

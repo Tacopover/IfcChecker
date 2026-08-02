@@ -1,0 +1,63 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('fixture-type-inherited-psets.ifc','2026-08-02',(''),(''),'IFC QA Tool fixture','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0FMxV72Kn2gQBLPeGefPXc',$,'Fixture Project',$,$,$,$,(#8),#5);
+#5=IFCUNITASSIGNMENT((#6,#7));
+#6=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#7=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#8=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,#9,$);
+#9=IFCAXIS2PLACEMENT3D(#10,$,$);
+#10=IFCCARTESIANPOINT((0.0,0.0,0.0));
+#11=IFCSITE('1PPvKvz85AqQI7$4o09XlU',$,'Fixture Site',$,$,#12,$,$,.ELEMENT.,$,$,$,$,$);
+#12=IFCLOCALPLACEMENT($,#9);
+#13=IFCBUILDING('2Rf9ce5uz1qOB7WEOWMYye',$,'Fixture Building',$,$,#12,$,$,.ELEMENT.,$,$,$);
+#14=IFCBUILDINGSTOREY('3Kf5r2t7D6UwlEDlNjJKq1',$,'Level 1',$,$,#12,$,$,.ELEMENT.,0.0);
+
+/* W-001 and W-002 are occurrences of the same wall type; W-003 has no type. */
+#15=IFCWALL('1abc2defGHI3jkl4mno5pq',$,'W-001','Typed wall with its own psets',$,#12,$,'TAG-001',.STANDARD.);
+#16=IFCWALL('2bcd3efgHIJ4klm5nop6qr',$,'W-002','Typed wall with no psets of its own',$,#12,$,'TAG-002',.STANDARD.);
+#17=IFCWALL('3cde4fghIJK5lmn6opq7rs',$,'W-003','Untyped wall',$,#12,$,'TAG-003',.STANDARD.);
+
+/* Instance-level. '3.5 Type' is also named by the type below, so it pins that
+   the occurrence wins per property; 'Q Lengte' is instance-only. */
+#20=IFCPROPERTYSINGLEVALUE('3.5 Type',$,IFCLABEL('instance'),$);
+#21=IFCPROPERTYSINGLEVALUE('Q Lengte',$,IFCLENGTHMEASURE(3000.0),$);
+#22=IFCPROPERTYSET('0zP1M8vE59Jw4qLKrVeSTu',$,'ASML',$,(#20,#21));
+#23=IFCRELDEFINESBYPROPERTIES('2yQ7N9wF60Kx5rMLsWfTUv',$,$,$,(#15),#22);
+#24=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);
+#25=IFCPROPERTYSET('1aQ2N9wF60Kx5rMLsWfTUv',$,'Pset_WallCommon',$,(#24));
+#26=IFCRELDEFINESBYPROPERTIES('3zR8O0xG71Ly6sNMtXgUVx',$,$,$,(#17),#25);
+
+/* Type-level, reachable only through IFCRELDEFINESBYTYPE. '3.6 NL-SfB code'
+   exists nowhere else in the file: a parser that reads instance relationships
+   alone cannot see it. */
+#30=IFCPROPERTYSINGLEVALUE('3.6 NL-SfB code',$,IFCTEXT('21.11'),$);
+#31=IFCPROPERTYSINGLEVALUE('3.5 Type',$,IFCLABEL('type'),$);
+#32=IFCPROPERTYSET('4aS9P1yH82Mz7tONuYhVWy',$,'ASML',$,(#30,#31));
+#33=IFCPROPERTYSINGLEVALUE('Manufacturer',$,IFCLABEL('Acme'),$);
+#34=IFCPROPERTYSET('5bT0Q2zI93Na8uPOvZiWXz',$,'Pset_ManufacturerTypeInformation',$,(#33));
+
+/* An IfcElementQuantity may share the type's HasPropertySets list. Quantity
+   sets are not read at either level, so this must not surface as a pset. */
+#35=IFCQUANTITYLENGTH('Length',$,$,4200.0,$);
+#36=IFCELEMENTQUANTITY('6cU1R3AJ04Ob9vQPwAjXY0',$,'Qto_WallBaseQuantities',$,$,(#35));
+
+#40=IFCWALLTYPE('7dV2S4BK15Pc0wRQxBkYZ1',$,'Fixture Wall Type',$,$,(#32,#34,#36),$,'TYPE-TAG',$,.STANDARD.);
+#41=IFCRELDEFINESBYTYPE('8eW3T5CL26Qd1xSRyClZa2',$,$,$,(#15,#16),#40);
+
+/* IFC4 also lets a property set reach a type by relationship rather than by the
+   inline HasPropertySets list. */
+#42=IFCPROPERTYSINGLEVALUE('TypeRelProp',$,IFCLABEL('fromRel'),$);
+#43=IFCPROPERTYSET('9fX4U6DM37Re2ySTzDmAb3',$,'Pset_TypeViaRelation',$,(#42));
+#44=IFCRELDEFINESBYPROPERTIES('AgY5V7EN48Sf3zTUAEnBc4',$,$,$,(#40),#43);
+
+#50=IFCRELAGGREGATES('3zR8O0xG71Ly6sNMtXgUVw',$,$,$,#1,(#11));
+#51=IFCRELAGGREGATES('4aS9P1yH82Mz7tONuYhVWx',$,$,$,#11,(#13));
+#52=IFCRELAGGREGATES('5bT0Q2zI93Na8uPOvZiWXy',$,$,$,#13,(#14));
+#53=IFCRELCONTAINEDINSPATIALSTRUCTURE('6cU1R3AJ04Ob9vQPwAjXYz',$,$,$,(#15,#16,#17),#14);
+ENDSEC;
+END-ISO-10303-21;
