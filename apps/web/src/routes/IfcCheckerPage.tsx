@@ -1,8 +1,15 @@
-import { Fragment, useRef, useState, type ChangeEvent } from "react";
-import type { ElementResult, EngineId } from "@ifc-qa/shared-types";
-import { parseFile, validateParsedModels, type ParseProgress } from "../local/parseAndValidate.js";
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import type { EngineId } from "@ifc-qa/shared-types";
+import {
+  parseFile,
+  validateParsedModels,
+  type ParseProgress,
+  type SpecificationSummary,
+} from "../local/parseAndValidate.js";
 import { useLoadedModels } from "../state/loadedModels.js";
-import { IssueTable } from "../components/IssueTable";
+import { CheckSummary } from "../components/CheckSummary";
+import { ElementDetails } from "../components/ElementDetails";
+import type { IssueRow } from "../components/IssueTable";
 import { ModelStructureTree } from "../components/ModelStructureTree";
 
 export function IfcCheckerPage() {
@@ -10,7 +17,8 @@ export function IfcCheckerPage() {
 
   const [engine, setEngine] = useState<EngineId | "">("");
   const [idsFile, setIdsFile] = useState<File | null>(null);
-  const [results, setResults] = useState<Array<ElementResult & { fileName: string }> | null>(null);
+  const [results, setResults] = useState<SpecificationSummary[] | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<IssueRow | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [isParsing, setIsParsing] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
@@ -42,10 +50,28 @@ export function IfcCheckerPage() {
   if (parsed.length === 0) checkRequirements.push("parse at least one IFC file");
   if (idsFile === null) checkRequirements.push("choose an IDS rule set file");
 
+  // Scanned on demand rather than indexed up front: a click can afford one pass over a model's
+  // elements, whereas a GlobalId index for every loaded file is memory held permanently for a
+  // lookup that may never happen. The model key is what joins here — file names collide.
+  const selectedElement = useMemo(() => {
+    if (selectedIssue === null) return null;
+    const model = models.find((entry) => entry.key === selectedIssue.modelKey);
+    return model?.elements.find((element) => element.globalId === selectedIssue.elementGlobalId) ?? null;
+  }, [selectedIssue, models]);
+
+  const detailsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (selectedIssue === null) return;
+    // block: "nearest" so picking a second element while the panel is already on screen
+    // doesn't yank the page around.
+    detailsRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [selectedIssue]);
+
   // Results describe the file set as it was when Check ran; any change to that
   // set makes them a claim about something the user is no longer looking at.
   function dropStaleResults() {
     setResults(null);
+    setSelectedIssue(null);
     setCheckError(null);
   }
 
@@ -120,8 +146,7 @@ export function IfcCheckerPage() {
     setEngine("");
     setIdsFile(null);
     clearModels();
-    setResults(null);
-    setCheckError(null);
+    dropStaleResults();
     setExpandedFiles(new Set());
     setResetKey((key) => key + 1);
   }
@@ -275,8 +300,22 @@ export function IfcCheckerPage() {
 
       {results && (
         <>
-          <h2>Issues</h2>
-          <IssueTable results={results} />
+          <h2>Results</h2>
+          <CheckSummary
+            summaries={results}
+            onSelectElement={setSelectedIssue}
+            selectedElementId={selectedIssue?.id ?? null}
+          />
+
+          {selectedIssue && (
+            <div ref={detailsRef}>
+              <ElementDetails
+                element={selectedElement}
+                fileName={selectedIssue.fileName}
+                onClose={() => setSelectedIssue(null)}
+              />
+            </div>
+          )}
         </>
       )}
     </section>

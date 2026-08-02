@@ -1328,3 +1328,157 @@ pre.xml .v {
     transition: none;
   }
 }
+
+/* --- Check results: per-specification summary and element details --- */
+
+.check-summary .spec-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.check-summary .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.spec-status {
+  font-size: 0.78rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.spec-status-passed {
+  color: var(--pass);
+  background: var(--data-soft);
+}
+
+.spec-status-failed {
+  color: var(--fail);
+  background: var(--fail-soft);
+}
+
+/* A rule that matched nothing is not a pass and must not read like one. */
+.spec-status-not-applied {
+  color: var(--warn);
+  background: var(--accent-soft);
+}
+
+tr.spec-not-applied td {
+  border-bottom: 0;
+  padding-top: 0;
+}
+
+tr.spec-not-applied p {
+  margin: 0 0 0.5rem;
+  color: var(--warn);
+}
+
+.issue-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+  margin: 0.75rem 0;
+}
+
+.issue-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.issue-filters input[type="text"] {
+  min-width: 9rem;
+}
+
+.element-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.1rem;
+  text-align: left;
+}
+
+.element-cell .element-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.element-cell .element-gid {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+table button.link {
+  background: none;
+  border: 0;
+  padding: 0.1rem 0.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+table button.link:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+table button.link[aria-pressed="true"] {
+  background: var(--accent-soft);
+  outline: 2px solid var(--accent);
+}
+
+tr.row-selected td {
+  background: var(--accent-soft);
+}
+
+.element-details {
+  margin-top: 1.25rem;
+  padding: 0 1rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.element-details-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.75rem;
+}
+
+.element-details-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+/* Captions are hidden app-wide because they repeat the heading above the table.
+   Here they are the only heading each table has, so they are shown. */
+.element-details caption {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 1rem 0 0.35rem;
+  clip: auto;
+  overflow: visible;
+  white-space: normal;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.element-details th[scope="row"] {
+  width: 40%;
+  background: none;
+  font-weight: 500;
+}
+
+.element-details .miss {
+  color: var(--text-muted);
+  font-style: italic;
+}

@@ -5,35 +5,69 @@ import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js
 export interface IdsViolation {
   elementGlobalId: string;
   elementType: string;
+  elementName: string | null;
   ruleId: string;
   severity: Severity;
   message: string;
 }
 
-export function validateElements(elements: NormalizedElement[], idsXml: string): IdsViolation[] {
-  const specifications = parseIdsXml(idsXml);
-  const violations: IdsViolation[] = [];
+// What one specification did to the model. Violations alone cannot answer the
+// question a reviewer actually asks first — "did this rule check anything?" — and
+// an empty list reads as a clean model whether the rule passed everything or
+// matched nothing at all. applicableCount separates those two.
+export interface SpecificationOutcome {
+  name: string;
+  applicableCount: number;
+  passedCount: number;
+  failedCount: number;
+  violations: IdsViolation[];
+}
 
-  for (const element of elements) {
-    for (const specification of specifications) {
+/**
+ * Counts are per element, not per violation: one wall missing two required properties is one
+ * failing wall, so passed + failed always equals the number of elements the rule applied to.
+ */
+export function validateBySpecification(
+  elements: NormalizedElement[],
+  idsXml: string
+): SpecificationOutcome[] {
+  return parseIdsXml(idsXml).map((specification) => {
+    const violations: IdsViolation[] = [];
+    let applicableCount = 0;
+    let failedCount = 0;
+
+    for (const element of elements) {
       if (!matchesApplicability(element, specification.applicabilityEntityNames)) {
         continue;
       }
+      applicableCount += 1;
 
+      const before = violations.length;
       for (const facet of specification.requirements) {
         const result = evaluateRequirement(element, facet);
-        if (!result.passed) {
-          violations.push({
-            elementGlobalId: element.globalId,
-            elementType: element.ifcType,
-            ruleId: specification.name,
-            severity: "error",
-            message: result.message,
-          });
-        }
+        if (result.passed) continue;
+        violations.push({
+          elementGlobalId: element.globalId,
+          elementType: element.ifcType,
+          elementName: element.name,
+          ruleId: specification.name,
+          severity: "error",
+          message: result.message,
+        });
       }
+      if (violations.length > before) failedCount += 1;
     }
-  }
 
-  return violations;
+    return {
+      name: specification.name,
+      applicableCount,
+      passedCount: applicableCount - failedCount,
+      failedCount,
+      violations,
+    };
+  });
+}
+
+export function validateElements(elements: NormalizedElement[], idsXml: string): IdsViolation[] {
+  return validateBySpecification(elements, idsXml).flatMap((outcome) => outcome.violations);
 }

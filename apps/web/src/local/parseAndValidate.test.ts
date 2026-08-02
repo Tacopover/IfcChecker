@@ -5,13 +5,17 @@ const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
   parseWebIfcBuffer: vi.fn(),
   parseIfcLiteBuffer: vi.fn(),
 }));
-const { validateElements, parseIdsXml } = vi.hoisted(() => ({
-  validateElements: vi.fn(),
+const { validateBySpecification, parseIdsXml } = vi.hoisted(() => ({
+  validateBySpecification: vi.fn(),
   parseIdsXml: vi.fn(),
 }));
 
 vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
-vi.mock("@ifc-qa/ids-validator", () => ({ validateElements, parseIdsXml }));
+vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecification, parseIdsXml }));
+
+function outcome(overrides: Record<string, unknown> = {}) {
+  return { name: "fake-spec", applicableCount: 0, passedCount: 0, failedCount: 0, violations: [], ...overrides };
+}
 
 function makeFile(name: string, content = "ISO-10303-21;") {
   return new File([content], name);
@@ -49,7 +53,7 @@ describe("parseFile", () => {
       elements,
       modelStructure,
     });
-    expect(validateElements).not.toHaveBeenCalled();
+    expect(validateBySpecification).not.toHaveBeenCalled();
     expect(parseIdsXml).not.toHaveBeenCalled();
   });
 
@@ -77,22 +81,41 @@ describe("parseFile", () => {
 });
 
 describe("validateParsedModels", () => {
-  it("maps violations to ElementResult rows tagged with the file they came from", () => {
-    validateElements.mockReturnValueOnce([
-      { elementGlobalId: "g1", elementType: "IFCWALL", ruleId: "naming-prefix", severity: "error", message: "Name must start with 'W-'" },
+  it("maps violations to rows tagged with the file and the model key they came from", () => {
+    validateBySpecification.mockReturnValueOnce([
+      outcome({
+        name: "naming-prefix",
+        applicableCount: 1,
+        failedCount: 1,
+        violations: [
+          {
+            elementGlobalId: "g1",
+            elementType: "IFCWALL",
+            elementName: "Wall-1",
+            ruleId: "naming-prefix",
+            severity: "error",
+            message: "Name must start with 'W-'",
+          },
+        ],
+      }),
     ]);
 
     const elements = [
       { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
     ];
-    const results = validateParsedModels([{ fileName: "model-a.ifc", elements }], "<ids/>");
+    const summaries = validateParsedModels(
+      [{ key: "model-a.ifc:12:99", fileName: "model-a.ifc", elements }],
+      "<ids/>"
+    );
 
-    expect(validateElements).toHaveBeenCalledWith(elements, "<ids/>");
-    expect(results).toEqual([
+    expect(validateBySpecification).toHaveBeenCalledWith(elements, "<ids/>");
+    expect(summaries[0].violations).toEqual([
       expect.objectContaining({
         fileName: "model-a.ifc",
         fileJobId: "model-a.ifc",
+        modelKey: "model-a.ifc:12:99",
         elementGlobalId: "g1",
+        elementName: "Wall-1",
         elementType: "IFCWALL",
         ruleId: "naming-prefix",
         severity: "error",
@@ -101,34 +124,69 @@ describe("validateParsedModels", () => {
     ]);
   });
 
-  it("re-checks already-parsed elements from every model, never re-reading the files", () => {
-    validateElements
-      .mockReturnValueOnce([
-        { elementGlobalId: "g1", elementType: "IFCWALL", ruleId: "r1", severity: "error", message: "no" },
-      ])
-      .mockReturnValueOnce([
-        { elementGlobalId: "g2", elementType: "IFCDOOR", ruleId: "r2", severity: "warning", message: "hm" },
-      ]);
+  it("keeps two files that share a name apart, since the file name is not identity", () => {
+    const violation = {
+      elementGlobalId: "g1",
+      elementType: "IFCWALL",
+      elementName: null,
+      ruleId: "r1",
+      severity: "error",
+      message: "no",
+    };
+    validateBySpecification
+      .mockReturnValueOnce([outcome({ applicableCount: 1, failedCount: 1, violations: [violation] })])
+      .mockReturnValueOnce([outcome({ applicableCount: 1, failedCount: 1, violations: [violation] })]);
 
-    const results = validateParsedModels(
+    const [summary] = validateParsedModels(
       [
-        { fileName: "a.ifc", elements: [] },
-        { fileName: "b.ifc", elements: [] },
+        { key: "model.ifc:10:1", fileName: "model.ifc", elements: [] },
+        { key: "model.ifc:20:2", fileName: "model.ifc", elements: [] },
       ],
       "<ids/>"
     );
 
-    expect(results.map((result) => result.fileName)).toEqual(["a.ifc", "b.ifc"]);
+    expect(summary.violations.map((row) => row.modelKey)).toEqual(["model.ifc:10:1", "model.ifc:20:2"]);
+    expect(new Set(summary.violations.map((row) => row.id)).size).toBe(2);
+  });
+
+  it("sums each specification's counts across every model, never re-reading the files", () => {
+    validateBySpecification
+      .mockReturnValueOnce([outcome({ applicableCount: 3, passedCount: 2, failedCount: 1 })])
+      .mockReturnValueOnce([outcome({ applicableCount: 4, passedCount: 4, failedCount: 0 })]);
+
+    const [summary] = validateParsedModels(
+      [
+        { key: "a", fileName: "a.ifc", elements: [] },
+        { key: "b", fileName: "b.ifc", elements: [] },
+      ],
+      "<ids/>"
+    );
+
+    expect(summary).toMatchObject({ applicableCount: 7, passedCount: 6, failedCount: 1 });
     expect(parseWebIfcBuffer).not.toHaveBeenCalled();
     expect(parseIfcLiteBuffer).not.toHaveBeenCalled();
+  });
+
+  it("reports a specification that matched nothing, rather than returning an empty result set", () => {
+    parseIdsXml.mockReturnValue([{ name: "Walls are fire rated", applicabilityEntityNames: [], requirements: [] }]);
+    validateBySpecification.mockReturnValueOnce([outcome({ name: "Walls are fire rated" })]);
+
+    const summaries = validateParsedModels([{ key: "a", fileName: "a.ifc", elements: [] }], "<ids/>");
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      name: "Walls are fire rated",
+      applicableCount: 0,
+      violations: [],
+    });
   });
 
   it("throws InvalidIdsRuleSetError instead of silently reporting zero issues when the IDS file has no specifications", () => {
     parseIdsXml.mockReturnValue([]);
 
-    expect(() => validateParsedModels([{ fileName: "a.ifc", elements: [] }], "<not-really-ids/>")).toThrow(
-      InvalidIdsRuleSetError
-    );
-    expect(validateElements).not.toHaveBeenCalled();
+    expect(() =>
+      validateParsedModels([{ key: "a", fileName: "a.ifc", elements: [] }], "<not-really-ids/>")
+    ).toThrow(InvalidIdsRuleSetError);
+    expect(validateBySpecification).not.toHaveBeenCalled();
   });
 });

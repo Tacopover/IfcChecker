@@ -164,11 +164,10 @@ elements that failed, isolated and framed, so a violation becomes something they
 **Done when:**
 - Clicking a row in the Validate page's issue table isolates the failing elements in the viewer
   and zooms to fit, with a visible un-isolate / reset control.
-- Results carry the `LoadedModel` key rather than the file name — two files named `Model.ifc`
-  must not navigate into the wrong model.
+- ~~Results carry the `LoadedModel` key rather than the file name~~ — done: `CheckRow.modelKey`.
 - Failing elements only; the validator needs no change, since that is exactly what it returns.
-- Decided: whether a row navigates to its one element or the table groups by rule so that
-  clicking a rule shows every element failing it.
+- ~~Decided: whether a row navigates to its one element or the table groups by rule~~ — done:
+  results group by specification, and a row selects its one element.
 - Handled honestly: a failing element with no geometry, and a clicked result whose model has
   not had its geometry loaded yet.
 
