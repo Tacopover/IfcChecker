@@ -30,6 +30,19 @@ function elementLabel(row: IssueRow): string {
 // scale, so results are paginated instead.
 const PAGE_SIZE = 25;
 
+// The table lays out fixed (see .issue-table in styles.css) so the message column
+// keeps a readable measure instead of being squeezed by whatever the identifier
+// columns happen to contain. Header and body cells take the same class, which is
+// what keeps a heading over its own values.
+const COLUMN_CLASS: Record<string, string> = {
+  element: "col-element",
+  elementType: "col-type",
+  fileName: "col-file",
+  ruleId: "col-rule",
+  severity: "col-severity",
+  message: "col-message",
+};
+
 export interface IssueTableProps {
   results: IssueRow[];
   onSelectElement?: (row: IssueRow) => void;
@@ -75,10 +88,20 @@ export function IssueTable({
           );
         },
       }),
-      columnHelper.accessor("elementType", { header: "Type" }),
+      columnHelper.accessor("elementType", {
+        header: "Type",
+        cell: (context) => <span className="mono-tag">{context.getValue()}</span>,
+      }),
       columnHelper.accessor("fileName", { header: "File" }),
       columnHelper.accessor("ruleId", { header: "Rule" }),
-      columnHelper.accessor("severity", { header: "Severity" }),
+      columnHelper.accessor("severity", {
+        header: "Severity",
+        cell: (context) => (
+          <span className="pill" data-severity={context.getValue()}>
+            {context.getValue()}
+          </span>
+        ),
+      }),
       columnHelper.accessor("message", { header: "Message" }),
     ],
     [onSelectElement, selectedElementId]
@@ -101,8 +124,10 @@ export function IssueTable({
     return (table.getColumn(columnId)?.getFilterValue() as string) ?? "";
   }
 
+  const rows = table.getRowModel().rows;
+
   return (
-    <div>
+    <div className="issue-table">
       <div role="group" aria-label="Issue filters" className="issue-filters">
         <label>
           Element
@@ -156,43 +181,57 @@ export function IssueTable({
         </label>
       </div>
 
-      <table>
-        <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th key={header.id}>
-                  {header.isPlaceholder ? null : (
-                    <button
-                      type="button"
-                      onClick={header.column.getToggleSortingHandler()}
-                      disabled={!header.column.getCanSort()}
-                    >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {{ asc: " ▲", desc: " ▼" }[header.column.getIsSorted() as string] ?? ""}
-                    </button>
-                  )}
-                </th>
+      {rows.length > 0 && (
+        <div className="table-frame">
+          <table>
+            <colgroup>
+              {table.getVisibleLeafColumns().map((column) => (
+                <col key={column.id} className={COLUMN_CLASS[column.id]} />
               ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr
-              key={row.id}
-              className={selectedElementId === row.original.id ? "row-selected" : undefined}
-            >
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+            </colgroup>
+            <thead>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th key={header.id} className={COLUMN_CLASS[header.column.id]}>
+                      {header.isPlaceholder ? null : (
+                        <button
+                          type="button"
+                          className="sort-btn"
+                          onClick={header.column.getToggleSortingHandler()}
+                          disabled={!header.column.getCanSort()}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          <span className="sort-mark" aria-hidden="true">
+                            {{ asc: "▲", desc: "▼" }[header.column.getIsSorted() as string] ?? ""}
+                          </span>
+                        </button>
+                      )}
+                    </th>
+                  ))}
+                </tr>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className={selectedElementId === row.original.id ? "row-selected" : undefined}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className={COLUMN_CLASS[cell.column.id]}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {table.getRowModel().rows.length === 0 && (
-        <p>
+      {rows.length === 0 && (
+        <p className="empty-note">
           {results.length === 0
             ? "Every element this rule applied to passed."
             : "No issues match the current filters."}
@@ -200,26 +239,26 @@ export function IssueTable({
       )}
 
       {table.getPageCount() > 1 && (
-        <div>
+        <div className="pager">
           <button
             type="button"
-            className="secondary"
+            className="ghost-btn"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
             Previous page
-          </button>{" "}
+          </button>
+          <span className="pager-state">
+            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          </span>
           <button
             type="button"
-            className="secondary"
+            className="ghost-btn"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
           >
             Next page
-          </button>{" "}
-          <span>
-            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-          </span>
+          </button>
         </div>
       )}
     </div>

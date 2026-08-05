@@ -52,87 +52,96 @@ export function CheckSummary({ summaries, onSelectElement, selectedElementId }: 
 
   return (
     <div className="check-summary">
-      <p role="status">
+      <p role="status" className="summary-line" data-tone={failing > 0 ? "fail" : "pass"}>
         {summaries.length} {summaries.length === 1 ? "specification" : "specifications"} —{" "}
         {failing === 0 ? "none failing" : `${failing} failing`}
         {inert > 0 && `, ${inert} matched no elements`}
       </p>
 
-      <table>
-        <caption>Specifications</caption>
-        <thead>
-          <tr>
-            <th>Specification</th>
-            <th>Applied to</th>
-            <th>Passed</th>
-            <th>Failed</th>
-            <th>Issues</th>
-          </tr>
-        </thead>
-        <tbody>
-          {summaries.map((summary, index) => {
-            const status = statusOf(summary);
-            const isExpanded = expanded.has(index);
-            return (
-              <Fragment key={`${summary.name}#${index}`}>
-                <tr className={`spec-${status}`}>
-                  <td>
-                    <span className="spec-name">{summary.name}</span>{" "}
-                    <span className={`spec-status spec-status-${status}`}>
-                      {STATUS_LABEL[status]}
-                    </span>
-                  </td>
-                  <td className="num">{summary.applicableCount}</td>
-                  <td className="num">{summary.passedCount}</td>
-                  <td className="num">{summary.failedCount}</td>
-                  <td>
-                    {summary.violations.length > 0 ? (
-                      <button
-                        type="button"
-                        className="secondary"
-                        aria-expanded={isExpanded}
-                        onClick={() => toggle(index)}
-                      >
-                        {`${isExpanded ? "Hide" : "Show"} ${summary.violations.length} ${
-                          summary.violations.length === 1 ? "issue" : "issues"
-                        } for ${summary.name}`}
-                      </button>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                </tr>
-
-                {status === "not-applied" && (
-                  <tr className="spec-not-applied">
-                    <td colSpan={5}>
-                      {/* The failure mode this whole summary exists for: an empty violation list
-                          reads as a clean model, when nothing was ever checked. */}
-                      <p role="alert">
-                        No element matched this specification, so nothing was checked. Its
-                        applicability may name a type this model doesn&apos;t use.
-                      </p>
+      <div className="table-frame">
+        <table className="spec-table">
+          <caption>Specifications</caption>
+          <thead>
+            <tr>
+              <th>Specification</th>
+              <th className="num">Applied to</th>
+              <th className="num">Passed</th>
+              <th className="num">Failed</th>
+              <th className="col-issues">Issues</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summaries.map((summary, index) => {
+              const status = statusOf(summary);
+              const isExpanded = expanded.has(index);
+              const issueCount = summary.violations.length;
+              const issueNoun = issueCount === 1 ? "issue" : "issues";
+              return (
+                <Fragment key={`${summary.name}#${index}`}>
+                  <tr className={`spec-row spec-${status}`} data-open={isExpanded}>
+                    <td>
+                      <span className="spec-name">{summary.name}</span>{" "}
+                      <span className={`spec-status spec-status-${status}`}>
+                        {STATUS_LABEL[status]}
+                      </span>
+                    </td>
+                    <td className="num">{summary.applicableCount}</td>
+                    <td className="num">{summary.passedCount}</td>
+                    <td className="num">{summary.failedCount}</td>
+                    <td className="col-issues">
+                      {issueCount > 0 ? (
+                        // The visible label stays short so it can't wrap the column open; the
+                        // specification's name lives in the accessible name, where a screen
+                        // reader still needs it to tell two toggles apart.
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          aria-expanded={isExpanded}
+                          aria-label={`${isExpanded ? "Hide" : "Show"} ${issueCount} ${issueNoun} for ${summary.name}`}
+                          onClick={() => toggle(index)}
+                        >
+                          <span className="caret" data-open={isExpanded} aria-hidden="true">
+                            ▸
+                          </span>
+                          {issueCount} {issueNoun}
+                        </button>
+                      ) : (
+                        <span className="dash">—</span>
+                      )}
                     </td>
                   </tr>
-                )}
 
-                {isExpanded && (
-                  <tr>
-                    <td colSpan={5}>
-                      <IssueTable
-                        results={summary.violations}
-                        onSelectElement={onSelectElement}
-                        selectedElementId={selectedElementId}
-                        hideRuleColumn
-                      />
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
+                  {status === "not-applied" && (
+                    <tr className="spec-not-applied">
+                      <td colSpan={5}>
+                        {/* The failure mode this whole summary exists for: an empty violation list
+                            reads as a clean model, when nothing was ever checked. */}
+                        <p role="alert">
+                          No element matched this specification, so nothing was checked. Its
+                          applicability may name a type this model doesn&apos;t use.
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+
+                  {isExpanded && (
+                    <tr className="drawer-row">
+                      <td colSpan={5}>
+                        <IssueTable
+                          results={summary.violations}
+                          onSelectElement={onSelectElement}
+                          selectedElementId={selectedElementId}
+                          hideRuleColumn
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
