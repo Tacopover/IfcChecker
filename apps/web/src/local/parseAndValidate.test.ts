@@ -5,16 +5,26 @@ const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
   parseWebIfcBuffer: vi.fn(),
   parseIfcLiteBuffer: vi.fn(),
 }));
-const { validateBySpecification, parseIdsXml } = vi.hoisted(() => ({
+const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => ({
   validateBySpecification: vi.fn(),
   parseIdsXml: vi.fn(),
+  isEvaluable: vi.fn(),
 }));
 
 vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
-vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecification, parseIdsXml }));
+vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecification, parseIdsXml, isEvaluable }));
 
 function outcome(overrides: Record<string, unknown> = {}) {
-  return { name: "fake-spec", applicableCount: 0, passedCount: 0, failedCount: 0, violations: [], ...overrides };
+  return {
+    name: "fake-spec",
+    checked: true,
+    unsupported: [],
+    applicableCount: 0,
+    passedCount: 0,
+    failedCount: 0,
+    violations: [],
+    ...overrides,
+  };
 }
 
 function makeFile(name: string, content = "ISO-10303-21;") {
@@ -26,7 +36,10 @@ function makeFile(name: string, content = "ISO-10303-21;") {
 // deliberately overrides it to assert the empty-rule-set path.
 beforeEach(() => {
   vi.clearAllMocks();
-  parseIdsXml.mockReturnValue([{ name: "fake-spec", applicabilityEntityNames: [], requirements: [] }]);
+  parseIdsXml.mockReturnValue([
+    { name: "fake-spec", applicabilityEntityNames: ["IFCWALL"], requirements: [], unsupported: [], applicabilityComplete: true },
+  ]);
+  isEvaluable.mockReturnValue(true);
 });
 
 describe("parseFile", () => {
@@ -168,7 +181,9 @@ describe("validateParsedModels", () => {
   });
 
   it("reports a specification that matched nothing, rather than returning an empty result set", () => {
-    parseIdsXml.mockReturnValue([{ name: "Walls are fire rated", applicabilityEntityNames: [], requirements: [] }]);
+    parseIdsXml.mockReturnValue([
+      { name: "Walls are fire rated", applicabilityEntityNames: ["IFCWALL"], requirements: [], unsupported: [], applicabilityComplete: true },
+    ]);
     validateBySpecification.mockReturnValueOnce([outcome({ name: "Walls are fire rated" })]);
 
     const summaries = validateParsedModels([{ key: "a", fileName: "a.ifc", elements: [] }], "<ids/>");
@@ -176,9 +191,30 @@ describe("validateParsedModels", () => {
     expect(summaries).toHaveLength(1);
     expect(summaries[0]).toMatchObject({
       name: "Walls are fire rated",
+      checked: true,
       applicableCount: 0,
       violations: [],
     });
+  });
+
+  it("carries the parser's verdict that a specification could not be checked at all", () => {
+    const unsupported = [
+      { section: "applicability", construct: "property", description: "Selects elements by <property>, which cannot be represented." },
+    ];
+    parseIdsXml.mockReturnValue([
+      { name: "Load-bearing walls", applicabilityEntityNames: ["IFCWALL"], requirements: [], unsupported, applicabilityComplete: false },
+    ]);
+    isEvaluable.mockReturnValue(false);
+    validateBySpecification.mockReturnValueOnce([
+      outcome({ name: "Load-bearing walls", checked: false, unsupported }),
+    ]);
+
+    const [summary] = validateParsedModels([{ key: "a", fileName: "a.ifc", elements: [] }], "<ids/>");
+
+    // Whether a rule can run is decided by the rule set, not by any one model, so it survives
+    // the merge across files rather than being recomputed per outcome.
+    expect(summary.checked).toBe(false);
+    expect(summary.unsupported).toEqual(unsupported);
   });
 
   it("throws InvalidIdsRuleSetError instead of silently reporting zero issues when the IDS file has no specifications", () => {

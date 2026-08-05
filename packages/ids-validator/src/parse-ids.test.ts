@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { parseIdsXml } from "./parse-ids.js";
+import { describe, expect, it } from "vitest";
+import { isEvaluable, parseIdsXml } from "./parse-ids.js";
 
 const SAMPLE_IDS = `<?xml version="1.0" encoding="utf-8"?>
 <ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd" xmlns="http://standards.buildingsmart.org/IDS">
@@ -149,36 +149,111 @@ describe("parseIdsXml", () => {
     expect(restriction.regex.test("(")).toBe(false);
   });
 
-  it("skips an unrecognized requirement facet and logs a warning instead of throwing", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("reports an unrecognized requirement facet instead of dropping it silently", () => {
     const xmlWithClassification = SAMPLE_IDS.replace(
       "</requirements>",
       "<classification><value><simpleValue>Foo</simpleValue></value></classification></requirements>"
     );
 
-    const specifications = parseIdsXml(xmlWithClassification);
+    const [spec] = parseIdsXml(xmlWithClassification);
 
-    expect(specifications[0].requirements).toHaveLength(2);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('unsupported requirement facet "<classification>"')
+    expect(spec.requirements).toHaveLength(2);
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "requirements", construct: "classification" })
     );
-    warnSpy.mockRestore();
+    // The rule still selects the elements its author meant, so it can be run — just weakened.
+    expect(spec.applicabilityComplete).toBe(true);
+    expect(isEvaluable(spec)).toBe(true);
   });
 
-  it("skips an unrecognized applicability facet and logs a warning instead of throwing", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("reports an unrecognized applicability facet and marks the applicability incomplete", () => {
     const xmlWithMaterial = SAMPLE_IDS.replace(
       "</applicability>",
       "<material><value><simpleValue>Concrete</simpleValue></value></material></applicability>"
     );
 
-    const specifications = parseIdsXml(xmlWithMaterial);
+    const [spec] = parseIdsXml(xmlWithMaterial);
 
-    expect(specifications[0].applicabilityEntityNames).toEqual(["IFCWALL"]);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('unsupported applicability facet "<material>"')
+    expect(spec.applicabilityEntityNames).toEqual(["IFCWALL"]);
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "applicability", construct: "material" })
     );
-    warnSpy.mockRestore();
+    // "Walls made of concrete" is not "walls" — the kept entity name is not the whole story.
+    expect(spec.applicabilityComplete).toBe(false);
+    expect(isEvaluable(spec)).toBe(false);
+  });
+
+  it("treats an entity name given as a restriction as an applicability it cannot read", () => {
+    const xml = SAMPLE_IDS.replace(
+      "<name><simpleValue>IFCWALL</simpleValue></name>",
+      `<name><xs:restriction base="xs:string"><xs:pattern value="IFCWALL.*" /></xs:restriction></name>`
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicabilityEntityNames).toEqual([]);
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "applicability", construct: "entity/name" })
+    );
+    expect(isEvaluable(spec)).toBe(false);
+  });
+
+  it("reports a predefinedType it cannot honour rather than widening the rule in silence", () => {
+    const xml = SAMPLE_IDS.replace(
+      "<name><simpleValue>IFCWALL</simpleValue></name>",
+      "<name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>PARTITIONING</simpleValue></predefinedType>"
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicabilityEntityNames).toEqual(["IFCWALL"]);
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "applicability", construct: "entity/predefinedType" })
+    );
+    expect(isEvaluable(spec)).toBe(false);
+  });
+
+  it("reports numeric bounds it cannot represent", () => {
+    const [spec] = parseIdsXml(
+      specificationXml(`<property dataType="IFCREAL">
+        <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+        <baseName><simpleValue>ThermalTransmittance</simpleValue></baseName>
+        <value><xs:restriction base="xs:double"><xs:maxInclusive value="0.24" /></xs:restriction></value>
+      </property>`)
+    );
+
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "requirements", construct: "xs:maxInclusive" })
+    );
+    // Still evaluable — the bound is lost loudly (nothing satisfies it), not silently.
+    expect(isEvaluable(spec)).toBe(true);
+  });
+
+  it("reports an optional requirement it will check as required", () => {
+    const [spec] = parseIdsXml(
+      specificationXml(`<attribute cardinality="optional">
+        <name><simpleValue>Description</simpleValue></name>
+      </attribute>`)
+    );
+
+    expect(spec.requirements[0].cardinality).toBe("required");
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "requirements", construct: "cardinality=optional" })
+    );
+  });
+
+  it("reports a specification with no applicability at all as unevaluable", () => {
+    const [spec] = parseIdsXml(`<ids xmlns="http://standards.buildingsmart.org/IDS">
+      <specifications>
+        <specification name="S">
+          <applicability />
+          <requirements />
+        </specification>
+      </specifications>
+    </ids>`);
+
+    expect(spec.applicabilityComplete).toBe(true);
+    expect(isEvaluable(spec)).toBe(false);
   });
 
   it("returns an empty list for a document with no specifications", () => {

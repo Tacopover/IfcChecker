@@ -1,6 +1,7 @@
 import type { ElementResult, EngineId, ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
 import { parseIfcLiteBuffer, parseWebIfcBuffer } from "@ifc-qa/parser-adapters/browser";
-import { parseIdsXml, validateBySpecification } from "@ifc-qa/ids-validator";
+import type { UnsupportedConstruct } from "@ifc-qa/ids-validator";
+import { isEvaluable, parseIdsXml, validateBySpecification } from "@ifc-qa/ids-validator";
 import type { ParseOutcome } from "../state/loadedModels.js";
 import { locateWebIfcWasm } from "./webIfcWasm.js";
 
@@ -79,6 +80,9 @@ export interface CheckRow extends ElementResult {
 
 export interface SpecificationSummary {
   name: string;
+  /** False when the specification was never run — its zero counts mean "unknown", not "clean". */
+  checked: boolean;
+  unsupported: UnsupportedConstruct[];
   applicableCount: number;
   passedCount: number;
   failedCount: number;
@@ -103,8 +107,12 @@ export function validateParsedModels(
 
   // Merged by position, not by name: an IDS may carry two specifications with the same name,
   // and every model yields these outcomes in document order.
+  // Whether a specification can be run at all is a property of the rule set, not of any one
+  // model, so it is read here once rather than merged out of the per-model outcomes.
   const summaries = specifications.map<SpecificationSummary>((specification) => ({
     name: specification.name,
+    checked: isEvaluable(specification),
+    unsupported: specification.unsupported,
     applicableCount: 0,
     passedCount: 0,
     failedCount: 0,

@@ -170,6 +170,53 @@ describe("validateBySpecification", () => {
     expect(outcome.passedCount).toBe(0);
   });
 
+  it("refuses to run a specification whose applicability it could not fully read", () => {
+    // A property-value applicability: this selects walls *bearing* a load, not all walls.
+    // Dropping the property facet and keeping IFCWALL would check the wrong set; dropping the
+    // whole applicability would match nothing and report the model clean. Neither is honest.
+    const idsXml = IDS_XML.replace(
+      "</applicability>",
+      `<property dataType="IFCBOOLEAN">
+         <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+         <baseName><simpleValue>LoadBearing</simpleValue></baseName>
+         <value><simpleValue>TRUE</simpleValue></value>
+       </property></applicability>`
+    );
+
+    const [outcome] = validateBySpecification([compliantWall, failingWall], idsXml);
+
+    expect(outcome.checked).toBe(false);
+    expect(outcome.violations).toEqual([]);
+    expect(outcome.applicableCount).toBe(0);
+    expect(outcome.unsupported).toContainEqual(
+      expect.objectContaining({ section: "applicability", construct: "property" })
+    );
+  });
+
+  it("marks a specification it could fully read as checked", () => {
+    const [outcome] = validateBySpecification([compliantWall], IDS_XML);
+
+    expect(outcome.checked).toBe(true);
+    expect(outcome.unsupported).toEqual([]);
+  });
+
+  it("runs a specification that only lost a requirement, and says what it lost", () => {
+    const idsXml = IDS_XML.replace(
+      "</requirements>",
+      "<material><value><simpleValue>Concrete</simpleValue></value></material></requirements>"
+    );
+
+    const [outcome] = validateBySpecification([compliantWall, failingWall], idsXml);
+
+    // Applicability is intact, so the rule still selects what its author meant — it is merely
+    // weaker than they wrote, which is reportable rather than disqualifying.
+    expect(outcome.checked).toBe(true);
+    expect(outcome.applicableCount).toBe(2);
+    expect(outcome.unsupported).toContainEqual(
+      expect.objectContaining({ section: "requirements", construct: "material" })
+    );
+  });
+
   it("keeps each specification's elements and counts separate", () => {
     const outcomes = validateBySpecification([failingWall, door], TWO_SPEC_IDS_XML);
 

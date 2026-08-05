@@ -72,32 +72,50 @@ requirements. That is exactly the failure the MVP was built to prevent (see the 
 entry on exports that contradict the preview). **No import ships until the fidelity contract
 is settled.**
 
-### 3a. Scope: inventory the gap
+### 3a. Scope: inventory the gap — DONE 2026-07-25
 
-Produce a written comparison of IDS 1.0 against what `parseIdsXml` + `RuleDraft` represent
-today: every facet, restriction, cardinality and metadata field, marked
-supported / droppable / blocking. Ground it in real files — pull several published IDS files
-(buildingSMART samples, a national standard) and measure which constructs actually occur in
-practice, rather than reasoning from the spec alone. Cheap, and it decides how much of the
-rest matters.
+Written up in `.claude/plans/2026-07-25-ids-import-scope.md`, measured against a corpus of real
+`.ids` files (buildingSMART, bSI Japan/MLIT, Molio, BimBem, OpenAEC, ifc-audit) rather than
+against the spec text. Read that before touching 3f or 3g.
 
-### 3b. Scope: decide the fidelity contract
+### 3b. Scope: decide the fidelity contract — DECIDED 2026-08-05
 
-Pick one, and write down why:
-- **Refuse** anything we cannot fully represent. Safest, probably too strict to be useful.
-- **Import lossily, with an explicit report** of what will be lost, and require the user to
-  acknowledge it before editing.
-- **Import with pass-through**: keep unrepresented constructs as opaque XML attached to the
-  rule, hidden from the UI but re-emitted verbatim on export. Highest fidelity; the most work;
-  needs care that an edited rule and its passed-through fragment cannot contradict each other.
+**A split contract**, because the losses are not evenly distributed and one flat "some things
+were lost" warning would hide that:
 
-This is a product decision, not a technical one — it needs the user, not just an implementer.
+1. **Represent** what the builder covers — entity applicability, attribute/property
+   requirements, exact/enum/pattern restrictions, required/prohibited cardinality.
+2. **Refuse to import a specification whose _applicability_ we cannot fully represent.** That
+   is the case where a partial import is silently wrong rather than merely incomplete: we
+   cannot display which elements the rule selects, so we cannot let anyone edit it. Listed in
+   the loss report as "not imported", kept out of the rule list.
+3. **Pass through unrepresented _requirement_ facets** as opaque XML attached to the rule,
+   hidden from the UI and re-emitted verbatim. The rule still means what it meant.
+4. **Report** everything in 2 and 3 before the user can edit.
 
-### 3c. Scope: decide the round-trip guarantee
+Measured 2026-08-05 against the 464 hand-authored specifications in the 3a corpus (the whole
+corpus excluding bSI Japan, which is machine-generated and 100% unrepresentable): **421 are
+importable and 43 (9%) are refused**. Of the 421, **195 carry at least one requirement
+construct that needs pass-through** — an unsupported facet, an optional cardinality, or a
+numeric bound — leaving 226 that round-trip with nothing attached.
 
-State precisely what `import → export` promises: byte-identical, semantically equivalent, or
-best-effort-with-a-diff. Whatever is chosen becomes a test, the way
-`parseIdsXml(buildIdsXml(d)) === compileDraft(d)` already is.
+The alternatives were measured too: refusing whole files rejects the large majority of them
+(see 3a), and lossy-with-a-warning leaves 37% of specifications drifting toward *approval*
+after one acknowledgement click — the one direction a compliance tool must never fail in.
+
+Promoting the four pass-through facets (`classification` 47, `partOf` 39, `material` 34,
+`entity` 25) to real editable conditions comes later, driven by what is actually hit.
+
+### 3c. Scope: decide the round-trip guarantee — DECIDED 2026-08-05
+
+**Semantic equivalence for imported-and-untouched rules; best-effort with a diff for edited
+ones.** Testable as: for every specification not marked unimported,
+`idsXmlToDrafts(x) → buildIdsXml → parseIdsXml` equals `parseIdsXml(x)`. That test can run over
+the whole 3a corpus.
+
+This requires two fixes that block round-trip on almost every real file: `dataType` is
+hardcoded to `IFCLABEL` (`rule-draft.ts`) though `IFCTEXT` outnumbers it 506:1 in the wild, and
+`ifcVersion` is hardcoded to `IFC4` though hand-authored files are 51% IFC2X3.
 
 ### 3d. Scope: decide the UX
 
@@ -105,10 +123,24 @@ Where import lives; what the user sees for a partially-understood file; whether 
 rule is visibly marked as such; what happens when an imported rule references a property set
 absent from the loaded model (likely common, and the coverage percentages will read 0%).
 
-### 3e. Implement: parser reports instead of warning
+The loss report's shape is settled by 3e's precedent on the validate page: refusals and
+weakenings are shown per specification, in place, with the offending construct named.
 
-`parseIdsXml` should return what it skipped rather than only logging it — a structured list of
-unsupported constructs per specification. Everything above depends on this.
+### 3e. Implement: parser reports instead of warning — DONE 2026-08-05
+
+`parseIdsXml` returns `unsupported: UnsupportedConstruct[]` and `applicabilityComplete` per
+specification instead of `console.warn`ing, and `isEvaluable` decides whether a specification
+can be judged at all.
+
+This was also a live bug on the validate page, not just import scaffolding: a specification
+whose applicability we only partly understood parsed to an empty entity list, and
+`matchesApplicability` over an empty list matches *nothing* — so it contributed zero violations
+and the model was reported clean. 41,318 of 41,751 corpus specifications (99%) parsed to an
+empty applicability this way, including 31 of the 464 hand-authored ones — among them the
+classification rule of the demo BIM basis ILS file, whose entity names are an `xs:enumeration`.
+`validateBySpecification` now refuses any specification it cannot fully read (43 of the 464,
+two of the ILS file's three) instead of running it, and the results table shows those as
+"not checked" with no counts rather than as zeros.
 
 ### 3f. Implement: `idsXmlToDrafts`
 

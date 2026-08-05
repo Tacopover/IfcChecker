@@ -1,5 +1,6 @@
 import type { NormalizedElement, Severity } from "@ifc-qa/shared-types";
-import { parseIdsXml } from "./parse-ids.js";
+import type { UnsupportedConstruct } from "./parse-ids.js";
+import { isEvaluable, parseIdsXml } from "./parse-ids.js";
 import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js";
 
 export interface IdsViolation {
@@ -17,6 +18,13 @@ export interface IdsViolation {
 // matched nothing at all. applicableCount separates those two.
 export interface SpecificationOutcome {
   name: string;
+  /**
+   * False when the specification was never run, because its applicability could not be fully
+   * represented. Its zero counts then mean "unknown", not "clean" — see `isEvaluable`.
+   */
+  checked: boolean;
+  /** What the source asked for and this parser could not represent. */
+  unsupported: UnsupportedConstruct[];
   applicableCount: number;
   passedCount: number;
   failedCount: number;
@@ -32,6 +40,20 @@ export function validateBySpecification(
   idsXml: string
 ): SpecificationOutcome[] {
   return parseIdsXml(idsXml).map((specification) => {
+    // Refused rather than run: evaluating a half-understood applicability silently checks the
+    // wrong set of elements, and reports the model clean when the rule never applied at all.
+    if (!isEvaluable(specification)) {
+      return {
+        name: specification.name,
+        checked: false,
+        unsupported: specification.unsupported,
+        applicableCount: 0,
+        passedCount: 0,
+        failedCount: 0,
+        violations: [],
+      };
+    }
+
     const violations: IdsViolation[] = [];
     let applicableCount = 0;
     let failedCount = 0;
@@ -60,6 +82,8 @@ export function validateBySpecification(
 
     return {
       name: specification.name,
+      checked: true,
+      unsupported: specification.unsupported,
       applicableCount,
       passedCount: applicableCount - failedCount,
       failedCount,

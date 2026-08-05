@@ -1853,6 +1853,11 @@ tr.spec-row.spec-not-applied > td:first-child {
   box-shadow: inset 3px 0 0 var(--warn);
 }
 
+/* Not a soft warning: a rule that could not run is a hole in the report. */
+tr.spec-row.spec-not-checked > td:first-child {
+  box-shadow: inset 3px 0 0 var(--fail);
+}
+
 tr.spec-row[data-open="true"] > td {
   background: var(--surface-2);
 }
@@ -1883,13 +1888,22 @@ tr.spec-row[data-open="true"] > td {
   background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 
-/* The notice row, not the specification row that shares its class. */
-tr.spec-not-applied:not(.spec-row) > td {
+.spec-status-not-checked {
+  color: var(--fail);
+  background: var(--fail-soft);
+}
+
+/* The notice rows, not the specification rows that share their classes. */
+tr.spec-not-applied:not(.spec-row) > td,
+tr.spec-not-checked:not(.spec-row) > td,
+tr.spec-partial > td {
   padding-top: 0;
   background: var(--surface-2);
 }
 
-tr.spec-not-applied p {
+tr.spec-not-applied p,
+tr.spec-not-checked p,
+tr.spec-partial p {
   margin: 0;
 }
 
@@ -1899,6 +1913,28 @@ tr.spec-not-applied [role="alert"] {
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 10%, var(--surface));
   border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
+/* These two report what the checker could not do, so they carry the failing colour:
+   a result the user must not read past. */
+tr.spec-not-checked [role="alert"],
+tr.spec-partial [role="alert"] {
+  color: var(--fail);
+  background: color-mix(in srgb, var(--fail) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--fail) 30%, transparent);
+}
+
+.unsupported-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.unsupported-list code {
+  color: var(--text);
+  font-size: 0.78rem;
 }
 
 /* --- Results: the issues inside one specification --- */

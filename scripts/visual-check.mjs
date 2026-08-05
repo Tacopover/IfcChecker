@@ -122,8 +122,9 @@ const SCENARIOS = {
       return h.all("table td").some(function (cell) { return cell.textContent === "succeeded"; });
     }, "parsed file row");
 
-    // Two specifications on purpose: one that every wall fails, and one whose applicability
-    // names a type this model doesn't contain.
+    // Three specifications on purpose: one that every wall fails, one whose applicability names
+    // a type this model doesn't contain, and one that selects by property value — which the
+    // checker cannot represent, and which used to match nothing and read as a clean pass.
     var ids = [
       '<?xml version="1.0" encoding="utf-8"?>',
       '<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://standards.buildingsmart.org/IDS">',
@@ -137,6 +138,16 @@ const SCENARIOS = {
       '</specification>',
       '<specification name="Curtain walls are named" ifcVersion="IFC4">',
       '<applicability maxOccurs="unbounded"><entity><name><simpleValue>IFCCURTAINWALL</simpleValue></name></entity></applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
+      '</specification>',
+      '<specification name="Load-bearing walls are named" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded">',
+      '<entity><name><simpleValue>IFCWALL</simpleValue></name></entity>',
+      '<property dataType="IFCBOOLEAN">',
+      '<propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>',
+      '<baseName><simpleValue>LoadBearing</simpleValue></baseName>',
+      '<value><simpleValue>TRUE</simpleValue></value></property>',
+      '</applicability>',
       '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
       '</specification>',
       '</specifications></ids>'
@@ -174,6 +185,26 @@ const SCENARIOS = {
       throw new Error("a rule that matched no elements did not say so — it reads as a clean model");
     }
 
+    // A rule the checker cannot represent must show no counts at all: a "0 failed" here would be
+    // a measurement never taken, and is exactly how a false pass used to be reported.
+    var refusedName = h.all(".check-summary .spec-name").filter(function (n) {
+      return n.textContent === "Load-bearing walls are named";
+    })[0];
+    if (!refusedName) throw new Error("no summary row for the unrepresentable rule");
+    var refusedRow = refusedName.closest("tr");
+    var refusedCells = Array.prototype.slice.call(refusedRow.querySelectorAll("td"));
+    var refused = { applied: refusedCells[1].textContent, passed: refusedCells[2].textContent, failed: refusedCells[3].textContent };
+    if (refused.applied !== "\\u2014" || refused.passed !== "\\u2014" || refused.failed !== "\\u2014") {
+      throw new Error("an unchecked rule reported counts: " + JSON.stringify(refused));
+    }
+    var refusedNotice = refusedRow.nextElementSibling;
+    if (!refusedNotice || refusedNotice.textContent.indexOf("false pass") === -1) {
+      throw new Error("a rule that could not run did not say so — it reads as a clean model");
+    }
+    if (h.text(".check-summary .summary-line").indexOf("1 not checked") === -1) {
+      throw new Error("the summary line hid an unchecked rule: " + h.text(".check-summary .summary-line"));
+    }
+
     // The element behind a row, which the flat table never identified at all.
     var pick = h.all(".check-summary button.link")[0];
     if (!pick) throw new Error("no failing element was offered for inspection");
@@ -195,7 +226,7 @@ const SCENARIOS = {
     window.scrollTo(0, 0);
     await h.settle(50);
 
-    return { failing: failing, inert: inert, picked: gid, sections: captions };
+    return { failing: failing, inert: inert, refused: refused, picked: gid, sections: captions };
   `,
 
   // Walks the real flow end to end: files are loaded and parsed on the validate

@@ -8,18 +8,21 @@ const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
   parseWebIfcBuffer: vi.fn(),
   parseIfcLiteBuffer: vi.fn(),
 }));
-const { validateBySpecification, parseIdsXml } = vi.hoisted(() => ({
+const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => ({
   validateBySpecification: vi.fn(),
   parseIdsXml: vi.fn(),
+  isEvaluable: vi.fn(),
 }));
 
 vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
-vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecification, parseIdsXml }));
+vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecification, parseIdsXml, isEvaluable }));
 
 /** One specification's outcome, as the validator hands it to the page. */
 function outcome(violations: Array<Record<string, unknown>>, overrides: Record<string, unknown> = {}) {
   return {
     name: "fake-spec",
+    checked: true,
+    unsupported: [],
     applicableCount: violations.length,
     passedCount: 0,
     failedCount: violations.length,
@@ -79,7 +82,10 @@ beforeEach(() => {
   // into whichever test runs next and desync its call-by-call mock
   // sequencing.
   vi.resetAllMocks();
-  parseIdsXml.mockReturnValue([{ name: "fake-spec", applicabilityEntityNames: [], requirements: [] }]);
+  parseIdsXml.mockReturnValue([
+    { name: "fake-spec", applicabilityEntityNames: ["IFCWALL"], requirements: [], unsupported: [], applicabilityComplete: true },
+  ]);
+  isEvaluable.mockReturnValue(true);
 });
 
 describe("IfcCheckerPage", () => {

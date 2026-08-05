@@ -25,10 +25,35 @@ export interface ParsedPropertyFacet {
 
 export type ParsedRequirementFacet = ParsedAttributeFacet | ParsedPropertyFacet;
 
+/** Something the source document asked for that this parser cannot represent. */
+export interface UnsupportedConstruct {
+  section: "applicability" | "requirements";
+  /** The construct in the source document's own vocabulary, e.g. `classification`. */
+  construct: string;
+  /** What it costs, phrased for whoever has to decide whether the result is still usable. */
+  description: string;
+}
+
 export interface ParsedSpecification {
   name: string;
   applicabilityEntityNames: string[];
   requirements: ParsedRequirementFacet[];
+  /** Reported rather than logged, so a caller can show the user what was dropped. */
+  unsupported: UnsupportedConstruct[];
+  /** True when nothing deciding *which* elements are selected was dropped. */
+  applicabilityComplete: boolean;
+}
+
+/**
+ * Whether the specification can be judged against a model at all.
+ *
+ * An applicability we only partly understood selects a different set of elements than the source
+ * asked for, and `matchesApplicability` over an empty name list matches *nothing* — so running one
+ * anyway produces zero violations and reports a clean model for a rule that was never applied.
+ * Callers must report these instead of evaluating them.
+ */
+export function isEvaluable(specification: ParsedSpecification): boolean {
+  return specification.applicabilityComplete && specification.applicabilityEntityNames.length > 0;
 }
 
 // Ordered mode is what lets requirements keep their document order: an <attribute> written after a
@@ -85,6 +110,13 @@ function nodesNamed(nodes: OrderedNode[], tag: string): OrderedNode[] {
   return nodes.filter((node) => tagOf(node) === tag);
 }
 
+/** Element tags in document order, with whitespace text nodes left out. */
+function tagsOf(nodes: OrderedNode[]): string[] {
+  return nodes
+    .map(tagOf)
+    .filter((tag): tag is string => tag !== null && tag !== TEXT_KEY);
+}
+
 /** Children of the first `<tag>` among `nodes`, or `[]` when there is none. */
 function descend(nodes: OrderedNode[], tag: string): OrderedNode[] {
   const node = nodes.find((candidate) => tagOf(candidate) === tag);
@@ -104,11 +136,32 @@ function readSimpleValue(nodes: OrderedNode[]): string | null {
   return node ? textOf(childrenOf(node, "simpleValue")) : null;
 }
 
-function readCardinality(node: OrderedNode): FacetCardinality {
-  return attributesOf(node)["@_cardinality"] === "prohibited" ? "prohibited" : "required";
+function readCardinality(
+  node: OrderedNode,
+  tag: string,
+  unsupported: UnsupportedConstruct[]
+): FacetCardinality {
+  const cardinality = attributesOf(node)["@_cardinality"];
+  if (cardinality === "prohibited") return "prohibited";
+  // Reading optional as required is the safe direction — it over-reports rather than under-reports —
+  // but it produces failures the source would have allowed, so the user has to be told.
+  if (cardinality === "optional") {
+    unsupported.push({
+      section: "requirements",
+      construct: "cardinality=optional",
+      description: `<${tag}> is optional, but is checked as required — expect failures the original would have allowed.`,
+    });
+  }
+  return "required";
 }
 
-function parseRestriction(facetChildren: OrderedNode[]): ParsedRestriction | null {
+/** The XSD facets a `ParsedRestriction` can carry; `annotation` is prose we can lose safely. */
+const RESTRICTION_FACETS_READ = ["pattern", "enumeration", "annotation"];
+
+function parseRestriction(
+  facetChildren: OrderedNode[],
+  unsupported: UnsupportedConstruct[]
+): ParsedRestriction | null {
   const valueNode = facetChildren.find((candidate) => tagOf(candidate) === "value");
   if (!valueNode) return null;
   const valueChildren = childrenOf(valueNode, "value");
@@ -120,9 +173,20 @@ function parseRestriction(facetChildren: OrderedNode[]): ParsedRestriction | nul
   if (!restrictionNode) return null;
   const restrictionChildren = childrenOf(restrictionNode, "restriction");
 
+  for (const tag of new Set(tagsOf(restrictionChildren))) {
+    if (RESTRICTION_FACETS_READ.includes(tag)) continue;
+    unsupported.push({
+      section: "requirements",
+      construct: `xs:${tag}`,
+      description: `Constrains the value with xs:${tag}, which cannot be represented.`,
+    });
+  }
+
   const patternNode = nodesNamed(restrictionChildren, "pattern")[0];
   if (patternNode) return patternRestriction(String(attributesOf(patternNode)["@_value"] ?? ""));
 
+  // A restriction built only from bounds we cannot read leaves no permitted values, so every
+  // element fails it loudly. That is the right direction to be wrong in, and it is reported above.
   return {
     kind: "enum",
     values: nodesNamed(restrictionChildren, "enumeration").map((node) =>
@@ -140,60 +204,126 @@ export function parseIdsXml(idsXml: string): ParsedSpecification[] {
 function parseSpecification(specNode: OrderedNode): ParsedSpecification {
   const name = String(attributesOf(specNode)["@_name"] ?? "");
   const specChildren = childrenOf(specNode, "specification");
+  const unsupported: UnsupportedConstruct[] = [];
 
-  const applicability = descend(specChildren, "applicability");
-  const applicabilityEntityNames = nodesNamed(applicability, "entity")
-    .map((entity) => readSimpleValue(descend(childrenOf(entity, "entity"), "name")))
-    .filter((value): value is string => value !== null);
+  const applicabilityEntityNames = readApplicability(
+    descend(specChildren, "applicability"),
+    unsupported
+  );
+  const requirements = readRequirements(descend(specChildren, "requirements"), unsupported);
 
-  warnUnsupported(applicability, ["entity"], "applicability", name);
+  return {
+    name,
+    applicabilityEntityNames,
+    requirements,
+    unsupported,
+    applicabilityComplete: !unsupported.some((entry) => entry.section === "applicability"),
+  };
+}
 
-  const requirementNodes = descend(specChildren, "requirements");
-  const requirements: ParsedRequirementFacet[] = [];
-  for (const node of requirementNodes) {
+/**
+ * Entity names, plus a report of everything else that narrowed the selection. IDS also selects by
+ * attribute, property, classification and material value; those decide which elements a rule is
+ * about, so dropping one quietly changes what the rule means.
+ */
+function readApplicability(
+  applicability: OrderedNode[],
+  unsupported: UnsupportedConstruct[]
+): string[] {
+  const entityNames: string[] = [];
+
+  for (const node of applicability) {
     const tag = tagOf(node);
-    if (tag === "attribute") {
-      const facet = parseAttributeFacet(node);
-      if (facet) requirements.push(facet);
-    } else if (tag === "property") {
-      const facet = parsePropertyFacet(node);
-      if (facet) requirements.push(facet);
+    if (tag === null || tag === TEXT_KEY) continue;
+
+    if (tag !== "entity") {
+      unsupported.push({
+        section: "applicability",
+        construct: tag,
+        description: `Selects elements by <${tag}>, which cannot be represented.`,
+      });
+      continue;
+    }
+
+    const children = childrenOf(node, "entity");
+    const entityName = readSimpleValue(descend(children, "name"));
+    if (entityName === null) {
+      unsupported.push({
+        section: "applicability",
+        construct: "entity/name",
+        description: "Gives its entity types as a pattern or list rather than plain names.",
+      });
+      continue;
+    }
+    entityNames.push(entityName);
+
+    if (children.some((child) => tagOf(child) === "predefinedType")) {
+      unsupported.push({
+        section: "applicability",
+        construct: "entity/predefinedType",
+        description: `Narrows <${entityName}> to one predefined type, which cannot be represented.`,
+      });
     }
   }
 
-  warnUnsupported(requirementNodes, ["attribute", "property"], "requirement", name);
-
-  return { name, applicabilityEntityNames, requirements };
+  return entityNames;
 }
 
-function warnUnsupported(
-  nodes: OrderedNode[],
-  supported: string[],
-  section: string,
-  specName: string
-): void {
-  for (const node of nodes) {
+function readRequirements(
+  requirementNodes: OrderedNode[],
+  unsupported: UnsupportedConstruct[]
+): ParsedRequirementFacet[] {
+  const requirements: ParsedRequirementFacet[] = [];
+
+  for (const node of requirementNodes) {
     const tag = tagOf(node);
-    if (tag === null || tag === TEXT_KEY || supported.includes(tag)) continue;
-    console.warn(
-      `ids-validator: skipping unsupported ${section} facet "<${tag}>" in specification "${specName}"`
-    );
+    if (tag === null || tag === TEXT_KEY) continue;
+
+    if (tag !== "attribute" && tag !== "property") {
+      unsupported.push({
+        section: "requirements",
+        construct: tag,
+        description: `Requires <${tag}>, which cannot be represented, so it is not checked.`,
+      });
+      continue;
+    }
+
+    const facet =
+      tag === "attribute"
+        ? parseAttributeFacet(node, unsupported)
+        : parsePropertyFacet(node, unsupported);
+
+    if (facet) requirements.push(facet);
+    else
+      unsupported.push({
+        section: "requirements",
+        construct: `${tag}/name`,
+        description: `Names its <${tag}> with a pattern or list rather than a plain name, so it is not checked.`,
+      });
   }
+
+  return requirements;
 }
 
-function parseAttributeFacet(node: OrderedNode): ParsedAttributeFacet | null {
+function parseAttributeFacet(
+  node: OrderedNode,
+  unsupported: UnsupportedConstruct[]
+): ParsedAttributeFacet | null {
   const children = childrenOf(node, "attribute");
   const name = readSimpleValue(descend(children, "name"));
   if (name === null) return null;
   return {
     kind: "attribute",
     name,
-    restriction: parseRestriction(children),
-    cardinality: readCardinality(node),
+    restriction: parseRestriction(children, unsupported),
+    cardinality: readCardinality(node, "attribute", unsupported),
   };
 }
 
-function parsePropertyFacet(node: OrderedNode): ParsedPropertyFacet | null {
+function parsePropertyFacet(
+  node: OrderedNode,
+  unsupported: UnsupportedConstruct[]
+): ParsedPropertyFacet | null {
   const children = childrenOf(node, "property");
   const propertySet = readSimpleValue(descend(children, "propertySet"));
   const baseName = readSimpleValue(descend(children, "baseName"));
@@ -203,7 +333,7 @@ function parsePropertyFacet(node: OrderedNode): ParsedPropertyFacet | null {
     propertySet,
     baseName,
     dataType: attributesOf(node)["@_dataType"] ?? null,
-    restriction: parseRestriction(children),
-    cardinality: readCardinality(node),
+    restriction: parseRestriction(children, unsupported),
+    cardinality: readCardinality(node, "property", unsupported),
   };
 }

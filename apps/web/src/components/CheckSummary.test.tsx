@@ -24,6 +24,8 @@ function violation(overrides: Partial<IssueRow> = {}): IssueRow {
 function summary(overrides: Partial<SpecificationSummary> = {}): SpecificationSummary {
   return {
     name: "Walls are fire rated",
+    checked: true,
+    unsupported: [],
     applicableCount: 3,
     passedCount: 2,
     failedCount: 1,
@@ -65,6 +67,83 @@ describe("CheckSummary", () => {
 
     expect(screen.getByText("passed")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // The worse sibling of "matched nothing": that rule ran and selected no elements, this one
+  // was never run at all, and zero counts would be a measurement we never made.
+  it("shows a specification it could not check as unchecked, with no counts and a reason", () => {
+    render(
+      <CheckSummary
+        summaries={[
+          summary({
+            checked: false,
+            applicableCount: 0,
+            passedCount: 0,
+            failedCount: 0,
+            violations: [],
+            unsupported: [
+              {
+                section: "applicability",
+                construct: "property",
+                description: "Selects elements by <property>, which cannot be represented.",
+              },
+            ],
+          }),
+        ]}
+      />
+    );
+
+    expect(screen.getByText("not checked")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("would have been a false pass");
+    expect(screen.getByText("property")).toBeInTheDocument();
+
+    const row = screen.getByText("Walls are fire rated").closest("tr");
+    expect(row).toHaveTextContent("—");
+    expect(row).not.toHaveTextContent("0");
+  });
+
+  it("warns that a specification which ran was checked against fewer requirements than it states", () => {
+    render(
+      <CheckSummary
+        summaries={[
+          summary({
+            applicableCount: 4,
+            passedCount: 4,
+            failedCount: 0,
+            violations: [],
+            unsupported: [
+              {
+                section: "requirements",
+                construct: "classification",
+                description: "Requires <classification>, which cannot be represented, so it is not checked.",
+              },
+            ],
+          }),
+        ]}
+      />
+    );
+
+    // It did pass — but on weaker terms than its author wrote, which the badge alone cannot say.
+    expect(screen.getByText("passed")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "fewer requirements than this specification states"
+    );
+    expect(screen.getByText("classification")).toBeInTheDocument();
+  });
+
+  it("counts unchecked specifications in the summary line, so a run with holes cannot read clean", () => {
+    render(
+      <CheckSummary
+        summaries={[
+          summary({ name: "A", applicableCount: 2, passedCount: 2, failedCount: 0, violations: [] }),
+          summary({ name: "B", checked: false, applicableCount: 0, passedCount: 0, failedCount: 0, violations: [] }),
+        ]}
+      />
+    );
+
+    const line = screen.getByRole("status");
+    expect(line).toHaveTextContent("2 specifications — none failing, 1 not checked");
+    expect(line).toHaveAttribute("data-tone", "fail");
   });
 
   it("counts the failing and inert specifications in one line", () => {

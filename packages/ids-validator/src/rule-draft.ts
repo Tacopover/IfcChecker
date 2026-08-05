@@ -92,5 +92,8 @@ export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
     name: rule.name,
     applicabilityEntityNames: rule.entityTypes.map((entityType) => entityType.toUpperCase()),
     requirements: rule.conditions.map(compileCondition),
+    // A draft is authored through the builder, so by construction there is nothing it cannot say.
+    unsupported: [],
+    applicabilityComplete: true,
   }));
 }
