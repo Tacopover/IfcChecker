@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import {
   createColumnHelper,
   flexRender,
@@ -49,6 +49,12 @@ export interface IssueTableProps {
   selectedElementId?: string | null;
   /** Set when the table already sits under one specification, where a Rule column repeats a constant. */
   hideRuleColumn?: boolean;
+  /**
+   * Rendered in a row directly beneath the selected element, which is where the
+   * answer to "what is wrong with this one" belongs — the table owns the
+   * placement, the caller owns what goes in it.
+   */
+  renderDetails?: (row: IssueRow) => ReactNode;
 }
 
 export function IssueTable({
@@ -56,6 +62,7 @@ export function IssueTable({
   onSelectElement,
   selectedElementId,
   hideRuleColumn = false,
+  renderDetails,
 }: IssueTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -213,18 +220,27 @@ export function IssueTable({
               ))}
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className={selectedElementId === row.original.id ? "row-selected" : undefined}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className={COLUMN_CLASS[cell.column.id]}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const isSelected = selectedElementId === row.original.id;
+                return (
+                  <Fragment key={row.id}>
+                    <tr className={isSelected ? "row-selected" : undefined}>
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className={COLUMN_CLASS[cell.column.id]}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                    {isSelected && renderDetails && (
+                      <tr className="details-row">
+                        <td colSpan={row.getVisibleCells().length}>
+                          {renderDetails(row.original)}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

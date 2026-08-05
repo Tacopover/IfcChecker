@@ -361,12 +361,14 @@ export function IfcCheckerPage() {
 
         <div className="step-body">
           <div className="file-field">
-            <label htmlFor="local-ids-file">IDS rule set (XML)</label>
+            <label htmlFor="local-ids-file">IDS rule set (.ids or .xml)</label>
             <input
               key={`ids-${resetKey}`}
               id="local-ids-file"
               type="file"
-              accept=".xml"
+              // An IDS document is XML, but it is normally saved as .ids — a picker
+              // filtered to .xml alone hides the very files it is asking for.
+              accept=".ids,.xml,application/xml,text/xml"
               onChange={(e) => {
                 setIdsFile(e.target.files?.[0] ?? null);
                 dropStaleResults();
@@ -401,21 +403,22 @@ export function IfcCheckerPage() {
           </header>
 
           <div className="step-body">
+            {/* The panel opens inside the table, under the row that was clicked, so
+                reading an element never costs a trip to the bottom of the page and back. */}
             <CheckSummary
               summaries={results}
               onSelectElement={setSelectedIssue}
               selectedElementId={selectedIssue?.id ?? null}
+              renderDetails={(row) => (
+                <div ref={detailsRef}>
+                  <ElementDetails
+                    element={selectedElement}
+                    fileName={row.fileName}
+                    onClose={() => setSelectedIssue(null)}
+                  />
+                </div>
+              )}
             />
-
-            {selectedIssue && (
-              <div ref={detailsRef}>
-                <ElementDetails
-                  element={selectedElement}
-                  fileName={selectedIssue.fileName}
-                  onClose={() => setSelectedIssue(null)}
-                />
-              </div>
-            )}
           </div>
         </section>
       )}

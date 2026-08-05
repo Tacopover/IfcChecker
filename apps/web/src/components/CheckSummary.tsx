@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import type { SpecificationSummary } from "../local/parseAndValidate.js";
 import { IssueTable, type IssueRow } from "./IssueTable";
 
@@ -26,9 +26,16 @@ export interface CheckSummaryProps {
   summaries: SpecificationSummary[];
   onSelectElement?: (row: IssueRow) => void;
   selectedElementId?: string | null;
+  /** Handed to the issue table, which opens it under the element it describes. */
+  renderDetails?: (row: IssueRow) => ReactNode;
 }
 
-export function CheckSummary({ summaries, onSelectElement, selectedElementId }: CheckSummaryProps) {
+export function CheckSummary({
+  summaries,
+  onSelectElement,
+  selectedElementId,
+  renderDetails,
+}: CheckSummaryProps) {
   const [expanded, setExpanded] = useState<Set<number>>(() => initiallyExpanded(summaries));
   // A fresh check produces a new array; its expansion is decided from scratch rather than
   // inherited from whichever rows the previous rule set happened to have open.
@@ -131,6 +138,7 @@ export function CheckSummary({ summaries, onSelectElement, selectedElementId }: 
                           results={summary.violations}
                           onSelectElement={onSelectElement}
                           selectedElementId={selectedElementId}
+                          renderDetails={renderDetails}
                           hideRuleColumn
                         />
                       </td>

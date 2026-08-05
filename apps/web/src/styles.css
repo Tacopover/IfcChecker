@@ -1599,11 +1599,14 @@ pre.xml .v {
   overflow-x: auto;
 }
 
-.table-frame table {
+/* Addressed through child combinators throughout: a frame holds one table, and
+   the element-details panel opens in a cell of it with tables of its own that
+   must keep their own look. */
+.table-frame > table {
   margin: 0;
 }
 
-.table-frame th {
+.table-frame > table > thead > tr > th {
   padding: 0.55rem 0.8rem;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
@@ -1616,26 +1619,26 @@ pre.xml .v {
   white-space: nowrap;
 }
 
-.table-frame td {
+.table-frame > table > tbody > tr > td {
   padding: 0.6rem 0.8rem;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 
-.table-frame tbody tr:last-child > td {
+.table-frame > table > tbody > tr:last-child > td {
   border-bottom: 0;
 }
 
-.table-frame th.num,
-.table-frame td.num {
+.table-frame > table > thead > tr > th.num,
+.table-frame > table > tbody > tr > td.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* Hover marks the row under the pointer, but never a drawer or a notice —
-   those are panels that happen to live in a <tr>. */
-.table-frame tbody tr:not(.drawer-row, .spec-not-applied):hover > td {
+/* Hover marks the row under the pointer, but never a drawer, a notice or an
+   opened element — those are panels that happen to live in a <tr>. */
+.table-frame > table > tbody > tr:not(.drawer-row, .spec-not-applied, .details-row):hover > td {
   background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
 }
 
@@ -1906,9 +1909,10 @@ tr.spec-not-applied [role="alert"] {
 
 /* Below this the columns stop being readable rather than merely tight, so the
    frame scrolls instead of crushing them. */
-.issue-table table {
+.issue-table > .table-frame > table {
   table-layout: fixed;
   min-width: 52rem;
+  font-size: 0.85rem;
 }
 
 col.col-element {
@@ -1934,10 +1938,6 @@ col.col-severity {
 /* The reason a run gets read at all, so it gets the room a sentence needs. */
 col.col-message {
   width: 38%;
-}
-
-.issue-table td {
-  font-size: 0.85rem;
 }
 
 .issue-table td.col-message {
@@ -2039,6 +2039,32 @@ col.col-message {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+/* The opened element's own row: the rail runs on from the row above so the
+   panel reads as that element's, not as a second thing under the table. */
+.issue-table tr.details-row > td {
+  padding: 0.4rem 0.7rem 0.8rem;
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Where the table is wider than its frame, the row it opens in is too — and a
+   panel that inherited that width would carry its own Close button off the
+   right edge. cqw is the frame's *visible* width, so the panel stays within it
+   and sticks there while the table scrolls underneath. */
+.issue-table > .table-frame {
+  container-type: inline-size;
+}
+
+.issue-table tr.details-row > td > * {
+  position: sticky;
+  left: 0;
+  width: min(100%, calc(100cqw - 1.4rem));
+}
+
+.issue-table tr.details-row .element-details {
+  margin-top: 0;
+}
+
 .issue-filters {
   display: flex;
   flex-wrap: wrap;
@@ -2126,8 +2152,24 @@ col.col-message {
   overflow-wrap: anywhere;
 }
 
+/* Stated in full rather than left to button.secondary: the panel now opens
+   inside a table cell, where the plain-text rule for table buttons would strip
+   this one back to a word. */
 .element-details-head button {
   margin: 0;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.element-details-head button:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .element-details table {

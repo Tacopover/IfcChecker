@@ -106,7 +106,7 @@ describe("IfcCheckerPage", () => {
     const check = screen.getByRole("button", { name: "Check files" });
     expect(check).toBeDisabled();
 
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     expect(check).toBeDisabled();
 
     await parseFiles(user, makeFile("model-a.ifc"));
@@ -127,7 +127,7 @@ describe("IfcCheckerPage", () => {
     expect(screen.queryByText(/To parse:/i)).not.toBeInTheDocument();
     expect(screen.getByText(/To check: choose an IDS rule set file/i)).toBeInTheDocument();
 
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     expect(screen.queryByText(/To check:/i)).not.toBeInTheDocument();
   });
 
@@ -183,7 +183,7 @@ describe("IfcCheckerPage", () => {
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
     await screen.findByRole("heading", { name: "Results" });
 
@@ -192,7 +192,7 @@ describe("IfcCheckerPage", () => {
     expect(screen.queryByRole("table", { name: "IFC files" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Results" })).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "web-ifc" })).not.toBeChecked();
-    expect((screen.getByLabelText("IDS rule set (XML)") as HTMLInputElement).files).toHaveLength(0);
+    expect((screen.getByLabelText("IDS rule set (.ids or .xml)") as HTMLInputElement).files).toHaveLength(0);
     expect((screen.getByLabelText(/IFC files/) as HTMLInputElement).files).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Parse files" })).toBeDisabled();
   });
@@ -214,7 +214,7 @@ describe("IfcCheckerPage", () => {
     // Nothing has been checked yet, so nothing may be claimed about compliance.
     expect(screen.queryByRole("heading", { name: "Results" })).not.toBeInTheDocument();
 
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
     expect(await screen.findByText("Name must start with 'W-'")).toBeInTheDocument();
@@ -233,11 +233,11 @@ describe("IfcCheckerPage", () => {
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
     await screen.findByRole("heading", { name: "Results" });
 
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("stricter.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("stricter.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
     expect(await screen.findByText("Fails the newer rules")).toBeInTheDocument();
@@ -252,7 +252,7 @@ describe("IfcCheckerPage", () => {
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
     expect(await screen.findByText("Name must start with 'W-'")).toBeInTheDocument();
 
@@ -281,7 +281,7 @@ describe("IfcCheckerPage", () => {
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
     await screen.findByRole("heading", { name: "Results" });
 
@@ -325,7 +325,7 @@ describe("IfcCheckerPage", () => {
       new File(["ISO-10303-21;"], "model.ifc"),
       new File(["ISO-10303-21; longer, so the size differs"], "model.ifc")
     );
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
     await screen.findByRole("heading", { name: "Results" });
 
@@ -345,7 +345,7 @@ describe("IfcCheckerPage", () => {
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("nothing was checked");
@@ -423,7 +423,7 @@ describe("IfcCheckerPage", () => {
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("not-really-ids.xml", "<not-ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("not-really-ids.xml", "<not-ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("doesn't look like a valid IDS rule set");
