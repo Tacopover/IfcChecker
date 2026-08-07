@@ -1,0 +1,299 @@
+# Next version — full IDS 1.0 support
+
+Scope for authoring, importing and editing every construct in IDS 1.0. Written 2026-08-07 against
+the authoritative schema (`buildingSMART/IDS@development`, `Schema/ids.xsd` version 1.0.0) and the
+User Manual beside it, with usage frequencies measured over the **464 hand-authored specifications**
+in the goal 3a corpus (the whole corpus minus bSI Japan, which is machine-generated and swamps any
+total it is in).
+
+Read `goals.md` §3 and `.claude/plans/2026-07-25-ids-import-scope.md` first — this continues them.
+
+---
+
+## Headline: one bug, and one cost that is not where it looks
+
+**1. We export schema-invalid IDS today.** `applicabilityType` allows **one** `<entity>` element:
+
+```xml
+<xs:element name="entity" type="ids:entityType" minOccurs="0"/>   <!-- maxOccurs defaults to 1 -->
+```
+
+`buildIdsXml` emits one `<entity>` per entity type, so any rule with two or more types produces a
+document no conforming checker will accept:
+
+```xml
+<applicability minOccurs="1" maxOccurs="unbounded">
+  <entity><name><simpleValue>IFCDUCTSEGMENT</simpleValue></name></entity>
+  <entity><name><simpleValue>IFCDUCTFITTING</simpleValue></name></entity>
+</applicability>
+```
+
+Multiple types must be a single `<entity>` whose `<name>` is an `xs:enumeration`. **0 of 464
+hand-authored specifications** emit two `<entity>` elements — the corpus round-trip never caught
+this because no real file does it, and our own importer reads it back happily. Multi-type rules are
+a headline builder feature (the inherited-type group chips), so this is likely affecting real
+exports now. Small fix, should not wait for the rest of this work.
+
+**2. The expensive part is the parser, not the UI.** `NormalizedElement` is:
+
+```ts
+{ globalId, ifcType, predefinedType, name, attributes, propertySets }
+```
+
+There is no material, no classification, and no relationship data. **Three of the six facets have
+nothing in the model to check against** — classification, material and partOf are parser and
+adapter work across both engines, before a single control is drawn. Anyone estimating this from the
+UI side will be badly wrong.
+
+The good news: `predefinedType` is already on the element and already readable by
+`facet-evaluation.ts`, so the entity facet's second parameter is nearly free.
+
+---
+
+## Where we are against the schema
+
+Six facets, each usable in **applicability** (which elements the rule is about) and **requirements**
+(what they must satisfy). Counts are facet occurrences across the 464 hand-authored specifications.
+
+| Facet | Parameters | In applicability | In requirements | We support |
+| --- | --- | --- | --- | --- |
+| **entity** | name, predefinedType | 452 | 26 | name only, applicability only |
+| **property** | propertySet, baseName, value, `dataType` | 13 | 310 | ✅ requirements; ❌ applicability |
+| **attribute** | name, value | 7 | 175 | ✅ requirements; ❌ applicability |
+| **classification** | system (required), value, `uri` | 3 | 51 | ❌ |
+| **material** | value, `uri` | 3 | 41 | ❌ |
+| **partOf** | entity (nested), `relation` | 0 | 40 | ❌ |
+
+**The single most useful finding for prioritising: applicability is nearly always just an entity.**
+452 of 464 specifications select by entity alone; only 12 use anything else, and only 26 non-entity
+applicability facets exist in the whole hand-authored corpus. Requirements are where the richness
+is — 158 facet occurrences we cannot represent, against 26 on the applicability side.
+
+So **requirement facets first, applicability facets last.** That inverts the order the schema
+presents them in, and it is the opposite of what "full support" instinctively suggests.
+
+### Restrictions
+
+`idsValue` is either a `<simpleValue>` or an `<xs:restriction>`. Four restriction kinds exist:
+
+| Kind | XSD facets | Uses | We support |
+| --- | --- | --- | --- |
+| **Enumeration** | `xs:enumeration` | 1095 | ✅ |
+| **Pattern** | `xs:pattern` | 90 | ✅ |
+| **Bounds** | `minInclusive` 19, `minExclusive` 47, `maxInclusive` 19, `maxExclusive` 7 | 92 | ❌ |
+| **Length** | `length` 2, `minLength` 4, `maxLength` 4 | 10 | ❌ |
+
+Plus `xs:annotation`/`xs:documentation` inside a restriction (16 uses) — the author's own
+explanation of the rule, which we currently force to pass-through.
+
+**Bounds are worth nine times what length is.** Both are cheap once there is a restriction editor,
+but bounds carry a real dependency: numeric comparison needs the IFC value converted to the SI unit
+IDS assumes (`Documentation/UserManual/units.md`). A `>= 10` on `NetFloorArea` compared against a
+model authored in mm² is silently wrong — and wrong in the approving direction if the raw number
+happens to be larger.
+
+### Cardinality
+
+| Where | Allowed | We support |
+| --- | --- | --- |
+| entity (requirements) | none — always required | n/a |
+| partOf | `required`, `prohibited` | ❌ |
+| classification, attribute, property, material | `required`, `prohibited`, `optional` | required + prohibited |
+| applicability (`minOccurs`) | 0 = subset optional, 1 = at least one must exist | always emits 1 |
+
+`optional` means "if present it must comply, but it may be absent" — a genuinely different check we
+currently pass through rather than run. Hand-authored applicability: 64 say `minOccurs="0"`, 47 say
+`"1"`, 353 omit it (the XSD default is 1, so our output matches the default — this is a missing
+capability, not a bug).
+
+### Metadata we currently carry but cannot edit
+
+Since the import work, all of this survives a round trip untouched — but only if the user does not
+touch the rule. None of it is editable, and none of it can be authored from scratch:
+
+- `<info>`: title, copyright, version, description, author (email-shaped), date, purpose, milestone
+- `<specification>`: identifier, description, instructions, ifcVersion (`IFC2X3` / `IFC4` /
+  `IFC4X3_ADD2`, a space-separated list — 344 of 464 say `"IFC2X3 IFC4"`)
+- `<requirements description>`, and per-facet `instructions` and `uri`
+
+---
+
+## The central refactor: `ConditionDraft` becomes a facet
+
+This is the piece everything else waits on, and it is a breaking change through import, export,
+evaluation and UI.
+
+Today's model conflates two independent things into one `operator` field:
+
+```ts
+operator: "exists" | "equals" | "oneOf" | "contains" | "startsWith" | "endsWith" | "matches" | "notExists"
+```
+
+`exists`/`notExists` are **cardinality**; the other six are **restrictions**. IDS treats them as
+orthogonal — you can have `prohibited` *with* a value ("must not be Steel"), which our model cannot
+say at all, and which is why the importer passes those facets through today.
+
+The replacement is a discriminated union mirroring the schema, with cardinality and restriction as
+separate fields:
+
+```ts
+type FacetDraft =
+  | { kind: "entity";         name: ValueDraft; predefinedType: ValueDraft | null }
+  | { kind: "attribute";      name: ValueDraft; value: ValueDraft | null }
+  | { kind: "property";       propertySet: ValueDraft; baseName: ValueDraft;
+                              value: ValueDraft | null; dataType: string | null }
+  | { kind: "classification"; system: ValueDraft; value: ValueDraft | null }
+  | { kind: "material";       value: ValueDraft | null }
+  | { kind: "partOf";         entity: EntityDraft; relation: Relation | null };
+
+type ValueDraft =
+  | { kind: "simple";  value: string }
+  | { kind: "enum";    values: string[] }
+  | { kind: "pattern"; source: string }
+  | { kind: "bounds";  min: Bound | null; max: Bound | null }   // Bound = { value, inclusive }
+  | { kind: "length";  exact: number | null; min: number | null; max: number | null };
+
+interface FacetCommon { id: string; cardinality: "required" | "optional" | "prohibited";
+                        instructions: string | null; uri: string | null; annotation: string | null }
+```
+
+**Keep the friendly operators as a shortcut layer over this, not as the storage.** "contains X" stays
+the fastest way to express `.*X.*` and should remain the default presentation — but derived from a
+pattern `ValueDraft`, the way the importer already derives it. The lesson from the import work
+applies unchanged: the moment the data model is narrower than the file, something gets silently
+dropped.
+
+Once `ValueDraft` covers all four restriction kinds and `FacetDraft` all six facets, **the XSD has
+no construct left over** — nothing needs pass-through except prose we choose not to surface. The
+pass-through machinery should stay regardless, as the safety net for IDS 1.1.
+
+---
+
+## UI: keeping it accessible
+
+The concern is real. A rule today shows entity chips and a flat condition list. Full IDS means six
+facet types on both sides of the rule, each with up to four parameters, each parameter with five
+possible value shapes, plus cardinality, instructions and a URI. Rendered naively that is a form
+with ~20 controls per facet and it will be unusable.
+
+Three things make it tractable, and they matter more than which page anything sits on.
+
+### 1. One collapsed line per facet
+
+The unit of the UI is a **facet row** that reads as a sentence when collapsed and becomes a form
+when opened. Everything else follows from this — it is what keeps a 12-facet specification
+scannable.
+
+```
+▸ Property   Pset_WallCommon · FireRating   is one of 60, 90              required   ⧉ 🗑
+▸ Material   is Concrete                                                  prohibited ⧉ 🗑
+▸ Part of    an IfcSpace, contained in spatial structure                  required   ⧉ 🗑
+▸ Class.     Uniclass 2015 · starts with EF_25_10                         optional   ⧉ 🗑
+```
+
+The existing `ConditionRow` is already close to this. The work is generalising it to six kinds and
+making the collapsed state a readable sentence rather than a row of inputs.
+
+### 2. One restriction editor, everywhere
+
+A single control behind every value parameter, with the shape picked by a small selector: *is* /
+*is one of* / *matches* / *between* / *length*. Same control for an entity name, a property value, a
+classification code, a material. Learn it once. This is also what makes the "friendly operator"
+shortcut layer possible — `contains` is a preset of the pattern shape.
+
+Bounds get numeric inputs with inclusive/exclusive toggles and, critically, **a unit label derived
+from `dataType`** so the user can see they are typing SI.
+
+### 3. The explorer rail must cover the new facets
+
+The builder's whole promise is *everything offered comes from your own file*. Adding classification,
+material and partOf facets without extending the rail breaks that promise exactly where users are
+least confident — nobody remembers their classification system's spelling.
+
+So the rail gains sections fed by the same parser work the validator needs:
+
+```
+In your model
+  Types            IfcWall (34), IfcDoor (12) …
+  Property sets    Pset_WallCommon, MEP_Data …
+  Classifications  NL/SfB · 21.22 (18), 22.11 (7) …      ← new
+  Materials        Concrete (54), Steel (12) …           ← new
+  Systems & spaces IfcSpace (8), IfcDistributionSystem   ← new, feeds partOf
+```
+
+This is the argument for doing the parser work first: it is not just validation plumbing, it is what
+keeps the UI friendly.
+
+### Should the page split?
+
+**Recommendation: not yet, and probably not the way it first appears.** Standing preference is one
+consolidated page, with a route earned only by a genuinely heavy workflow. With collapsed facet rows
+a full specification is roughly the height of today's expanded rule card, so the page holds.
+
+What does deserve its own surface is **document-level metadata** — title, author, version, purpose,
+ifcVersion targeting, and the per-specification identifier/description/instructions. That is a
+different task from writing rules (you do it once, at the start or the end), it is ~12 fields, and
+interleaving it with rule editing would clutter the thing we are trying to keep clean. A collapsible
+panel at the top of the page is probably enough; a small modal is the fallback.
+
+The honest trigger for splitting is measurable, so it should be measured rather than guessed: if a
+typical imported national standard (NL BIM Basis ILS, RVB BIM Norm — both already in the corpus)
+cannot be scanned without the rule list scrolling past two screens, revisit. Suggest re-deciding
+after stage 4 below, with a real file on screen.
+
+One genuine split to consider separately: **applicability and requirements as two columns** inside
+an open rule, rather than stacked. They are symmetric in the schema and the two-column form makes
+"which elements / what they must satisfy" legible at a glance. Cheap to try, easy to revert.
+
+---
+
+## Suggested staging
+
+Ordered so each stage is independently shippable and testable, and so the riskiest unknown (parser
+data) is faced first rather than last.
+
+**Stage 0 — fix the multi-entity export.** Emit one `<entity>` with an `xs:enumeration` when a rule
+names more than one type. Add a schema-validity check to the gate so this class of bug cannot
+recur: validate every fixture and every round-trip output against `ids.xsd`. Small, and it should
+not ride along with anything else.
+
+**Stage 1 — model data for the missing facets.** Extend `NormalizedElement` with materials,
+classifications and the five partOf relationships; implement in both the ifc-lite and web-ifc
+adapters; extend the fixtures. No UI. Watch the scale constraint — these are new traversals over
+models up to 1.6 GB, and the adapter-parity tests will need new cases. Biggest and least certain
+stage; worth a spike before committing to an estimate.
+
+**Stage 2 — the `FacetDraft` refactor.** Reshape the draft model, then bring `parse-ids`,
+`build-ids`, `import-ids` and `validate-elements` onto it. Cardinality and restriction become
+orthogonal. The existing corpus round-trip is the safety net — it must stay at 7,784/7,784
+throughout, and the number of specifications needing pass-through should fall as facets land.
+
+**Stage 3 — restrictions: bounds and length.** Plus the unit conversion bounds depend on, and the
+`dataType` picker that makes it meaningful. Bounds before length (92 uses against 10).
+
+**Stage 4 — requirement facets in the builder.** classification, material, partOf, entity, in that
+order of corpus frequency (51 / 41 / 40 / 26), with the collapsed facet row and the shared
+restriction editor. Explorer rail sections land alongside the facets they feed.
+
+**Stage 5 — applicability facets, cardinality and metadata.** The long tail: non-entity
+applicability (26 occurrences total), `optional` cardinality, `minOccurs="0"`, per-facet
+instructions and uri, and the document metadata panel.
+
+**Throughout:** every stage that touches representability should reduce, never increase, what the
+importer passes through — and the "refuse rather than half-understand" rule from §3e holds for all
+six facets. A partly-understood classification applicability must refuse exactly as a partly
+understood entity one does today.
+
+---
+
+## Open questions for the user
+
+1. **Two columns or stacked** for applicability vs requirements inside an open rule.
+2. **Is `partOf` worth stage-4 placement** for MEP work specifically? It is 40 occurrences in the
+   corpus, but "is this duct assigned to a distribution system" is the kind of check that is hard to
+   do any other way, and may be worth more here than the corpus average suggests.
+3. **How far to go on units.** Full SI conversion for every measure type is a large table; the
+   alternative is supporting bounds only for unitless types at first and refusing the rest loudly.
+4. **Whether `optional` cardinality should be evaluated or kept refused.** It is the one cardinality
+   whose meaning ("if present, comply") differs from what we do today, and getting it wrong fails in
+   the approving direction.
