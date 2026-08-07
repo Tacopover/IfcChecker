@@ -56,6 +56,7 @@ export function RuleCard({
     matched === 0 || rule.conditions.length === 0 ? "empty" : failing === 0 ? "all-pass" : "has-fail";
 
   const problems = ruleProblems(rule);
+  const preserved = rule.imported?.passThrough ?? [];
   const groupByName = new Map(introspection.groups.map((group) => [group.name, group]));
   const countByType = new Map(introspection.entityTypes.map((entry) => [entry.name, entry.count]));
   const usedTypes = new Set(rule.entityTypes);
@@ -64,14 +65,19 @@ export function RuleCard({
     onChange({ ...rule, conditions });
   }
 
+  // Qualified whenever requirements were kept but not shown, so "all pass" never reads as a verdict
+  // on the whole specification when part of it was never checked here.
+  const shownOnly = preserved.length > 0 ? " on the conditions shown" : "";
   const summary =
     rule.conditions.length === 0
-      ? "Nothing checked yet"
+      ? preserved.length > 0
+        ? "Nothing shown here to check"
+        : "Nothing checked yet"
       : matched === 0
         ? "No matching elements in this file"
         : failing === 0
-          ? `All ${matched} pass`
-          : `${failing} of ${matched} fail`;
+          ? `All ${matched} pass${shownOnly}`
+          : `${failing} of ${matched} fail${shownOnly}`;
 
   return (
     <article
@@ -96,6 +102,11 @@ export function RuleCard({
           value={rule.name}
           onChange={(event) => onChange({ ...rule, name: event.target.value })}
         />
+        {preserved.length > 0 && (
+          <span className="badge kept" title={preserved.map((entry) => entry.construct).join(", ")}>
+            {preserved.length} kept
+          </span>
+        )}
         <span className={`score ${scoreClass}`}>
           <span className="bar" data-empty={matched ? 0 : 1}>
             <i style={{ width: `${ratio * 100}%` }} />
@@ -231,6 +242,26 @@ export function RuleCard({
             >
               + condition
             </button>
+
+            {/* Permanent, not dismissible: the moment this matters is export, which can happen
+                long after the import, and a count above that ignores these would be a lie. */}
+            {preserved.length > 0 && (
+              <div className="rule-preserved" role="note">
+                <strong>
+                  {preserved.length} more requirement{preserved.length === 1 ? "" : "s"} kept from
+                  the imported file.
+                </strong>{" "}
+                They are written back on export, but the builder cannot show them, so the count
+                above does not include them.
+                <ul className="unsupported-list">
+                  {preserved.map((entry) => (
+                    <li key={`${entry.construct}-${entry.afterIndex}-${entry.xml}`}>
+                      <code>{entry.construct}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div className="rule-foot">

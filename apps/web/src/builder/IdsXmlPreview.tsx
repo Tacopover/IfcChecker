@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { buildIdsXml, type RuleDraft } from "@ifc-qa/ids-validator";
+import { buildIdsXml, type RefusedSpecification, type RuleDraft } from "@ifc-qa/ids-validator";
 import { exportBlockers } from "./completeness.js";
 
 // Tag names, then attribute="value" pairs — enough to read the structure at a glance without
@@ -46,12 +46,32 @@ function downloadName(title: string): string {
 export interface IdsXmlPreviewProps {
   rules: RuleDraft[];
   title: string;
+  /** Imported specifications the builder cannot edit, written back untouched. */
+  refused?: RefusedSpecification[];
+  /** `<info>` children of an imported document, written back untouched. */
+  extraInfo?: string[];
 }
 
-export function IdsXmlPreview({ rules, title }: IdsXmlPreviewProps) {
+const NO_REFUSED: RefusedSpecification[] = [];
+const NO_EXTRA_INFO: string[] = [];
+
+export function IdsXmlPreview({
+  rules,
+  title,
+  refused = NO_REFUSED,
+  extraInfo = NO_EXTRA_INFO,
+}: IdsXmlPreviewProps) {
   const [visible, setVisible] = useState(true);
-  const xml = useMemo(() => buildIdsXml(rules, { title }), [rules, title]);
-  const blockers = useMemo(() => exportBlockers(rules), [rules]);
+  const xml = useMemo(
+    () =>
+      buildIdsXml(rules, {
+        title,
+        extraInfo,
+        untouched: refused.map((specification) => specification.passThrough),
+      }),
+    [rules, title, refused, extraInfo]
+  );
+  const blockers = useMemo(() => exportBlockers(rules, refused.length), [rules, refused]);
 
   function handleDownload() {
     if (blockers.length) return;

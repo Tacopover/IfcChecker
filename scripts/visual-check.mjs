@@ -95,6 +95,140 @@ window.__smokeErrors = [];
 // Each scenario is a body for `async function scenario(h)`, evaluated in the
 // page. Anything it returns is reported back under `scenario`.
 const SCENARIOS = {
+  // The whole point of the results section, in a real browser: a rule that fails elements
+  // reports which ones, a rule that matches nothing says so instead of reading as clean, and
+  // picking an element shows what it actually carries.
+  validate: `
+    h.click('[data-smoke-route="validate"]');
+    await h.waitFor(function () { return document.getElementById("local-ifc-files"); }, "validate page");
+    document.querySelector('input[name="local-engine"][value="ifc-lite"]').click();
+
+    var response = await fetch("/fixtures/ifc/mixed-disciplines.ifc");
+    if (!response.ok) throw new Error("fixture fetch failed: " + response.status);
+    var bytes = await response.arrayBuffer();
+
+    var input = document.getElementById("local-ifc-files");
+    var transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], "mixed-disciplines.ifc", { type: "application/octet-stream" }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await h.waitFor(function () {
+      var button = h.button("Parse files");
+      return button && !button.disabled ? button : null;
+    }, "enabled Parse files button");
+    h.button("Parse files").click();
+    await h.waitFor(function () {
+      return h.all("table td").some(function (cell) { return cell.textContent === "succeeded"; });
+    }, "parsed file row");
+
+    // Three specifications on purpose: one that every wall fails, one whose applicability names
+    // a type this model doesn't contain, and one that selects by property value — which the
+    // checker cannot represent, and which used to match nothing and read as a clean pass.
+    var ids = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://standards.buildingsmart.org/IDS">',
+      '<info><title>Gate rules</title></info>',
+      '<specifications>',
+      '<specification name="Walls are fire rated" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability>',
+      '<requirements><property dataType="IFCLABEL">',
+      '<propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>',
+      '<baseName><simpleValue>FireRating</simpleValue></baseName></property></requirements>',
+      '</specification>',
+      '<specification name="Curtain walls are named" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded"><entity><name><simpleValue>IFCCURTAINWALL</simpleValue></name></entity></applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
+      '</specification>',
+      '<specification name="Load-bearing walls are named" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded">',
+      '<entity><name><simpleValue>IFCWALL</simpleValue></name></entity>',
+      '<property dataType="IFCBOOLEAN">',
+      '<propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>',
+      '<baseName><simpleValue>LoadBearing</simpleValue></baseName>',
+      '<value><simpleValue>TRUE</simpleValue></value></property>',
+      '</applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
+      '</specification>',
+      '</specifications></ids>'
+    ].join("\\n");
+
+    var idsInput = document.getElementById("local-ids-file");
+    var idsTransfer = new DataTransfer();
+    idsTransfer.items.add(new File([ids], "gate-rules.ids", { type: "text/xml" }));
+    idsInput.files = idsTransfer.files;
+    idsInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await h.waitFor(function () {
+      var button = h.button("Check files");
+      return button && !button.disabled ? button : null;
+    }, "enabled Check files button");
+    h.button("Check files").click();
+
+    await h.waitFor(function () { return document.querySelector(".check-summary"); }, "check summary");
+
+    function specRow(name) {
+      var cell = h.all(".check-summary .spec-name").filter(function (n) { return n.textContent === name; })[0];
+      if (!cell) throw new Error("no summary row for " + name);
+      var cells = Array.prototype.slice.call(cell.closest("tr").querySelectorAll("td"));
+      return { applied: cells[1].textContent, passed: cells[2].textContent, failed: cells[3].textContent };
+    }
+
+    var failing = specRow("Walls are fire rated");
+    if (failing.applied === "0") throw new Error("the wall rule matched nothing; the fixture or the rule is wrong");
+    if (failing.failed === "0") throw new Error("expected the wall rule to fail elements, got " + JSON.stringify(failing));
+
+    var inert = specRow("Curtain walls are named");
+    if (inert.applied !== "0") throw new Error("expected the curtain wall rule to match nothing, got " + inert.applied);
+    var alert = h.all(".check-summary [role=alert]")[0];
+    if (!alert || alert.textContent.indexOf("nothing was checked") === -1) {
+      throw new Error("a rule that matched no elements did not say so — it reads as a clean model");
+    }
+
+    // A rule the checker cannot represent must show no counts at all: a "0 failed" here would be
+    // a measurement never taken, and is exactly how a false pass used to be reported.
+    var refusedName = h.all(".check-summary .spec-name").filter(function (n) {
+      return n.textContent === "Load-bearing walls are named";
+    })[0];
+    if (!refusedName) throw new Error("no summary row for the unrepresentable rule");
+    var refusedRow = refusedName.closest("tr");
+    var refusedCells = Array.prototype.slice.call(refusedRow.querySelectorAll("td"));
+    var refused = { applied: refusedCells[1].textContent, passed: refusedCells[2].textContent, failed: refusedCells[3].textContent };
+    if (refused.applied !== "\\u2014" || refused.passed !== "\\u2014" || refused.failed !== "\\u2014") {
+      throw new Error("an unchecked rule reported counts: " + JSON.stringify(refused));
+    }
+    var refusedNotice = refusedRow.nextElementSibling;
+    if (!refusedNotice || refusedNotice.textContent.indexOf("false pass") === -1) {
+      throw new Error("a rule that could not run did not say so — it reads as a clean model");
+    }
+    if (h.text(".check-summary .summary-line").indexOf("1 not checked") === -1) {
+      throw new Error("the summary line hid an unchecked rule: " + h.text(".check-summary .summary-line"));
+    }
+
+    // The element behind a row, which the flat table never identified at all.
+    var pick = h.all(".check-summary button.link")[0];
+    if (!pick) throw new Error("no failing element was offered for inspection");
+    var gidNode = pick.querySelector(".element-gid");
+    var gid = gidNode ? gidNode.textContent.trim() : "";
+    pick.click();
+
+    var details = await h.waitFor(function () { return document.querySelector(".element-details"); }, "element details");
+    if (details.textContent.indexOf(gid) === -1) {
+      throw new Error("details panel does not describe the element that was picked (" + gid + ")");
+    }
+    var captions = Array.prototype.slice.call(details.querySelectorAll("caption")).map(function (n) { return n.textContent; });
+    if (captions.indexOf("Attributes") === -1) throw new Error("details panel has no attributes section");
+    if (captions.length < 3) throw new Error("details panel showed no property sets: " + JSON.stringify(captions));
+
+    // Picking an element scrolls the panel into view, and Chromium screenshots a scrolled
+    // document as blank under --virtual-time-budget. The assertions above have already run
+    // against real layout; this only keeps the saved screenshot readable.
+    window.scrollTo(0, 0);
+    await h.settle(50);
+
+    return { failing: failing, inert: inert, refused: refused, picked: gid, sections: captions };
+  `,
+
   // Walks the real flow end to end: files are loaded and parsed on the validate
   // page, and the builder then picks one of them out of the shared store.
   builder: `
@@ -132,12 +266,84 @@ const SCENARIOS = {
     }, "builder model picker");
 
     await h.waitFor(function () { return document.querySelector(".tree [role=treeitem]"); }, "model tree");
+
+    // Importing an IDS the builder only partly understands: one editable rule that also carries a
+    // facet outside its model, and one specification it must hold read-only rather than mangle.
+    var ids = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://standards.buildingsmart.org/IDS">',
+      '<info><title>Client standard</title><author>bim@client.example</author></info>',
+      '<specifications>',
+      '<specification name="Walls are named" ifcVersion="IFC2X3 IFC4">',
+      '<applicability maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute>',
+      '<classification><value><simpleValue>21.22</simpleValue></value></classification></requirements>',
+      '</specification>',
+      '<specification name="Classified elements are named" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded"><classification><system><simpleValue>NL/SfB</simpleValue></system></classification></applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
+      '</specification>',
+      '<specification name="Doors are named" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded"><entity><name><simpleValue>IFCDOOR</simpleValue></name></entity></applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
+      '</specification>',
+      '</specifications></ids>'
+    ].join("\\n");
+
+    var idsInput = document.querySelector('input[aria-label="Import an IDS file"]');
+    if (!idsInput) throw new Error("the builder offers no way to import an IDS file");
+    var idsTransfer = new DataTransfer();
+    idsTransfer.items.add(new File([ids], "client.ids", { type: "text/xml" }));
+    idsInput.files = idsTransfer.files;
+    idsInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await h.waitFor(function () {
+      return h.all("article.rule").length === 3 ? true : null;
+    }, "three imported specification cards");
+
+    var cards = h.all("article.rule").map(function (card) {
+      var editable = card.querySelector(".rule-title");
+      var readOnly = card.querySelector(".rule-title-static");
+      return editable ? editable.value : readOnly ? readOnly.textContent.trim() : "";
+    });
+    if (cards.join("|") !== "Walls are named|Classified elements are named|Doors are named") {
+      throw new Error("imported specifications lost their document order: " + JSON.stringify(cards));
+    }
+
+    // The refused one must be visibly inert, not quietly missing from the list.
+    var refusedCard = document.querySelector("article.rule.refused");
+    if (!refusedCard) throw new Error("a specification that cannot be edited was not marked as such");
+    if (refusedCard.querySelector(".rule-title")) {
+      throw new Error("a specification the builder cannot show offered an editable name");
+    }
+    var keptBadges = h.all(".badge.kept").map(function (n) { return n.textContent; });
+    if (keptBadges.indexOf("1 kept") === -1) {
+      throw new Error("a rule carrying a preserved requirement did not say so: " + JSON.stringify(keptBadges));
+    }
+
+    // The whole point: what the builder could not read still leaves in the exported document.
+    var exported = h.text(".xml");
+    if (exported.indexOf("<classification>") === -1) {
+      throw new Error("re-export dropped the facets the builder could not represent");
+    }
+    if (exported.indexOf('name="Classified elements are named"') === -1) {
+      throw new Error("re-export dropped the specification the builder refused to edit");
+    }
+    if (exported.indexOf("bim@client.example") === -1) {
+      throw new Error("re-export dropped the imported document's own metadata");
+    }
+
+    window.scrollTo(0, 0);
+    await h.settle(50);
+
     return {
       fixtureBytes: bytes.byteLength,
       picked: picker.options[picker.selectedIndex].textContent,
       tally: h.text(".explorer .card header .tally"),
       source: h.text(".srcfile"),
-      treeRoots: h.all(".tree > [role=treeitem] > .rowline .row-name").map(function (n) { return n.textContent; })
+      treeRoots: h.all(".tree > [role=treeitem] > .rowline .row-name").map(function (n) { return n.textContent; }),
+      imported: cards,
+      kept: keptBadges
     };
   `,
 };

@@ -1,8 +1,15 @@
-import { Fragment, useRef, useState, type ChangeEvent } from "react";
-import type { ElementResult, EngineId } from "@ifc-qa/shared-types";
-import { parseFile, validateParsedModels, type ParseProgress } from "../local/parseAndValidate.js";
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import type { EngineId } from "@ifc-qa/shared-types";
+import {
+  parseFile,
+  validateParsedModels,
+  type ParseProgress,
+  type SpecificationSummary,
+} from "../local/parseAndValidate.js";
 import { useLoadedModels } from "../state/loadedModels.js";
-import { IssueTable } from "../components/IssueTable";
+import { CheckSummary } from "../components/CheckSummary";
+import { ElementDetails } from "../components/ElementDetails";
+import type { IssueRow } from "../components/IssueTable";
 import { ModelStructureTree } from "../components/ModelStructureTree";
 
 export function IfcCheckerPage() {
@@ -10,7 +17,8 @@ export function IfcCheckerPage() {
 
   const [engine, setEngine] = useState<EngineId | "">("");
   const [idsFile, setIdsFile] = useState<File | null>(null);
-  const [results, setResults] = useState<Array<ElementResult & { fileName: string }> | null>(null);
+  const [results, setResults] = useState<SpecificationSummary[] | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<IssueRow | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [isParsing, setIsParsing] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
@@ -42,10 +50,28 @@ export function IfcCheckerPage() {
   if (parsed.length === 0) checkRequirements.push("parse at least one IFC file");
   if (idsFile === null) checkRequirements.push("choose an IDS rule set file");
 
+  // Scanned on demand rather than indexed up front: a click can afford one pass over a model's
+  // elements, whereas a GlobalId index for every loaded file is memory held permanently for a
+  // lookup that may never happen. The model key is what joins here — file names collide.
+  const selectedElement = useMemo(() => {
+    if (selectedIssue === null) return null;
+    const model = models.find((entry) => entry.key === selectedIssue.modelKey);
+    return model?.elements.find((element) => element.globalId === selectedIssue.elementGlobalId) ?? null;
+  }, [selectedIssue, models]);
+
+  const detailsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (selectedIssue === null) return;
+    // block: "nearest" so picking a second element while the panel is already on screen
+    // doesn't yank the page around.
+    detailsRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [selectedIssue]);
+
   // Results describe the file set as it was when Check ran; any change to that
   // set makes them a claim about something the user is no longer looking at.
   function dropStaleResults() {
     setResults(null);
+    setSelectedIssue(null);
     setCheckError(null);
   }
 
@@ -120,164 +146,281 @@ export function IfcCheckerPage() {
     setEngine("");
     setIdsFile(null);
     clearModels();
-    setResults(null);
-    setCheckError(null);
+    dropStaleResults();
     setExpandedFiles(new Set());
     setResetKey((key) => key + 1);
   }
 
+  // Each step header carries its own state, so the page can be read top to bottom
+  // without opening anything: where the files stand, which rule set is loaded.
+  function loadState(): { text: string; tone: "idle" | "pending" | "ready" } {
+    if (models.length === 0) return { text: "No files chosen", tone: "idle" };
+    const files = `${models.length} ${models.length === 1 ? "file" : "files"}`;
+    if (engine === "") return { text: `${files} · no engine`, tone: "pending" };
+    if (unparsed.length > 0) return { text: `${files} · ${unparsed.length} to parse`, tone: "pending" };
+    return { text: `${files} · ${engine}`, tone: "ready" };
+  }
+
+  const load = loadState();
+
   return (
-    <section>
-      <h1>Ifc Checker</h1>
-      <p>Parse and validate IFC files entirely in your browser — no server, no upload.</p>
+    <section className="checker">
+      <header className="checker-head">
+        <h1>IFC Checker</h1>
+        <p className="lede">
+          Parse and validate IFC files entirely in your browser — no server, no upload.
+        </p>
+      </header>
 
-      <h2>1. Load your IFC files</h2>
-      <p>
-        Parse them once here. Checking them against a rule set, or building one in the rule builder,
-        then works from what is already in memory.
-      </p>
+      <section className="step">
+        <header className="step-head">
+          <span className="step-no" aria-hidden="true">
+            1
+          </span>
+          <div className="step-title">
+            <h2>Load your IFC files</h2>
+            <p>
+              Parse them once here. Checking them against a rule set, or building one in the rule
+              builder, then works from what is already in memory.
+            </p>
+          </div>
+          <span className="step-state" data-tone={load.tone}>
+            {load.text}
+          </span>
+        </header>
 
-      <fieldset>
-        <legend>Engine</legend>
-        <label>
-          <input
-            type="radio"
-            name="local-engine"
-            value="web-ifc"
-            checked={engine === "web-ifc"}
-            onChange={() => setEngine("web-ifc")}
-          />
-          web-ifc
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="local-engine"
-            value="ifc-lite"
-            checked={engine === "ifc-lite"}
-            onChange={() => setEngine("ifc-lite")}
-          />
-          ifc-lite
-        </label>
-      </fieldset>
+        <div className="step-body">
+          <div className="control-row">
+            <fieldset className="segmented">
+              <legend>Engine</legend>
+              <div className="segments">
+                <label>
+                  <input
+                    type="radio"
+                    name="local-engine"
+                    value="web-ifc"
+                    checked={engine === "web-ifc"}
+                    onChange={() => setEngine("web-ifc")}
+                  />
+                  web-ifc
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="local-engine"
+                    value="ifc-lite"
+                    checked={engine === "ifc-lite"}
+                    onChange={() => setEngine("ifc-lite")}
+                  />
+                  ifc-lite
+                </label>
+              </div>
+            </fieldset>
 
-      <label htmlFor="local-ifc-files">IFC files</label>
-      <input id="local-ifc-files" type="file" multiple accept=".ifc" onChange={handleIfcFilesChange} />
+            <div className="file-field">
+              <label htmlFor="local-ifc-files">IFC files</label>
+              <input
+                id="local-ifc-files"
+                type="file"
+                multiple
+                accept=".ifc"
+                onChange={handleIfcFilesChange}
+              />
+            </div>
+          </div>
 
-      {models.length > 0 && (
-        <table>
-          <caption>IFC files</caption>
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Status</th>
-              <th>Parse time (ms)</th>
-              <th>Elements</th>
-              <th>Error</th>
-              <th>Structure</th>
-              <th>Remove</th>
-            </tr>
-          </thead>
-          <tbody>
-            {models.map((model) => {
-              const isExpanded = expandedFiles.has(model.key);
-              return (
-                <Fragment key={model.key}>
+          {models.length > 0 && (
+            <div className="table-frame">
+              <table className="files-table">
+                <caption>IFC files</caption>
+                <thead>
                   <tr>
-                    <td>{model.fileName}</td>
-                    <td>{model.status}</td>
-                    <td>{model.parseMs !== null ? Math.round(model.parseMs) : "—"}</td>
-                    <td>{model.status === "succeeded" ? model.elements.length : "—"}</td>
-                    <td>{model.errorMessage ?? ""}</td>
-                    <td>
-                      {model.modelStructure && (
-                        <button
-                          type="button"
-                          className="secondary"
-                          aria-expanded={isExpanded}
-                          onClick={() => toggleStructureExpanded(model.key)}
-                        >
-                          {isExpanded
-                            ? `Hide structure for ${model.fileName}`
-                            : `Show structure for ${model.fileName}`}
-                        </button>
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="remove-file"
-                        aria-label={`Remove ${model.fileName}`}
-                        disabled={isParsing}
-                        onClick={() => handleRemoveIfcFile(model.key)}
-                      >
-                        ×
-                      </button>
-                    </td>
+                    <th>File</th>
+                    <th>Status</th>
+                    <th className="num">Parse time</th>
+                    <th className="num">Elements</th>
+                    <th className="col-actions">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                  {isExpanded && model.modelStructure && (
-                    <tr>
-                      <td colSpan={7}>
-                        <ModelStructureTree node={model.modelStructure} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+                </thead>
+                <tbody>
+                  {models.map((model) => {
+                    const isExpanded = expandedFiles.has(model.key);
+                    return (
+                      <Fragment key={model.key}>
+                        <tr>
+                          <td>
+                            <span className="file-name">{model.fileName}</span>
+                            {model.errorMessage && (
+                              <span className="file-error">{model.errorMessage}</span>
+                            )}
+                          </td>
+                          <td>
+                            <span className="pill" data-status={model.status}>
+                              {model.status}
+                            </span>
+                          </td>
+                          <td className="num">
+                            {model.parseMs !== null ? `${Math.round(model.parseMs)} ms` : "—"}
+                          </td>
+                          <td className="num">
+                            {model.status === "succeeded"
+                              ? model.elements.length.toLocaleString()
+                              : "—"}
+                          </td>
+                          <td className="col-actions">
+                            <div className="row-actions">
+                              {model.modelStructure && (
+                                <button
+                                  type="button"
+                                  className="ghost-btn"
+                                  aria-expanded={isExpanded}
+                                  aria-label={
+                                    isExpanded
+                                      ? `Hide structure for ${model.fileName}`
+                                      : `Show structure for ${model.fileName}`
+                                  }
+                                  onClick={() => toggleStructureExpanded(model.key)}
+                                >
+                                  <span className="caret" data-open={isExpanded} aria-hidden="true">
+                                    ▸
+                                  </span>
+                                  Structure
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="remove-file"
+                                aria-label={`Remove ${model.fileName}`}
+                                disabled={isParsing}
+                                onClick={() => handleRemoveIfcFile(model.key)}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && model.modelStructure && (
+                          <tr className="drawer-row">
+                            <td colSpan={5}>
+                              <ModelStructureTree node={model.modelStructure} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-      <button type="button" disabled={!canParse} onClick={handleParse}>
-        {isParsing ? "Parsing..." : "Parse files"}
-      </button>{" "}
-      <button type="button" className="secondary" disabled={isParsing} onClick={handleReset}>
-        Reset
-      </button>
+          <div className="step-actions">
+            <button type="button" disabled={!canParse} onClick={handleParse}>
+              {isParsing ? "Parsing..." : "Parse files"}
+            </button>
+            <button type="button" className="secondary" disabled={isParsing} onClick={handleReset}>
+              Reset
+            </button>
 
-      {!isParsing && parseRequirements.length > 0 && <p>To parse: {parseRequirements.join(", ")}.</p>}
-      {!isParsing && parseRequirements.length === 0 && unparsed.length === 0 && (
-        <p>
-          All {parsed.length} {parsed.length === 1 ? "file is" : "files are"} parsed with {engine}.
-        </p>
-      )}
+            {!isParsing && parseRequirements.length > 0 && (
+              <p className="requirement">To parse: {parseRequirements.join(", ")}.</p>
+            )}
+            {!isParsing && parseRequirements.length === 0 && unparsed.length === 0 && (
+              <p className="requirement done">
+                All {parsed.length} {parsed.length === 1 ? "file is" : "files are"} parsed with{" "}
+                {engine}.
+              </p>
+            )}
+          </div>
 
-      {isParsing && progress && (
-        <p role="status">
-          Parsing {progress.index} of {progress.total}: {progress.fileName}… ({elapsedSeconds}s elapsed)
-        </p>
-      )}
+          {isParsing && progress && (
+            <p role="status" className="progress">
+              <span className="spinner" aria-hidden="true" />
+              Parsing {progress.index} of {progress.total}: {progress.fileName}… ({elapsedSeconds}s
+              elapsed)
+            </p>
+          )}
+        </div>
+      </section>
 
-      <h2>2. Check them against a rule set</h2>
+      <section className="step">
+        <header className="step-head">
+          <span className="step-no" aria-hidden="true">
+            2
+          </span>
+          <div className="step-title">
+            <h2>Check them against a rule set</h2>
+            <p>An IDS file describes what the model has to contain. Every check runs locally.</p>
+          </div>
+          <span className="step-state" data-tone={idsFile ? "ready" : "idle"}>
+            {idsFile ? idsFile.name : "No rule set chosen"}
+          </span>
+        </header>
 
-      <label htmlFor="local-ids-file">IDS rule set (XML)</label>
-      <input
-        key={`ids-${resetKey}`}
-        id="local-ids-file"
-        type="file"
-        accept=".xml"
-        onChange={(e) => {
-          setIdsFile(e.target.files?.[0] ?? null);
-          dropStaleResults();
-        }}
-      />
+        <div className="step-body">
+          <div className="file-field">
+            <label htmlFor="local-ids-file">IDS rule set (.ids or .xml)</label>
+            <input
+              key={`ids-${resetKey}`}
+              id="local-ids-file"
+              type="file"
+              // An IDS document is XML, but it is normally saved as .ids — a picker
+              // filtered to .xml alone hides the very files it is asking for.
+              accept=".ids,.xml,application/xml,text/xml"
+              onChange={(e) => {
+                setIdsFile(e.target.files?.[0] ?? null);
+                dropStaleResults();
+              }}
+            />
+          </div>
 
-      <button type="button" disabled={!canCheck} onClick={handleCheck}>
-        {isChecking ? "Checking..." : "Check files"}
-      </button>
+          <div className="step-actions">
+            <button type="button" disabled={!canCheck} onClick={handleCheck}>
+              {isChecking ? "Checking..." : "Check files"}
+            </button>
 
-      {!canCheck && !isChecking && checkRequirements.length > 0 && (
-        <p>To check: {checkRequirements.join(", ")}.</p>
-      )}
+            {!canCheck && !isChecking && checkRequirements.length > 0 && (
+              <p className="requirement">To check: {checkRequirements.join(", ")}.</p>
+            )}
+          </div>
 
-      {checkError && <p role="alert">{checkError}</p>}
+          {checkError && <p role="alert">{checkError}</p>}
+        </div>
+      </section>
 
       {results && (
-        <>
-          <h2>Issues</h2>
-          <IssueTable results={results} />
-        </>
+        <section className="step step-results">
+          <header className="step-head">
+            <span className="step-no" aria-hidden="true">
+              3
+            </span>
+            <div className="step-title">
+              <h2>Results</h2>
+              <p>One row per specification. Open a specification to see the elements it failed.</p>
+            </div>
+          </header>
+
+          <div className="step-body">
+            {/* The panel opens inside the table, under the row that was clicked, so
+                reading an element never costs a trip to the bottom of the page and back. */}
+            <CheckSummary
+              summaries={results}
+              onSelectElement={setSelectedIssue}
+              selectedElementId={selectedIssue?.id ?? null}
+              renderDetails={(row) => (
+                <div ref={detailsRef}>
+                  <ElementDetails
+                    element={selectedElement}
+                    fileName={row.fileName}
+                    onClose={() => setSelectedIssue(null)}
+                  />
+                </div>
+              )}
+            />
+          </div>
+        </section>
       )}
     </section>
   );

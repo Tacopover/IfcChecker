@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The three specification shapes from buildingSMART's "Demo - BIM basis ILS" example, trimmed to
+  a readable size. Two of them select their elements in ways this parser cannot represent — an
+  attribute-value filter and an entity-name enumeration — and before those were reported, both
+  parsed into an empty entity list, matched nothing, and reported the model clean.
+-->
+<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd" xmlns="http://standards.buildingsmart.org/IDS">
+  <info>
+    <title>Partly understood rule set</title>
+    <description>Real-world specification shapes that this parser only partly represents.</description>
+  </info>
+  <specifications>
+    <specification name="lokale positie" ifcVersion="IFC2X3">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity>
+          <name><simpleValue>IFCBUILDINGELEMENTPROXY</simpleValue></name>
+        </entity>
+        <attribute>
+          <name><simpleValue>Name</simpleValue></name>
+          <value>
+            <xs:restriction base="xs:string">
+              <xs:pattern value=".*[nN][uU][lL][pP][uU][nN][tT].*" />
+            </xs:restriction>
+          </value>
+        </attribute>
+      </applicability>
+      <requirements>
+        <attribute>
+          <name><simpleValue>Description</simpleValue></name>
+        </attribute>
+      </requirements>
+    </specification>
+
+    <specification name="Bouwlaagindeling en -naamgeving" ifcVersion="IFC2X3">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity>
+          <name><simpleValue>IFCBUILDINGSTOREY</simpleValue></name>
+        </entity>
+      </applicability>
+      <requirements>
+        <attribute>
+          <name><simpleValue>Name</simpleValue></name>
+        </attribute>
+      </requirements>
+    </specification>
+
+    <specification name="Classificatiesystematiek" ifcVersion="IFC4">
+      <applicability maxOccurs="unbounded">
+        <entity>
+          <name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCWALL" />
+              <xs:enumeration value="IFCBUILDINGELEMENTPROXY" />
+            </xs:restriction>
+          </name>
+        </entity>
+      </applicability>
+      <requirements>
+        <classification>
+          <system><simpleValue>NL-SfB</simpleValue></system>
+        </classification>
+      </requirements>
+    </specification>
+  </specifications>
+</ids>

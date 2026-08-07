@@ -8,13 +8,40 @@ const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
   parseWebIfcBuffer: vi.fn(),
   parseIfcLiteBuffer: vi.fn(),
 }));
-const { validateElements, parseIdsXml } = vi.hoisted(() => ({
-  validateElements: vi.fn(),
+const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => ({
+  validateBySpecification: vi.fn(),
   parseIdsXml: vi.fn(),
+  isEvaluable: vi.fn(),
 }));
 
 vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
-vi.mock("@ifc-qa/ids-validator", () => ({ validateElements, parseIdsXml }));
+vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecification, parseIdsXml, isEvaluable }));
+
+/** One specification's outcome, as the validator hands it to the page. */
+function outcome(violations: Array<Record<string, unknown>>, overrides: Record<string, unknown> = {}) {
+  return {
+    name: "fake-spec",
+    checked: true,
+    unsupported: [],
+    applicableCount: violations.length,
+    passedCount: 0,
+    failedCount: violations.length,
+    violations,
+    ...overrides,
+  };
+}
+
+function violation(overrides: Record<string, unknown> = {}) {
+  return {
+    elementGlobalId: "g1",
+    elementType: "IFCWALL",
+    elementName: "Wall-1",
+    ruleId: "naming-prefix",
+    severity: "error",
+    message: "Name must start with 'W-'",
+    ...overrides,
+  };
+}
 
 function renderPage() {
   return render(
@@ -48,14 +75,17 @@ async function parseFiles(user: ReturnType<typeof userEvent.setup>, ...files: Fi
 
 beforeEach(() => {
   // resetAllMocks (not clearAllMocks): a test whose IDS file has no
-  // specifications throws before validateElements is ever called (see
+  // specifications throws before validateBySpecification is ever called (see
   // "no specifications" test below), leaving its queued
   // mockReturnValueOnce unconsumed — clearAllMocks only resets call
   // history, not that queue, so the leftover value would otherwise leak
   // into whichever test runs next and desync its call-by-call mock
   // sequencing.
   vi.resetAllMocks();
-  parseIdsXml.mockReturnValue([{ name: "fake-spec", applicabilityEntityNames: [], requirements: [] }]);
+  parseIdsXml.mockReturnValue([
+    { name: "fake-spec", applicabilityEntityNames: ["IFCWALL"], requirements: [], unsupported: [], applicabilityComplete: true },
+  ]);
+  isEvaluable.mockReturnValue(true);
 });
 
 describe("IfcCheckerPage", () => {
@@ -82,7 +112,7 @@ describe("IfcCheckerPage", () => {
     const check = screen.getByRole("button", { name: "Check files" });
     expect(check).toBeDisabled();
 
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     expect(check).toBeDisabled();
 
     await parseFiles(user, makeFile("model-a.ifc"));
@@ -103,7 +133,7 @@ describe("IfcCheckerPage", () => {
     expect(screen.queryByText(/To parse:/i)).not.toBeInTheDocument();
     expect(screen.getByText(/To check: choose an IDS rule set file/i)).toBeInTheDocument();
 
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     expect(screen.queryByText(/To check:/i)).not.toBeInTheDocument();
   });
 
@@ -153,22 +183,22 @@ describe("IfcCheckerPage", () => {
 
   it("resets the engine, files, and results back to the empty state", async () => {
     parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
-    validateElements.mockReturnValueOnce([]);
+    validateBySpecification.mockReturnValueOnce([outcome([], { applicableCount: 0, failedCount: 0 })]);
 
     const user = userEvent.setup();
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
-    await screen.findByRole("heading", { name: "Issues" });
+    await screen.findByRole("heading", { name: "Results" });
 
     await user.click(screen.getByRole("button", { name: "Reset" }));
 
     expect(screen.queryByRole("table", { name: "IFC files" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Issues" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Results" })).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "web-ifc" })).not.toBeChecked();
-    expect((screen.getByLabelText("IDS rule set (XML)") as HTMLInputElement).files).toHaveLength(0);
+    expect((screen.getByLabelText("IDS rule set (.ids or .xml)") as HTMLInputElement).files).toHaveLength(0);
     expect((screen.getByLabelText(/IFC files/) as HTMLInputElement).files).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Parse files" })).toBeDisabled();
   });
@@ -178,9 +208,7 @@ describe("IfcCheckerPage", () => {
       elements: [{ globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} }],
       parseMs: 12,
     });
-    validateElements.mockReturnValueOnce([
-      { elementGlobalId: "g1", elementType: "IFCWALL", ruleId: "naming-prefix", severity: "error", message: "Name must start with 'W-'" },
-    ]);
+    validateBySpecification.mockReturnValueOnce([outcome([violation()])]);
 
     const user = userEvent.setup();
     renderPage();
@@ -190,53 +218,144 @@ describe("IfcCheckerPage", () => {
     expect(within(table).getByText("succeeded")).toBeInTheDocument();
     expect(within(table).getByText("1")).toBeInTheDocument();
     // Nothing has been checked yet, so nothing may be claimed about compliance.
-    expect(screen.queryByRole("heading", { name: "Issues" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Results" })).not.toBeInTheDocument();
 
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
-    expect(await screen.findByText("naming-prefix")).toBeInTheDocument();
-    expect(screen.getByText("Name must start with 'W-'")).toBeInTheDocument();
+    expect(await screen.findByText("Name must start with 'W-'")).toBeInTheDocument();
+    expect(screen.getByText("Wall-1")).toBeInTheDocument();
   });
 
   it("checks a second rule set against the files already in memory, without parsing them again", async () => {
     parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
-    validateElements.mockReturnValueOnce([]).mockReturnValueOnce([
-      { elementGlobalId: "g1", elementType: "IFCWALL", ruleId: "second-set", severity: "error", message: "Fails the newer rules" },
-    ]);
+    validateBySpecification
+      .mockReturnValueOnce([outcome([], { applicableCount: 0, failedCount: 0 })])
+      .mockReturnValueOnce([
+        outcome([violation({ ruleId: "second-set", message: "Fails the newer rules" })], { name: "second-set" }),
+      ]);
 
     const user = userEvent.setup();
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
-    await screen.findByRole("heading", { name: "Issues" });
+    await screen.findByRole("heading", { name: "Results" });
 
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("stricter.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("stricter.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
-    expect(await screen.findByText("second-set")).toBeInTheDocument();
+    expect(await screen.findByText("Fails the newer rules")).toBeInTheDocument();
     expect(parseWebIfcBuffer).toHaveBeenCalledTimes(1);
   });
 
   it("drops results that no longer describe the current file set", async () => {
     parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
-    validateElements.mockReturnValueOnce([
-      { elementGlobalId: "g1", elementType: "IFCWALL", ruleId: "naming-prefix", severity: "error", message: "Name must start with 'W-'" },
+    validateBySpecification.mockReturnValueOnce([outcome([violation()])]);
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await parseFiles(user, makeFile("model-a.ifc"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
+    await user.click(screen.getByRole("button", { name: "Check files" }));
+    expect(await screen.findByText("Name must start with 'W-'")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove model-a.ifc" }));
+
+    expect(screen.queryByRole("heading", { name: "Results" })).not.toBeInTheDocument();
+  });
+
+  it("opens the full attributes and property sets of a failing element when it is picked", async () => {
+    parseWebIfcBuffer.mockResolvedValueOnce({
+      elements: [
+        {
+          globalId: "g1",
+          ifcType: "IFCWALL",
+          predefinedType: "STANDARD",
+          name: "Wall-1",
+          attributes: { Tag: "W-001" },
+          propertySets: { Pset_WallCommon: { FireRating: null, IsExternal: true } },
+        },
+      ],
+      parseMs: 12,
+    });
+    validateBySpecification.mockReturnValueOnce([outcome([violation()])]);
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await parseFiles(user, makeFile("model-a.ifc"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
+    await user.click(screen.getByRole("button", { name: "Check files" }));
+    await screen.findByRole("heading", { name: "Results" });
+
+    await user.click(screen.getByRole("button", { name: /Wall-1/ }));
+
+    const details = screen.getByRole("complementary", { name: "Element details" });
+    expect(within(details).getByText("g1")).toBeInTheDocument();
+    expect(within(details).getByText("Tag")).toBeInTheDocument();
+    expect(within(details).getByText("W-001")).toBeInTheDocument();
+    expect(within(details).getByText("IsExternal")).toBeInTheDocument();
+    expect(within(details).getByText("FireRating").closest("tr")).toHaveTextContent("not set");
+    expect(within(details).getByText("model-a.ifc")).toBeInTheDocument();
+
+    await user.click(within(details).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("complementary", { name: "Element details" })).not.toBeInTheDocument();
+  });
+
+  // The store keys models by name+size+lastModified precisely because names collide, so the
+  // details panel has to resolve the element through that key rather than the file name.
+  it("shows the element from the file the issue came from when two files share a name", async () => {
+    const wallIn = (name: string) => ({
+      globalId: "g1",
+      ifcType: "IFCWALL",
+      predefinedType: null,
+      name,
+      attributes: {},
+      propertySets: {},
+    });
+    parseWebIfcBuffer
+      .mockResolvedValueOnce({ elements: [wallIn("Wall in the first file")], parseMs: 5 })
+      .mockResolvedValueOnce({ elements: [wallIn("Wall in the second file")], parseMs: 5 });
+    validateBySpecification
+      .mockReturnValueOnce([outcome([], { applicableCount: 1, passedCount: 1, failedCount: 0 })])
+      .mockReturnValueOnce([outcome([violation({ elementName: "Wall in the second file" })])]);
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await parseFiles(
+      user,
+      new File(["ISO-10303-21;"], "model.ifc"),
+      new File(["ISO-10303-21; longer, so the size differs"], "model.ifc")
+    );
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
+    await user.click(screen.getByRole("button", { name: "Check files" }));
+    await screen.findByRole("heading", { name: "Results" });
+
+    await user.click(screen.getByRole("button", { name: /Wall in the second file/ }));
+
+    const details = screen.getByRole("complementary", { name: "Element details" });
+    expect(within(details).getByRole("heading", { name: "Wall in the second file" })).toBeInTheDocument();
+  });
+
+  it("reports a specification that matched no elements rather than showing a clean result", async () => {
+    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    validateBySpecification.mockReturnValueOnce([
+      outcome([], { name: "Walls are fire rated", applicableCount: 0, passedCount: 0, failedCount: 0 }),
     ]);
 
     const user = userEvent.setup();
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("rules.xml", "<ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
-    expect(await screen.findByText("naming-prefix")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Remove model-a.ifc" }));
-
-    expect(screen.queryByRole("heading", { name: "Issues" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("nothing was checked");
+    expect(screen.getByText("matched nothing")).toBeInTheDocument();
   });
 
   it("lets the user expand a parsed file's row to see its project/site/building/storey structure", async () => {
@@ -310,11 +429,11 @@ describe("IfcCheckerPage", () => {
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    await user.upload(screen.getByLabelText("IDS rule set (XML)"), makeFile("not-really-ids.xml", "<not-ids/>"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("not-really-ids.xml", "<not-ids/>"));
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("doesn't look like a valid IDS rule set");
-    expect(screen.queryByRole("heading", { name: "Issues" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Results" })).not.toBeInTheDocument();
   });
 
   it("shows live progress naming the current file and its position in the batch while parsing, then clears it", async () => {

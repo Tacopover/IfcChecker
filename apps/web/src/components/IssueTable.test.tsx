@@ -1,15 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ElementResult } from "@ifc-qa/shared-types";
-import { IssueTable } from "./IssueTable";
+import { IssueTable, type IssueRow } from "./IssueTable";
 import { runResultsFixture } from "../test/mocks/fixtures";
 
-function makeManyResults(count: number): Array<ElementResult & { fileName: string }> {
+const fixtureRows: IssueRow[] = runResultsFixture.results.map((result) => ({
+  ...result,
+  modelKey: "model-a.ifc:1:1",
+  elementName: null,
+}));
+
+function makeManyResults(count: number): IssueRow[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `r${i}`,
     fileJobId: "fj1",
+    modelKey: "model.ifc:1:1",
     elementGlobalId: `g${i}`,
+    elementName: `Wall ${i}`,
     elementType: "IFCWALL",
     ruleId: "naming-prefix",
     severity: "error" as const,
@@ -20,7 +27,7 @@ function makeManyResults(count: number): Array<ElementResult & { fileName: strin
 
 describe("IssueTable", () => {
   it("renders every result row with its file, element type, rule, severity, and message", () => {
-    render(<IssueTable results={runResultsFixture.results} />);
+    render(<IssueTable results={fixtureRows} />);
 
     expect(screen.getByText("IFCWALL")).toBeInTheDocument();
     expect(screen.getByText("naming-prefix")).toBeInTheDocument();
@@ -29,9 +36,65 @@ describe("IssueTable", () => {
     expect(screen.getByText("fire-rating-required")).toBeInTheDocument();
   });
 
+  // Without this the rows for two failing walls are identical text, and the table
+  // says a wall is wrong without saying which one.
+  it("identifies which element each row is about", () => {
+    render(<IssueTable results={makeManyResults(2)} />);
+
+    expect(screen.getByText("Wall 0")).toBeInTheDocument();
+    expect(screen.getByText("g0")).toBeInTheDocument();
+    expect(screen.getByText("Wall 1")).toBeInTheDocument();
+    expect(screen.getByText("g1")).toBeInTheDocument();
+  });
+
+  it("falls back to the GlobalId when the element has no name", () => {
+    render(<IssueTable results={fixtureRows} />);
+
+    expect(screen.getAllByText("(unnamed)")).toHaveLength(2);
+    expect(screen.getByText("g1")).toBeInTheDocument();
+  });
+
+  it("hands the whole row back when an element is picked", async () => {
+    const user = userEvent.setup();
+    const onSelectElement = vi.fn();
+    render(<IssueTable results={makeManyResults(1)} onSelectElement={onSelectElement} />);
+
+    await user.click(screen.getByRole("button", { name: /Wall 0/ }));
+
+    expect(onSelectElement).toHaveBeenCalledWith(
+      expect.objectContaining({ elementGlobalId: "g0", modelKey: "model.ifc:1:1" })
+    );
+  });
+
+  it("does not offer elements as buttons when nothing can be done with the selection", () => {
+    render(<IssueTable results={makeManyResults(1)} />);
+
+    expect(screen.queryByRole("button", { name: /Wall 0/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Wall 0")).toBeInTheDocument();
+  });
+
+  it("marks the selected element", () => {
+    render(
+      <IssueTable results={makeManyResults(2)} onSelectElement={vi.fn()} selectedElementId="r1" />
+    );
+
+    expect(screen.getByRole("button", { name: /Wall 1/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Wall 0/ })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("filters rows by element name or GlobalId", async () => {
+    const user = userEvent.setup();
+    render(<IssueTable results={makeManyResults(3)} />);
+
+    await user.type(screen.getByLabelText("Filter by element name or GlobalId"), "g2");
+
+    expect(screen.queryByText("Wall 0")).not.toBeInTheDocument();
+    expect(screen.getByText("Wall 2")).toBeInTheDocument();
+  });
+
   it("filters rows by element type", async () => {
     const user = userEvent.setup();
-    render(<IssueTable results={runResultsFixture.results} />);
+    render(<IssueTable results={fixtureRows} />);
 
     await user.type(screen.getByLabelText("Filter by element type"), "IFCDOOR");
 
@@ -41,7 +104,7 @@ describe("IssueTable", () => {
 
   it("filters rows by severity", async () => {
     const user = userEvent.setup();
-    render(<IssueTable results={runResultsFixture.results} />);
+    render(<IssueTable results={fixtureRows} />);
 
     await user.selectOptions(screen.getByLabelText("Filter by severity"), "warning");
 
@@ -49,13 +112,28 @@ describe("IssueTable", () => {
     expect(screen.getByText("fire-rating-required")).toBeInTheDocument();
   });
 
+  it("drops the rule column and its filter when every row shares one rule", () => {
+    render(<IssueTable results={makeManyResults(1)} hideRuleColumn />);
+
+    expect(screen.queryByLabelText("Filter by rule id")).not.toBeInTheDocument();
+    expect(screen.queryByText("naming-prefix")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when no rows match the current filters", async () => {
     const user = userEvent.setup();
-    render(<IssueTable results={runResultsFixture.results} />);
+    render(<IssueTable results={fixtureRows} />);
 
     await user.type(screen.getByLabelText("Filter by rule id"), "no-such-rule");
 
     expect(screen.getByText("No issues match the current filters.")).toBeInTheDocument();
+  });
+
+  // "No issues match the current filters" blamed filters the user never set, for the one
+  // case that deserves a plain answer.
+  it("says the elements passed when there were no issues to begin with", () => {
+    render(<IssueTable results={[]} />);
+
+    expect(screen.getByText("Every element this rule applied to passed.")).toBeInTheDocument();
   });
 
   it("paginates instead of rendering every row when there are more issues than fit on one page", async () => {

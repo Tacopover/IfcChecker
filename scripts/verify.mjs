@@ -39,6 +39,14 @@ const stages = [];
 if (!FAST) stages.push(["build + typecheck", "corepack", ["pnpm", "-r", "run", "build"]]);
 stages.push(["unit + component tests", "corepack", ["pnpm", "-r", "run", "test"]]);
 if (VISUAL) stages.push(["browser render check", process.execPath, ["scripts/visual-check.mjs"]]);
+// The results section is where a wrong answer is most expensive — a rule that silently
+// checked nothing reads as a passing model — so it is driven end to end in a real browser.
+if (VISUAL)
+  stages.push([
+    "browser validate check",
+    process.execPath,
+    ["scripts/visual-check.mjs", "--scenario", "validate"],
+  ]);
 
 const results = [];
 for (const [label, command, commandArgs] of stages) {

@@ -1,4 +1,10 @@
-import { IfcParser, extractPropertiesOnDemand, extractAllEntityAttributes, type IfcDataStore } from "@ifc-lite/parser";
+import {
+  IfcParser,
+  extractPropertiesOnDemand,
+  extractTypePropertiesOnDemand,
+  extractAllEntityAttributes,
+  type IfcDataStore,
+} from "@ifc-lite/parser";
 import { IfcTypeEnumToString, type SpatialNode } from "@ifc-lite/data";
 import type { ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
@@ -84,15 +90,25 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
 
     for (const expressId of expressIds) {
       elementTypeByExpressId.set(expressId, typeName);
-      const psets = extractPropertiesOnDemand(store, expressId);
+      // Type first, instance second: a property the model states once on the
+      // IfcTypeObject reaches its occurrences only through IFCRELDEFINESBYTYPE,
+      // and IFC overrides per *property*, not per set — so a set named on both
+      // levels ends up the union of the two, the occurrence's own value winning
+      // on any shared key. extractTypePropertiesOnDemand walks the type
+      // relationship and reads both the type's inline HasPropertySets and any
+      // IFC4 IFCRELDEFINESBYPROPERTIES aimed at it.
       const propertySets: Record<string, Record<string, string | number | boolean | null>> = {};
-      for (const pset of psets) {
-        const props: Record<string, string | number | boolean | null> = {};
-        for (const prop of pset.properties) {
-          props[prop.name] = normalizePropertyValue(prop.value);
+      const addPsets = (psets: Array<{ name: string; properties: Array<{ name: string; value: unknown }> }>) => {
+        for (const pset of psets) {
+          const props: Record<string, string | number | boolean | null> = { ...propertySets[pset.name] };
+          for (const prop of pset.properties) {
+            props[prop.name] = normalizePropertyValue(prop.value);
+          }
+          propertySets[pset.name] = props;
         }
-        propertySets[pset.name] = props;
-      }
+      };
+      addPsets(extractTypePropertiesOnDemand(store, expressId)?.properties ?? []);
+      addPsets(extractPropertiesOnDemand(store, expressId));
 
       // store.entities.getPredefinedType/getTag are optional and not
       // populated on this in-process parseColumnar() path (confirmed
