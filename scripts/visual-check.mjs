@@ -266,12 +266,84 @@ const SCENARIOS = {
     }, "builder model picker");
 
     await h.waitFor(function () { return document.querySelector(".tree [role=treeitem]"); }, "model tree");
+
+    // Importing an IDS the builder only partly understands: one editable rule that also carries a
+    // facet outside its model, and one specification it must hold read-only rather than mangle.
+    var ids = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://standards.buildingsmart.org/IDS">',
+      '<info><title>Client standard</title><author>bim@client.example</author></info>',
+      '<specifications>',
+      '<specification name="Walls are named" ifcVersion="IFC2X3 IFC4">',
+      '<applicability maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute>',
+      '<classification><value><simpleValue>21.22</simpleValue></value></classification></requirements>',
+      '</specification>',
+      '<specification name="Classified elements are named" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded"><classification><system><simpleValue>NL/SfB</simpleValue></system></classification></applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
+      '</specification>',
+      '<specification name="Doors are named" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded"><entity><name><simpleValue>IFCDOOR</simpleValue></name></entity></applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
+      '</specification>',
+      '</specifications></ids>'
+    ].join("\\n");
+
+    var idsInput = document.querySelector('input[aria-label="Import an IDS file"]');
+    if (!idsInput) throw new Error("the builder offers no way to import an IDS file");
+    var idsTransfer = new DataTransfer();
+    idsTransfer.items.add(new File([ids], "client.ids", { type: "text/xml" }));
+    idsInput.files = idsTransfer.files;
+    idsInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await h.waitFor(function () {
+      return h.all("article.rule").length === 3 ? true : null;
+    }, "three imported specification cards");
+
+    var cards = h.all("article.rule").map(function (card) {
+      var editable = card.querySelector(".rule-title");
+      var readOnly = card.querySelector(".rule-title-static");
+      return editable ? editable.value : readOnly ? readOnly.textContent.trim() : "";
+    });
+    if (cards.join("|") !== "Walls are named|Classified elements are named|Doors are named") {
+      throw new Error("imported specifications lost their document order: " + JSON.stringify(cards));
+    }
+
+    // The refused one must be visibly inert, not quietly missing from the list.
+    var refusedCard = document.querySelector("article.rule.refused");
+    if (!refusedCard) throw new Error("a specification that cannot be edited was not marked as such");
+    if (refusedCard.querySelector(".rule-title")) {
+      throw new Error("a specification the builder cannot show offered an editable name");
+    }
+    var keptBadges = h.all(".badge.kept").map(function (n) { return n.textContent; });
+    if (keptBadges.indexOf("1 kept") === -1) {
+      throw new Error("a rule carrying a preserved requirement did not say so: " + JSON.stringify(keptBadges));
+    }
+
+    // The whole point: what the builder could not read still leaves in the exported document.
+    var exported = h.text(".xml");
+    if (exported.indexOf("<classification>") === -1) {
+      throw new Error("re-export dropped the facets the builder could not represent");
+    }
+    if (exported.indexOf('name="Classified elements are named"') === -1) {
+      throw new Error("re-export dropped the specification the builder refused to edit");
+    }
+    if (exported.indexOf("bim@client.example") === -1) {
+      throw new Error("re-export dropped the imported document's own metadata");
+    }
+
+    window.scrollTo(0, 0);
+    await h.settle(50);
+
     return {
       fixtureBytes: bytes.byteLength,
       picked: picker.options[picker.selectedIndex].textContent,
       tally: h.text(".explorer .card header .tally"),
       source: h.text(".srcfile"),
-      treeRoots: h.all(".tree > [role=treeitem] > .rowline .row-name").map(function (n) { return n.textContent; })
+      treeRoots: h.all(".tree > [role=treeitem] > .rowline .row-name").map(function (n) { return n.textContent; }),
+      imported: cards,
+      kept: keptBadges
     };
   `,
 };

@@ -220,6 +220,119 @@ describe("RuleBuilderPage", () => {
   });
 });
 
+const IMPORTED_IDS = `<?xml version="1.0" encoding="UTF-8"?>
+<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <info><title>Client standard</title><author>bim@client.example</author></info>
+  <specifications>
+    <specification name="Walls are named" ifcVersion="IFC2X3 IFC4">
+      <applicability><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability>
+      <requirements>
+        <attribute><name><simpleValue>Name</simpleValue></name></attribute>
+        <classification><value><simpleValue>21.22</simpleValue></value></classification>
+      </requirements>
+    </specification>
+    <specification name="Classified elements are named" ifcVersion="IFC4">
+      <applicability><classification><system><simpleValue>NL/SfB</simpleValue></system></classification></applicability>
+      <requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>
+    </specification>
+    <specification name="Doors are named" ifcVersion="IFC4">
+      <applicability><entity><name><simpleValue>IFCDOOR</simpleValue></name></entity></applicability>
+      <requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>
+    </specification>
+  </specifications>
+</ids>`;
+
+function idsFile(name = "client.ids", body = IMPORTED_IDS): File {
+  return new File([body], name, { type: "application/xml" });
+}
+
+/** Every specification card in document order, whether it is editable or held read-only. */
+function cardTitles(container: HTMLElement): string[] {
+  return [...container.querySelectorAll("article.rule")].map((card) => {
+    const editable = card.querySelector<HTMLInputElement>(".rule-title");
+    return editable ? editable.value : (card.querySelector(".rule-title-static")?.textContent ?? "");
+  });
+}
+
+describe("RuleBuilderPage importing an IDS file", () => {
+  it("loads every specification, holding the ones it cannot edit in their original place", async () => {
+    const user = userEvent.setup();
+    const { container } = renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+
+    expect(cardTitles(container)).toEqual([
+      "Walls are named",
+      "Classified elements are named",
+      "Doors are named",
+    ]);
+    expect(screen.getByText("Kept, not editable")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Selects elements by <classification>, which the builder cannot show\./)
+    ).toBeInTheDocument();
+  });
+
+  it("says permanently, on the rule itself, what it kept but cannot show", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+
+    // Visible while collapsed, so it survives until the moment the user exports.
+    expect(screen.getByText("1 kept")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Expand Walls are named" }));
+    expect(screen.getByText(/1 more requirement kept from the imported file\./)).toBeInTheDocument();
+    // The count above the note must not read as a verdict on requirements it never checked.
+    expect(screen.getByText("All 3 pass on the conditions shown")).toBeInTheDocument();
+  });
+
+  it("writes the whole document back out, including the parts it could not read", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+    const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
+
+    expect(xml).toContain("<title>Client standard</title>");
+    expect(xml).toContain("<author>bim@client.example</author>");
+    expect(xml).toContain(`ifcVersion="IFC2X3 IFC4"`);
+    expect(xml).toContain(`<specification name="Classified elements are named"`);
+    expect(xml).toContain("<classification>");
+  });
+
+  it("confirms before replacing work already on the page, and stops if the user declines", async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.click(await screen.findByRole("button", { name: "+ New rule" }));
+    await user.upload(screen.getByLabelText("Import an IDS file"), idsFile());
+
+    expect(confirm).toHaveBeenCalledWith(
+      "Importing client.ids replaces the 1 specification already here. Continue?"
+    );
+    expect(screen.getAllByLabelText("Rule name").map((input) => (input as HTMLInputElement).value))
+      .toEqual(["New rule"]);
+    confirm.mockRestore();
+  });
+
+  it("reports a file it cannot read and leaves the rules alone", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(
+      await screen.findByLabelText("Import an IDS file"),
+      idsFile("schedule.xml", `<?xml version="1.0"?><project><wall /></project>`)
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "schedule.xml contains no IDS specifications."
+    );
+    expect(screen.queryAllByLabelText("Rule name")).toHaveLength(0);
+  });
+});
+
 describe("pathToNode", () => {
   const tree: TreeNode[] = [
     {

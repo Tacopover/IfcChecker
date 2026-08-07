@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Every shape the importer has to preserve rather than represent, in one file: spec-level metadata
+  the builder has no field for, requirement facets outside its model, an XSD bound it cannot read,
+  an author's annotation, and one specification whose applicability makes it unshowable at all.
+  Trimmed from the patterns found across the goal 3a corpus; not copied from any single file.
+-->
+<ids xmlns="http://standards.buildingsmart.org/IDS"
+     xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <info>
+    <title>Mixed fidelity</title>
+    <date>2026-08-06</date>
+    <author>taco@mepover.com</author>
+    <version>1.1</version>
+  </info>
+  <specifications>
+    <specification name="Walls carry a name and a type code" identifier="S1" ifcVersion="IFC2X3 IFC4" description="Spec-level prose the builder has no field for." instructions="Fill these in from the wall schedule." minOccurs="1">
+      <applicability minOccurs="0" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+      </applicability>
+      <requirements description="Requirement-level prose, which lives on the element itself.">
+        <attribute cardinality="required">
+          <name><simpleValue>Name</simpleValue></name>
+        </attribute>
+        <property dataType="IFCTEXT">
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName><simpleValue>Reference</simpleValue></baseName>
+          <value>
+            <xs:restriction base="xs:string">
+              <xs:pattern value="W-.*" />
+            </xs:restriction>
+          </value>
+        </property>
+        <property>
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName><simpleValue>Status</simpleValue></baseName>
+          <value>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="New" />
+              <xs:enumeration value="Existing" />
+            </xs:restriction>
+          </value>
+        </property>
+        <classification>
+          <value><simpleValue>21.22</simpleValue></value>
+          <system><simpleValue>NL/SfB</simpleValue></system>
+        </classification>
+        <property dataType="IFCTHERMALTRANSMITTANCEMEASURE">
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName><simpleValue>ThermalTransmittance</simpleValue></baseName>
+          <value>
+            <xs:restriction base="xs:double">
+              <xs:maxInclusive value="0.24" />
+            </xs:restriction>
+          </value>
+        </property>
+        <property dataType="IFCLABEL" cardinality="optional">
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName><simpleValue>AcousticRating</simpleValue></baseName>
+        </property>
+        <attribute cardinality="prohibited">
+          <name><simpleValue>Description</simpleValue></name>
+        </attribute>
+        <material>
+          <value><simpleValue>Concrete</simpleValue></value>
+        </material>
+      </requirements>
+    </specification>
+    <specification name="Doors are documented" ifcVersion="IFC4">
+      <applicability minOccurs="0" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCDOOR</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+        <attribute>
+          <name><simpleValue>Name</simpleValue></name>
+          <value>
+            <xs:restriction base="xs:string">
+              <xs:annotation>
+                <xs:documentation>Any name beginning with D-, e.g. D-01.</xs:documentation>
+              </xs:annotation>
+              <xs:pattern value="D\-.*" />
+            </xs:restriction>
+          </value>
+        </attribute>
+        <attribute cardinality="prohibited">
+          <name><simpleValue>Tag</simpleValue></name>
+          <value><simpleValue>TODO</simpleValue></value>
+        </attribute>
+      </requirements>
+    </specification>
+    <specification name="Classified elements are named" ifcVersion="IFC4">
+      <applicability minOccurs="0" maxOccurs="unbounded">
+        <classification>
+          <system><simpleValue>NL/SfB</simpleValue></system>
+        </classification>
+      </applicability>
+      <requirements>
+        <attribute>
+          <name><simpleValue>Name</simpleValue></name>
+        </attribute>
+      </requirements>
+    </specification>
+    <specification name="Some storey must exist" ifcVersion="IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCBUILDINGSTOREY</simpleValue></name></entity>
+      </applicability>
+    </specification>
+  </specifications>
+</ids>

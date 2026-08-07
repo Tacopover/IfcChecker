@@ -113,18 +113,33 @@ ones.** Testable as: for every specification not marked unimported,
 `idsXmlToDrafts(x) → buildIdsXml → parseIdsXml` equals `parseIdsXml(x)`. That test can run over
 the whole 3a corpus.
 
-This requires two fixes that block round-trip on almost every real file: `dataType` is
-hardcoded to `IFCLABEL` (`rule-draft.ts`) though `IFCTEXT` outnumbers it 506:1 in the wild, and
-`ifcVersion` is hardcoded to `IFC4` though hand-authored files are 51% IFC2X3.
+This required two fixes that block round-trip on almost every real file, both **done in 3f**:
+`dataType` was hardcoded to `IFCLABEL` (`rule-draft.ts`) though that covers only 61 of the 310
+hand-authored property facets — `IFCREAL` 53, `IFCTEXT` 39, `IFCLENGTHMEASURE` 38, `IFCBOOLEAN`
+35, and 27 omit the attribute entirely; and `ifcVersion` was hardcoded to `IFC4` though 344 of
+the 464 hand-authored specifications say `"IFC2X3 IFC4"` and only 49 say plain `IFC4`. (Both
+figures correct earlier ones measured over the whole corpus, where machine-generated bSI Japan
+files dominate.)
 
-### 3d. Scope: decide the UX
+### 3d. Scope: decide the UX — DECIDED 2026-08-06
 
-Where import lives; what the user sees for a partially-understood file; whether an imported
-rule is visibly marked as such; what happens when an imported rule references a property set
-absent from the loaded model (likely common, and the coverage percentages will read 0%).
-
-The loss report's shape is settled by 3e's precedent on the validate page: refusals and
-weakenings are shown per specification, in place, with the offending construct named.
+- **Import lives on the Build rules page**, in the load bar beside the file picker.
+- **Importing replaces the current rule set**, after a confirm when anything would be lost. The
+  builder is a view onto one document, which is what makes "open, edit, re-export" coherent and
+  what lets the preserved parts belong to a single file.
+- **Refused specifications appear as read-only cards in the rule list, in document order** —
+  dashed and greyed, naming the construct that made them unshowable, with a delete button for a
+  user who does want them gone. A user comparing the page to their file has to be able to see
+  that nothing went missing, and where.
+- **The loss report is permanent and per rule**, mirroring 3e on the validate page: a "N kept"
+  badge in the rule header, visible while collapsed, and the detail inside. Not a dismissible
+  panel — the moment it matters is export, which can come long after the import.
+- **A rule whose entity types or property sets are absent from the loaded model needs nothing
+  new**: the existing card already reads "No matching elements in this file" and shows 0 counts,
+  which is the honest answer.
+- **A rule's pass/fail summary is qualified** ("All 12 pass on the conditions shown") whenever
+  requirements were kept but not shown, so it never reads as a verdict on the whole
+  specification.
 
 ### 3e. Implement: parser reports instead of warning — DONE 2026-08-05
 
@@ -142,14 +157,49 @@ classification rule of the demo BIM basis ILS file, whose entity names are an `x
 two of the ILS file's three) instead of running it, and the results table shows those as
 "not checked" with no counts rather than as zeros.
 
-### 3f. Implement: `idsXmlToDrafts`
+### 3f. Implement: `idsXmlToDrafts` — DONE 2026-08-06
 
-The reverse of `compileDraft`: `(xml) => { rules: RuleDraft[]; unsupported: UnsupportedConstruct[] }`.
-Round-trip tested per the contract from 3c, against the real-world files gathered in 3a.
+`(xml) => { rules, refused, title, extraInfo }` in `packages/ids-validator/src/import-ids.ts`.
 
-### 3g. Implement: import UI
+The governing rule is **carry verbatim whatever we cannot represent**, at every level: a
+requirement facet outside the builder's model, a whole refused specification, `<info>` children,
+and the raw attribute maps of `<specification>`, `<applicability>` and `<requirements>`. Naming
+those attributes individually was the first attempt and it lost five different things — real
+files put `minOccurs` on `<specification>` and `description` on `<requirements>`, neither of
+which the schema advertises loudly.
 
-Per 3d, including the loss report from 3b.
+A facet is either fully representable or kept whole; there is no partial import. So
+`cardinality="optional"`, a prohibited facet that names a value, an `xs:` bound, an author's
+`xs:annotation`, and an unmodelled attribute all pass through rather than importing weakened.
+Pattern restrictions become `contains`/`startsWith`/`endsWith` only when `escapeRegExp` would
+reproduce the source character for character, otherwise `matches`, which stores it verbatim.
+
+Measured over the 3a corpus, re-exporting a file that was only opened:
+- **464 of 464** hand-authored specifications satisfy the 3c semantic contract (421 imported as
+  rules, 43 refused and passed through — exactly the split 3b predicted).
+- **7,784 of 7,784** files reproduce their `<specifications>` subtree element for element,
+  attribute for attribute, under a check far stricter than 3c asks for.
+- 212 of the 421 imported rules carry at least one passed-through requirement facet.
+
+Committed coverage is `import-ids.test.ts`, `import-ids.roundtrip.test.ts` and the
+`mixed-fidelity.ids` fixture; the corpus runs stay ad-hoc, since the corpus is not in the repo.
+
+### 3g. Implement: import UI — DONE 2026-08-06
+
+Per 3d. `importIds.ts` turns a picked file into rules or one sentence saying why not;
+`RefusedSpecificationCard.tsx` holds what cannot be edited; `RuleCard` gained the badge and the
+permanent note; `IdsXmlPreview` writes the refused specifications and `<info>` children back.
+Covered by component tests and by an extension to the `builder` browser scenario, which imports
+a partly-understood document and asserts the export still carries what the builder could not read.
+
+**Remaining, deliberately not built:**
+- **Import needs a parsed IFC model.** The whole builder does — every card reads counts and
+  field lists from one — so a user cannot open a client's IDS just to look at it. Decoupling
+  `RuleCard` from a model is its own piece of work.
+- **`exportBlockers` cannot see a passed-through facet's own problems.** It validates the
+  conditions the builder shows; a preserved facet is trusted because it came in that way.
+- Editing an imported rule still degrades its round-trip guarantee to best-effort per 3c, and
+  nothing on screen says which rules have been touched since import.
 
 **Size:** large — treat 3a–3d as one scoping pass to review before any code is written.
 
@@ -211,9 +261,10 @@ elements that failed, isolated and framed, so a violation becomes something they
 
 Not scheduled; each is self-contained.
 
-- **`dataType="IFCLABEL"` is hardcoded** on every exported property facet
-  (`packages/ids-validator/src/build-ids.ts`). Numeric properties are mistyped in exported
-  IDS. Matters as soon as numeric bounds are supported.
+- **`dataType="IFCLABEL"` is still the default** for a property condition authored in the
+  builder (`packages/ids-validator/src/build-ids.ts`); an imported one now carries its own.
+  Numeric properties the user types here are mistyped in exported IDS. Matters as soon as
+  numeric bounds are supported.
 - **Numeric bounds and length restrictions** are unsupported in both directions — the natural
   next facet capability after import, and the reason the item above will start to bite.
 - **`scripts/verify.mjs` runs the browser check without a scenario**, so the loaded-model path

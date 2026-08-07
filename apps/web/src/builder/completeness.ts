@@ -50,13 +50,19 @@ export interface RuleProblems {
 }
 
 export function ruleProblems(rule: RuleDraft): RuleProblems {
+  // An imported rule can carry requirements the builder keeps but cannot show, and a source with
+  // no <requirements> at all is a valid existence check — neither is a rule that checks nothing.
+  const checksNothing =
+    rule.conditions.length === 0 && (rule.imported?.passThrough.length ?? 0) === 0;
+  const applicabilityOnly = rule.imported?.requirementsAttributes === null;
+
   return {
     applicability:
       rule.entityTypes.length === 0
         ? "No element types — IDS needs at least one, and this rule would apply to nothing."
         : null,
     conditions:
-      rule.conditions.length === 0
+      checksNothing && !applicabilityOnly
         ? "No conditions — there is nothing for this rule to check."
         : null,
   };
@@ -78,8 +84,10 @@ export function isRuleComplete(rule: RuleDraft): boolean {
  * One line per reason the rule set must not be downloaded. Empty means the document the preview
  * shows is the document an external checker would read.
  */
-export function exportBlockers(rules: RuleDraft[]): string[] {
-  if (rules.length === 0) return ["No rules yet — there is nothing to export."];
+export function exportBlockers(rules: RuleDraft[], preservedCount = 0): string[] {
+  if (rules.length === 0 && preservedCount === 0) {
+    return ["No rules yet — there is nothing to export."];
+  }
 
   const blockers: string[] = [];
   for (const rule of rules) {

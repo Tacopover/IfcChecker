@@ -1,13 +1,15 @@
-import { Fragment, useMemo, useState, type ChangeEvent } from "react";
+import { Fragment, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import type { ConditionDraft, RuleDraft } from "@ifc-qa/ids-validator";
+import type { ConditionDraft, RefusedSpecification, RuleDraft } from "@ifc-qa/ids-validator";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
 import { ModelTree } from "./ModelTree.js";
 import { RuleCard } from "./RuleCard.js";
+import { RefusedSpecificationCard } from "./RefusedSpecificationCard.js";
 import { IdsXmlPreview } from "./IdsXmlPreview.js";
 import { defaultConditionFor } from "./ConditionRow.js";
 import { nextDraftId } from "./draftIds.js";
+import { importIdsText } from "./importIds.js";
 
 const SAMPLE_VALUES = 3;
 const SAMPLE_LENGTH = 18;
@@ -129,6 +131,13 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
   const [openRuleIds, setOpenRuleIds] = useState<ReadonlySet<string>>(new Set());
   const [failureRuleIds, setFailureRuleIds] = useState<ReadonlySet<string>>(new Set());
+
+  // Everything an imported document carries that is not a rule. Held beside the rules rather than
+  // inside them because it belongs to the file as a whole, and re-export has to hand all of it back.
+  const [refused, setRefused] = useState<RefusedSpecification[]>([]);
+  const [importedTitle, setImportedTitle] = useState<string | null>(null);
+  const [extraInfo, setExtraInfo] = useState<string[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Only a parsed model can be a worked example — the rest of the page reads its elements.
   const parsedModels = models.filter((entry) => entry.status === "succeeded");
@@ -269,6 +278,79 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     openRule(copy.id);
   }
 
+  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Cleared straight away, so picking the same file twice still fires a change event.
+    event.target.value = "";
+    if (!file) return;
+
+    const existing = rules.length + refused.length;
+    if (
+      existing > 0 &&
+      !window.confirm(
+        `Importing ${file.name} replaces the ${existing} specification${existing === 1 ? "" : "s"} already here. Continue?`
+      )
+    ) {
+      return;
+    }
+
+    const outcome = importIdsText(file.name, await file.text());
+    if (!outcome.ok) {
+      setImportError(outcome.message);
+      return;
+    }
+
+    setImportError(null);
+    setRules(outcome.result.rules);
+    setRefused(outcome.result.refused);
+    setImportedTitle(outcome.result.title);
+    setExtraInfo(outcome.result.extraInfo);
+    setActiveRuleId(null);
+    setOpenRuleIds(new Set());
+    setFailureRuleIds(new Set());
+  }
+
+  /** Rules and refused specifications in the order the imported document put them. */
+  function specificationCards(): ReactNode[] {
+    const cards: ReactNode[] = [];
+
+    for (let index = 0; index <= rules.length; index += 1) {
+      refused.forEach((specification, position) => {
+        if (Math.min(specification.passThrough.afterIndex, rules.length) !== index) return;
+        cards.push(
+          <RefusedSpecificationCard
+            key={`refused-${position}`}
+            specification={specification}
+            onDelete={() => setRefused(refused.filter((entry) => entry !== specification))}
+          />
+        );
+      });
+      if (index === rules.length) break;
+
+      const rule = rules[index];
+      cards.push(
+        <RuleCard
+          key={rule.id}
+          rule={rule}
+          elements={model?.elements ?? NO_ELEMENTS}
+          introspection={introspection}
+          isActive={rule.id === activeRuleId}
+          isOpen={openRuleIds.has(rule.id)}
+          showFailures={failureRuleIds.has(rule.id)}
+          onChange={(next) =>
+            setRules((previous) => previous.map((entry) => (entry.id === rule.id ? next : entry)))
+          }
+          onDuplicate={() => handleDuplicateRule(rule)}
+          onDelete={() => setRules(rules.filter((entry) => entry.id !== rule.id))}
+          onActivate={() => setActiveRuleId(rule.id)}
+          onToggleOpen={() => toggleIn(setOpenRuleIds, rule.id)}
+          onToggleFailures={() => toggleIn(setFailureRuleIds, rule.id)}
+        />
+      );
+    }
+    return cards;
+  }
+
   function toggleIn(setter: typeof setOpenRuleIds, id: string) {
     setter((previous) => {
       const next = new Set(previous);
@@ -310,7 +392,29 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             </span>
           </span>
         )}
+
+        {/* The rest of the page reads its counts and field lists from a model, so an imported rule
+            has nothing to render against until one is parsed. */}
+        <label
+          className={`btn ghost importbtn${model ? "" : " is-disabled"}`}
+          title={model ? "Open an existing .ids file" : "Parse an IFC file first"}
+        >
+          Import .ids
+          <input
+            type="file"
+            accept=".ids,.xml,application/xml,text/xml"
+            aria-label="Import an IDS file"
+            disabled={!model}
+            onChange={handleImport}
+          />
+        </label>
       </div>
+
+      {importError && (
+        <p className="import-error" role="alert">
+          {importError}
+        </p>
+      )}
 
       {!model || !selectionSource || selectionName === null ? (
         <div className="empty-state">
@@ -366,43 +470,32 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             <div className="stack-head">
               <h2>Rules</h2>
               <span className="micro">
-                {rules.length} {rules.length === 1 ? "rule" : "rules"} · one specification each
+                {rules.length} {rules.length === 1 ? "rule" : "rules"}
+                {refused.length > 0
+                  ? ` · ${refused.length} kept but not editable`
+                  : " · one specification each"}
               </span>
             </div>
 
-            {rules.length === 0 && (
+            {rules.length === 0 && refused.length === 0 && (
               <p className="hint">
-                No rules yet — click a field on the left, or start an empty one below.
+                No rules yet — click a field on the left, start an empty one below, or import an
+                existing .ids file.
               </p>
             )}
 
-            {rules.map((rule) => (
-              <RuleCard
-                key={rule.id}
-                rule={rule}
-                elements={model.elements}
-                introspection={introspection}
-                isActive={rule.id === activeRuleId}
-                isOpen={openRuleIds.has(rule.id)}
-                showFailures={failureRuleIds.has(rule.id)}
-                onChange={(next) =>
-                  setRules((previous) =>
-                    previous.map((entry) => (entry.id === rule.id ? next : entry))
-                  )
-                }
-                onDuplicate={() => handleDuplicateRule(rule)}
-                onDelete={() => setRules(rules.filter((entry) => entry.id !== rule.id))}
-                onActivate={() => setActiveRuleId(rule.id)}
-                onToggleOpen={() => toggleIn(setOpenRuleIds, rule.id)}
-                onToggleFailures={() => toggleIn(setFailureRuleIds, rule.id)}
-              />
-            ))}
+            {specificationCards()}
 
             <button type="button" className="addrule" onClick={handleAddRule}>
               + New rule
             </button>
 
-            <IdsXmlPreview rules={rules} title={model.fileName} />
+            <IdsXmlPreview
+              rules={rules}
+              title={importedTitle ?? model.fileName}
+              refused={refused}
+              extraInfo={extraInfo}
+            />
           </main>
         </div>
       )}
