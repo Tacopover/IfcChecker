@@ -102,6 +102,38 @@ describe("CheckSummary", () => {
     expect(row).not.toHaveTextContent("0");
   });
 
+  // The other way a specification can be refused: its elements are selectable, but every single
+  // requirement was dropped, so it would have run and found nothing wrong with any of them.
+  it("says so when a specification is unchecked because all of its requirements were dropped", () => {
+    render(
+      <CheckSummary
+        summaries={[
+          summary({
+            checked: false,
+            applicableCount: 0,
+            passedCount: 0,
+            failedCount: 0,
+            violations: [],
+            unsupported: [
+              {
+                section: "requirements",
+                construct: "classification",
+                description: "Requires <classification>, which cannot be represented.",
+              },
+            ],
+          }),
+        ]}
+      />
+    );
+
+    expect(screen.getByText("not checked")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "every requirement it states is one this checker cannot represent"
+    );
+    // The reason has to survive: filtering the list to applicability losses left this blank.
+    expect(screen.getByText("classification")).toBeInTheDocument();
+  });
+
   it("warns that a specification which ran was checked against fewer requirements than it states", () => {
     render(
       <CheckSummary

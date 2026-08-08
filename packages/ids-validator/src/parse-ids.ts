@@ -51,9 +51,16 @@ export interface ParsedSpecification {
  * asked for, and `matchesApplicability` over an empty name list matches *nothing* — so running one
  * anyway produces zero violations and reports a clean model for a rule that was never applied.
  * Callers must report these instead of evaluating them.
+ *
+ * The same trap sits on the requirements side: a specification whose every requirement we had to
+ * drop still selects elements, finds nothing wrong with them, and passes. "All pass" would be a
+ * verdict on nothing that was checked, so it is refused too.
  */
 export function isEvaluable(specification: ParsedSpecification): boolean {
-  return specification.applicabilityComplete && specification.applicabilityEntityNames.length > 0;
+  if (!specification.applicabilityComplete) return false;
+  if (specification.applicabilityEntityNames.length === 0) return false;
+  if (specification.requirements.length > 0) return true;
+  return !specification.unsupported.some((entry) => entry.section === "requirements");
 }
 
 // Ordered mode is what lets requirements keep their document order: an <attribute> written after a
@@ -222,6 +229,31 @@ function parseSpecification(specNode: OrderedNode): ParsedSpecification {
 }
 
 /**
+ * The IFC class names a `<name>` selects: one `<simpleValue>`, or every member of an enumeration.
+ * `null` when the names cannot be listed at all — a pattern selects an open-ended set of classes,
+ * and a rule whose subject we cannot name is one we must refuse rather than guess at.
+ *
+ * An applicability holds a single `<entity>` per `ids.xsd`, so an enumeration here is how every
+ * multi-type rule in the wild is written, and how this package writes them too.
+ */
+function readEntityNames(nameChildren: OrderedNode[]): string[] | null {
+  const simpleValue = readSimpleValue(nameChildren);
+  if (simpleValue !== null) return [simpleValue];
+
+  const restrictionNode = nameChildren.find((node) => tagOf(node) === "restriction");
+  if (!restrictionNode) return null;
+
+  // Enumeration only: a pattern alongside it would narrow the list further, and reading just the
+  // list would select classes the source excluded.
+  const children = childrenOf(restrictionNode, "restriction");
+  if (tagsOf(children).some((tag) => tag !== "enumeration" && tag !== "annotation")) return null;
+
+  const enumerations = nodesNamed(children, "enumeration");
+  if (enumerations.length === 0) return null;
+  return enumerations.map((node) => String(attributesOf(node)["@_value"] ?? ""));
+}
+
+/**
  * Entity names, plus a report of everything else that narrowed the selection. IDS also selects by
  * attribute, property, classification and material value; those decide which elements a rule is
  * about, so dropping one quietly changes what the rule means.
@@ -246,22 +278,22 @@ function readApplicability(
     }
 
     const children = childrenOf(node, "entity");
-    const entityName = readSimpleValue(descend(children, "name"));
-    if (entityName === null) {
+    const names = readEntityNames(descend(children, "name"));
+    if (names === null) {
       unsupported.push({
         section: "applicability",
         construct: "entity/name",
-        description: "Gives its entity types as a pattern or list rather than plain names.",
+        description: "Gives its entity types as a pattern rather than plain names.",
       });
       continue;
     }
-    entityNames.push(entityName);
+    entityNames.push(...names);
 
     if (children.some((child) => tagOf(child) === "predefinedType")) {
       unsupported.push({
         section: "applicability",
         construct: "entity/predefinedType",
-        description: `Narrows <${entityName}> to one predefined type, which cannot be represented.`,
+        description: `Narrows <${names.join(", ")}> to one predefined type, which cannot be represented.`,
       });
     }
   }

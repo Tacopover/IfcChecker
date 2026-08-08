@@ -24,6 +24,17 @@ function droppedRequirements(summary: SpecificationSummary) {
   return summary.unsupported.filter((entry) => entry.section === "requirements");
 }
 
+/**
+ * Which half of a refused specification stopped it. An unreadable applicability comes first
+ * because it decides the subject: once we cannot say which elements a rule is about, what it
+ * asks of them no longer matters.
+ */
+function refusalCause(summary: SpecificationSummary): "applicability" | "requirements" {
+  return summary.unsupported.some((entry) => entry.section === "applicability")
+    ? "applicability"
+    : "requirements";
+}
+
 // The first failing specification opens by itself: a summary that shows only counts leaves the
 // user one click away from every answer, and the first problem is the one they came to read.
 function initiallyExpanded(summaries: SpecificationSummary[]): Set<number> {
@@ -134,16 +145,18 @@ export function CheckSummary({
                   {status === "not-checked" && (
                     <tr className="spec-not-checked">
                       <td colSpan={5}>
-                        {/* The worst failure mode there is: this specification selects its elements
-                            in a way we cannot read, so running it would have matched nothing and
-                            reported the model clean against a rule that never applied. */}
+                        {/* The worst failure mode there is, and it arrives from two directions: a
+                            rule whose elements we cannot select matches nothing, and a rule whose
+                            every requirement we had to drop finds nothing wrong. Both report a
+                            clean model for a check that never happened, so both say which it was. */}
                         <p role="alert">
-                          This specification was not run: it selects elements in a way this checker
-                          cannot represent, so any result would have been a false pass.
+                          {refusalCause(summary) === "applicability"
+                            ? "This specification was not run: it selects elements in a way this checker cannot represent, so any result would have been a false pass."
+                            : "This specification was not run: every requirement it states is one this checker cannot represent, so a pass would have meant nothing was checked."}
                         </p>
                         <ul className="unsupported-list">
                           {summary.unsupported
-                            .filter((entry) => entry.section === "applicability")
+                            .filter((entry) => entry.section === refusalCause(summary))
                             .map((entry, position) => (
                               <li key={`${entry.construct}#${position}`}>
                                 <code>{entry.construct}</code> — {entry.description}

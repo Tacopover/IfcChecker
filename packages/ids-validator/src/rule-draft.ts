@@ -57,6 +57,12 @@ export interface PassThrough {
 export interface ImportedRuleSource {
   /** `<specification>` attributes except `name`, which the builder owns. Includes `ifcVersion`. */
   attributes: Record<string, string>;
+  /**
+   * Whether the source listed its entity types as an `xs:enumeration` rather than a single
+   * `<simpleValue>`. Only tells the two forms apart for a one-type rule, where both are legal and
+   * mean the same thing — but rewriting one as the other is still editing the author's document.
+   */
+  entityNamesAsEnumeration: boolean;
   applicabilityAttributes: Record<string, string>;
   /** `null` when the source had no `<requirements>` element at all — an applicability-only rule. */
   requirementsAttributes: Record<string, string> | null;

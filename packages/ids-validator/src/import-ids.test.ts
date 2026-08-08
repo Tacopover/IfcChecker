@@ -251,7 +251,7 @@ describe("idsXmlToDrafts document metadata", () => {
     const { title, extraInfo } = idsXmlToDrafts(MIXED);
 
     expect(title).toBe("Mixed fidelity");
-    expect(extraInfo).toEqual(["<author>taco@mepover.com</author>", "<version>1.1</version>"]);
+    expect(extraInfo).toEqual(["<version>1.1</version>", "<author>taco@mepover.com</author>"]);
   });
 
   it("returns nothing for a document with no specifications", () => {

@@ -116,7 +116,19 @@ describe("buildIdsXml", () => {
 
   it("uppercases applicability entity names", () => {
     const xml = buildIdsXml(DRAFTS);
-    expect(xml).toContain("<entity><name><simpleValue>IFCDUCTSEGMENT</simpleValue></name></entity>");
+    expect(xml).toContain("<entity><name><simpleValue>IFCELEMENT</simpleValue></name></entity>");
+    expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
+  });
+
+  // ids.xsd allows one <entity> in an applicability, so several types are one enumeration. Emitting
+  // one <entity> each produced a document no conforming checker would read.
+  it("writes several entity types as a single entity facet", () => {
+    const xml = buildIdsXml(DRAFTS);
+    const applicability = xml.slice(xml.indexOf("Ducts carry a system code"));
+
+    expect(applicability.match(/<entity>/g)).toHaveLength(1);
+    expect(applicability).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
+    expect(applicability).toContain('<xs:enumeration value="IFCDUCTFITTING" />');
   });
 
   it("emits a well-formed document for an empty rule set", () => {

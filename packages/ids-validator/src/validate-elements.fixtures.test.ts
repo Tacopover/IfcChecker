@@ -41,7 +41,7 @@ describe("validateBySpecification against a rule set it only partly understands"
   const idsXml = readFileSync(join(FIXTURES_DIR, "partly-understood.ids"), "utf-8");
   const elements = loadElements("partly-understood.json");
 
-  it("refuses the two specifications whose applicability it cannot read, and runs the one it can", () => {
+  it("refuses the two specifications it cannot judge, and runs the one it can", () => {
     const outcomes = validateBySpecification(elements, idsXml);
 
     expect(outcomes.map((outcome) => [outcome.name, outcome.checked])).toEqual([
@@ -52,14 +52,29 @@ describe("validateBySpecification against a rule set it only partly understands"
   });
 
   it("names the construct behind each refusal", () => {
-    const [byAttributeValue, , byEntityEnumeration] = validateBySpecification(elements, idsXml);
+    const [byApplicability, , byRequirement] = validateBySpecification(elements, idsXml);
 
-    expect(byAttributeValue.unsupported).toContainEqual(
+    expect(byApplicability.unsupported).toContainEqual(
       expect.objectContaining({ section: "applicability", construct: "attribute" })
     );
-    expect(byEntityEnumeration.unsupported).toContainEqual(
-      expect.objectContaining({ section: "applicability", construct: "entity/name" })
+    // Its applicability is an enumeration of entity names, which is readable — it is refused on
+    // the other side, because its one requirement is a classification we cannot check.
+    expect(byRequirement.unsupported).not.toContainEqual(
+      expect.objectContaining({ section: "applicability" })
     );
+    expect(byRequirement.unsupported).toContainEqual(
+      expect.objectContaining({ section: "requirements", construct: "classification" })
+    );
+  });
+
+  // Reading the enumeration is what makes this reachable: the specification now selects elements,
+  // and with every requirement dropped it would have found nothing wrong with any of them.
+  it("refuses a readable applicability whose every requirement had to be dropped", () => {
+    const [, , byRequirement] = validateBySpecification(elements, idsXml);
+
+    expect(byRequirement.checked).toBe(false);
+    expect(byRequirement.applicableCount).toBe(0);
+    expect(byRequirement.passedCount).toBe(0);
   });
 
   // The regression this fixture exists for. Every specification here used to parse, match nothing

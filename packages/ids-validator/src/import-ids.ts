@@ -176,7 +176,7 @@ function readSpecification(
   const applicabilityNode = findChild(children, "applicability");
 
   const reasons: UnsupportedConstruct[] = [];
-  const entityTypes = readApplicability(applicabilityNode, reasons);
+  const { entityTypes, asEnumeration } = readApplicability(applicabilityNode, reasons);
 
   if (reasons.length > 0 || entityTypes.length === 0) {
     if (entityTypes.length === 0 && reasons.length === 0) {
@@ -212,11 +212,43 @@ function readSpecification(
   const imported: ImportedRuleSource = {
     attributes: plainAttributes(node, ["name"]),
     applicabilityAttributes: plainAttributes(applicabilityNode),
+    entityNamesAsEnumeration: asEnumeration,
     requirementsAttributes: requirementsNode ? plainAttributes(requirementsNode) : null,
     passThrough,
   };
 
   rules.push({ id: draftId("r"), name, entityTypes, conditions, imported });
+}
+
+/**
+ * The IFC class names a `<name>` lists, or `null` when they cannot be listed and edited as a set.
+ * `ids.xsd` allows one `<entity>` per applicability, so an enumeration here is how a multi-type
+ * rule is written — reading it is what lets those rules be imported at all.
+ *
+ * Stricter than the validator's reader: anything the exporter would not reproduce exactly, such as
+ * an annotation or a non-string base, refuses the specification rather than rewriting the author's
+ * document behind their back.
+ */
+function readEntityNames(
+  nameChildren: OrderedNode[]
+): { names: string[]; asEnumeration: boolean } | null {
+  const simpleValue = readSimpleValue(nameChildren);
+  if (simpleValue !== null) return { names: [simpleValue], asEnumeration: false };
+
+  const restrictionNode = findChild(nameChildren, "restriction");
+  if (!restrictionNode) return null;
+
+  const base = attributeOrNull(restrictionNode, "base");
+  if (base !== null && base.slice(base.indexOf(":") + 1) !== "string") return null;
+
+  const children = elementsOf(childrenOf(restrictionNode));
+  if (children.some((child) => tagOf(child) !== "enumeration")) return null;
+  if (children.length === 0) return null;
+
+  return {
+    names: children.map((child) => attributeOrNull(child, "value") ?? ""),
+    asEnumeration: true,
+  };
 }
 
 /**
@@ -227,9 +259,10 @@ function readSpecification(
 function readApplicability(
   applicabilityNode: OrderedNode | null,
   reasons: UnsupportedConstruct[]
-): string[] {
-  if (!applicabilityNode) return [];
+): { entityTypes: string[]; asEnumeration: boolean } {
   const entityTypes: string[] = [];
+  let asEnumeration = false;
+  if (!applicabilityNode) return { entityTypes, asEnumeration };
 
   for (const node of elementsOf(childrenOf(applicabilityNode))) {
     const tag = tagOf(node);
@@ -244,28 +277,29 @@ function readApplicability(
     }
 
     const children = childrenOf(node);
-    const entityName = readSimpleValue(descend(children, "name"));
-    if (entityName === null) {
+    const read = readEntityNames(descend(children, "name"));
+    if (read === null) {
       reasons.push({
         section: "applicability",
         construct: "entity/name",
-        description: "Gives its entity types as a pattern or list rather than plain names.",
+        description: "Gives its entity types as a pattern rather than plain names.",
       });
       continue;
     }
-    entityTypes.push(entityName);
+    entityTypes.push(...read.names);
+    asEnumeration = read.asEnumeration;
 
     for (const child of elementsOf(children)) {
       if (tagOf(child) === "name") continue;
       reasons.push({
         section: "applicability",
         construct: `entity/${tagOf(child)}`,
-        description: `Narrows <${entityName}> by <${tagOf(child)}>, which the builder cannot show.`,
+        description: `Narrows <${read.names.join(", ")}> by <${tagOf(child)}>, which the builder cannot show.`,
       });
     }
   }
 
-  return entityTypes;
+  return { entityTypes, asEnumeration };
 }
 
 /** Attributes a facet may carry and still be fully representable. */

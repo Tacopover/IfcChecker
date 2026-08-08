@@ -252,10 +252,9 @@ an open rule, rather than stacked. They are symmetric in the schema and the two-
 Ordered so each stage is independently shippable and testable, and so the riskiest unknown (parser
 data) is faced first rather than last.
 
-**Stage 0 — fix the multi-entity export.** Emit one `<entity>` with an `xs:enumeration` when a rule
-names more than one type. Add a schema-validity check to the gate so this class of bug cannot
-recur: validate every fixture and every round-trip output against `ids.xsd`. Small, and it should
-not ride along with anything else.
+**Stage 0 — fix the multi-entity export — DONE 2026-08-07.** Emitted as one `<entity>` with an
+`xs:enumeration`, which forced both readers to learn to read one, which turned up two more things
+the schema check then found. Written up below; the corpus still round-trips 7,784/7,784.
 
 **Stage 1 — model data for the missing facets.** Extend `NormalizedElement` with materials,
 classifications and the five partOf relationships; implement in both the ifc-lite and web-ifc
@@ -283,6 +282,41 @@ instructions and uri, and the document metadata panel.
 importer passes through — and the "refuse rather than half-understand" rule from §3e holds for all
 six facets. A partly-understood classification applicability must refuse exactly as a partly
 understood entity one does today.
+
+---
+
+## What stage 0 turned up
+
+Fixing the export meant `parse-ids` and `import-ids` had to read an entity-name enumeration, since
+otherwise our own output would be a document we could not read back. That pulled two further
+problems into the light, both worse than the bug being fixed.
+
+**156 of 464 hand-authored specifications were reporting green having checked nothing.** Once an
+enumeration applicability is readable, a specification whose *every* requirement we had to drop
+still selects its elements, finds nothing wrong with any of them, and passes. That is §3e's
+false-pass exactly, sitting on the requirements side where nobody had looked. `isEvaluable` now
+refuses a specification with no checkable requirement left, and the count of runnable hand-authored
+specifications drops from 426 to 270. The 156 break down as classification 44, partOf 35, material
+32, entity 25, and 20 whose property or attribute *name* is a pattern rather than a plain name —
+which sums exactly to the facet frequencies above, so the measurement is sound.
+
+This is the strongest argument yet for the stage ordering: every one of those 156 becomes a real
+check as its facet lands, and until then it is honestly reported as unchecked.
+
+**Two smaller ones, both found by the new schema check rather than by review:**
+
+- `<info>` children have a schema-fixed order, and `buildIdsXml` appended carried-through ones
+  after `<date>`. Any imported file with an `<author>` or `<version>` came back out invalid. The
+  `mixed-fidelity.ids` fixture had the same fault, written by the same wrong assumption.
+- A single-member `xs:enumeration` of entity names was being rewritten as a `<simpleValue>`. Same
+  meaning, but a diff on the author's file — `ImportedRuleSource.entityNamesAsEnumeration` now
+  carries the form.
+
+`idsSchemaViolations()` encodes the structural rules of `ids.xsd` — element order and cardinality,
+required elements and attributes, enumerated attribute values, and the `idsValue` choice. It is not
+a full XSD validation and does not pretend to be. Three corpus files are schema-invalid on the way
+*in* (two have `<n>` where `<name>` belongs, from markdown mangling); we reproduce them faithfully
+rather than silently correcting someone else's document, and the count out equals the count in.
 
 ---
 

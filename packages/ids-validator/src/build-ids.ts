@@ -109,11 +109,34 @@ function interleave(
   return out;
 }
 
+/**
+ * The one `<entity>` an applicability may hold. `ids.xsd` allows a single entity facet there, so
+ * several types are one facet whose name is an enumeration — emitting one `<entity>` per type
+ * produces a document no conforming checker will read.
+ */
+function entityApplicabilityXml(entityTypes: string[], asEnumeration: boolean): string[] {
+  const names = entityTypes.map((entityType) => entityType.toUpperCase());
+  if (names.length === 0) return [];
+  if (names.length === 1 && !asEnumeration) {
+    return [`        <entity><name><simpleValue>${escapeXml(names[0])}</simpleValue></name></entity>`];
+  }
+
+  return [
+    `        <entity>`,
+    `          <name>`,
+    `            <xs:restriction base="xs:string">`,
+    ...names.map((name) => `              <xs:enumeration value="${escapeXml(name)}" />`),
+    `            </xs:restriction>`,
+    `          </name>`,
+    `        </entity>`,
+  ];
+}
+
 function specificationXml(rule: RuleDraft): string {
   const source = rule.imported;
-  const entities = rule.entityTypes.map(
-    (entityType) =>
-      `        <entity><name><simpleValue>${escapeXml(entityType.toUpperCase())}</simpleValue></name></entity>`
+  const entities = entityApplicabilityXml(
+    rule.entityTypes,
+    source?.entityNamesAsEnumeration ?? false
   );
 
   const specAttributes = source
@@ -146,6 +169,32 @@ function specificationXml(rule: RuleDraft): string {
   ].join("\n");
 }
 
+/** `ids.xsd` fixes the order of `<info>` children, so a carried-through one cannot just be appended. */
+const INFO_ORDER = [
+  "title",
+  "copyright",
+  "version",
+  "description",
+  "author",
+  "date",
+  "purpose",
+  "milestone",
+];
+
+function infoXml(title: string, date: string, extraInfo: string[]): string[] {
+  const entries = [
+    { order: INFO_ORDER.indexOf("title"), xml: `    <title>${escapeXml(title)}</title>` },
+    { order: INFO_ORDER.indexOf("date"), xml: `    <date>${escapeXml(date)}</date>` },
+    ...extraInfo.map((xml) => {
+      const tag = /<\s*([\w:.]+)/.exec(xml)?.[1] ?? "";
+      const order = INFO_ORDER.indexOf(tag.slice(tag.indexOf(":") + 1));
+      return { order: order === -1 ? INFO_ORDER.length : order, xml: indent(xml, "    ") };
+    }),
+  ];
+
+  return entries.sort((left, right) => left.order - right.order).map((entry) => entry.xml);
+}
+
 export function buildIdsXml(rules: RuleDraft[], info: IdsDocumentInfo = {}): string {
   const title = info.title ?? "IDS rules";
   const date = info.date ?? new Date().toISOString().slice(0, 10);
@@ -155,9 +204,7 @@ export function buildIdsXml(rules: RuleDraft[], info: IdsDocumentInfo = {}): str
     `<ids xmlns="http://standards.buildingsmart.org/IDS"`,
     `     xmlns:xs="http://www.w3.org/2001/XMLSchema">`,
     `  <info>`,
-    `    <title>${escapeXml(title)}</title>`,
-    `    <date>${escapeXml(date)}</date>`,
-    ...(info.extraInfo ?? []).map((xml) => indent(xml, "    ")),
+    ...infoXml(title, date, info.extraInfo ?? []),
     `  </info>`,
     `  <specifications>`,
     ...interleave(rules.map(specificationXml), info.untouched ?? [], "    "),
