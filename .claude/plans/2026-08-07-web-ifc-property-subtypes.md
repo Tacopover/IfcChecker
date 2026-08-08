@@ -78,8 +78,12 @@ Worth deciding with the property-facet interpretation table in hand, not before.
 
 ## Gotchas
 
-- ifc-lite's path (`ifc-lite-buffer.ts`) needs the same audit — it was not checked when this was
-  found, so do not assume it is correct just because it differs from web-ifc.
+- **ifc-lite already handles all six**, joining list and enumerated values with `", "` — recorded
+  in the hub Decisions-Log entry of 2026-08-02, which also measured the divergence: 280 elements
+  differ on `Pset_PipeConnection`/`Pset_DuctConnection`.`ConnectionType`, `null` against
+  `"Generic"`, from an `IFCPROPERTYLISTVALUE`. So this is web-ifc catching up, not a joint audit —
+  but note ifc-lite's joined string is a *display* choice, and the IDS interpretation rules
+  ("at least one of the IFC values should match") may not be satisfiable from it.
 - **Scale.** Real federated models run to 1.6 GB and parse in ~120 s; these are new reads per
   property. Measure, and see `feedback-verify-scale-against-real-models` — do not extrapolate from
   sandbox hardware or synthetic fixtures.
