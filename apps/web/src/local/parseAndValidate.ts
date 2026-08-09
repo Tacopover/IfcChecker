@@ -91,6 +91,15 @@ export interface SpecificationSummary {
   passedCount: number;
   failedCount: number;
   violations: CheckRow[];
+  /**
+   * Why the specification failed as a whole rather than on any element — most often that its
+   * applicability is required and nothing in the model matched it. Null when it did not.
+   *
+   * Across a batch this is the first model that failed it: cardinality is a question about one
+   * model, and summing applicable counts over files would let a file full of walls cover for a
+   * file with none.
+   */
+  cardinalityFailure: string | null;
 }
 
 /**
@@ -121,6 +130,7 @@ export function validateParsedModels(
     passedCount: 0,
     failedCount: 0,
     violations: [],
+    cardinalityFailure: null,
   }));
 
   for (const model of models) {
@@ -129,6 +139,7 @@ export function validateParsedModels(
       summary.applicableCount += outcome.applicableCount;
       summary.passedCount += outcome.passedCount;
       summary.failedCount += outcome.failedCount;
+      summary.cardinalityFailure ??= outcome.cardinalityFailure;
       summary.violations.push(
         ...outcome.violations.map<CheckRow>((violation, position) => ({
           // No real FileJob exists in this client-only path — fileName stands in for

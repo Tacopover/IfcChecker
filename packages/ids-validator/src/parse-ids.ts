@@ -35,8 +35,25 @@ export interface UnsupportedConstruct {
   description: string;
 }
 
+/**
+ * How many elements a specification's applicability is allowed to select.
+ *
+ * `<applicability minOccurs maxOccurs>`, and `ids.xsd` inherits XML Schema's
+ * `occurs` group, where **`minOccurs` defaults to 1**. So the plain
+ * `<applicability maxOccurs="unbounded">` every rule in the wild is written
+ * with is *required*: a model in which nothing matches fails the specification.
+ * That is the opposite of what an empty violation list looks like.
+ *
+ * - `required` — at least one element must match (the default).
+ * - `optional` — `minOccurs="0"`; nothing needs to match, matches are checked.
+ * - `prohibited` — `minOccurs="0" maxOccurs="0"`; nothing may match, and the
+ *   specification carries no requirements. One that does is invalid.
+ */
+export type SpecificationCardinality = "required" | "optional" | "prohibited";
+
 export interface ParsedSpecification {
   name: string;
+  cardinality: SpecificationCardinality;
   applicabilityEntityNames: string[];
   requirements: ParsedRequirementFacet[];
   /** Reported rather than logged, so a caller can show the user what was dropped. */
@@ -214,6 +231,7 @@ function parseSpecification(specNode: OrderedNode): ParsedSpecification {
   const specChildren = childrenOf(specNode, "specification");
   const unsupported: UnsupportedConstruct[] = [];
 
+  const applicabilityNode = specChildren.find((node) => tagOf(node) === "applicability");
   const applicabilityEntityNames = readApplicability(
     descend(specChildren, "applicability"),
     unsupported
@@ -222,6 +240,7 @@ function parseSpecification(specNode: OrderedNode): ParsedSpecification {
 
   return {
     name,
+    cardinality: readSpecificationCardinality(applicabilityNode),
     applicabilityEntityNames,
     requirements,
     unsupported,
@@ -252,6 +271,34 @@ function readEntityNames(nameChildren: OrderedNode[]): string[] | null {
   const enumerations = nodesNamed(children, "enumeration");
   if (enumerations.length === 0) return null;
   return enumerations.map((node) => String(attributesOf(node)["@_value"] ?? ""));
+}
+
+/**
+ * The cardinality an `<applicability minOccurs maxOccurs>` states.
+ *
+ * Exported because the rule builder compiles drafts straight to
+ * `ParsedSpecification` without serialising, and has to read the numbers the
+ * same way this parser would — an imported rule carries its source's occurs
+ * attributes verbatim.
+ */
+export function specificationCardinalityOf(
+  minOccursRaw: string | undefined,
+  maxOccursRaw: string | undefined
+): SpecificationCardinality {
+  // Absent means 1, per the XML Schema `occurs` group ids.xsd pulls in — the
+  // default is "required", not "whatever happens to match".
+  const minOccurs = Number(minOccursRaw ?? 1);
+  const maxOccurs = maxOccursRaw === "unbounded" ? Infinity : Number(maxOccursRaw ?? 1);
+
+  if (minOccurs === 0 && maxOccurs === 0) return "prohibited";
+  return minOccurs === 0 ? "optional" : "required";
+}
+
+function readSpecificationCardinality(
+  applicabilityNode: OrderedNode | undefined
+): SpecificationCardinality {
+  const attributes = applicabilityNode ? attributesOf(applicabilityNode) : {};
+  return specificationCardinalityOf(attributes["@_minOccurs"], attributes["@_maxOccurs"]);
 }
 
 /**

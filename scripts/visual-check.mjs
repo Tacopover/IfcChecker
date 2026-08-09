@@ -178,11 +178,17 @@ const SCENARIOS = {
     if (failing.applied === "0") throw new Error("the wall rule matched nothing; the fixture or the rule is wrong");
     if (failing.failed === "0") throw new Error("expected the wall rule to fail elements, got " + JSON.stringify(failing));
 
+    // The model has no curtain walls, and this rule's applicability is required (minOccurs
+    // defaults to 1), so the rule itself fails. Its counts are the same zeroes a clean model
+    // produces, which is exactly why the reason has to be on screen.
     var inert = specRow("Curtain walls are named");
     if (inert.applied !== "0") throw new Error("expected the curtain wall rule to match nothing, got " + inert.applied);
-    var alert = h.all(".check-summary [role=alert]")[0];
-    if (!alert || alert.textContent.indexOf("nothing was checked") === -1) {
-      throw new Error("a rule that matched no elements did not say so — it reads as a clean model");
+    var alerts = h.all(".check-summary [role=alert]").map(function (n) { return n.textContent; }).join(" | ");
+    if (alerts.indexOf("requires at least one matching element") === -1) {
+      throw new Error("a required rule that matched no elements did not say so — it reads as a clean model: " + alerts);
+    }
+    if (h.text(".check-summary .summary-line").indexOf("2 failing") === -1) {
+      throw new Error("a required rule that matched nothing was not counted as failing: " + h.text(".check-summary .summary-line"));
     }
 
     // A rule the checker cannot represent must show no counts at all: a "0 failed" here would be

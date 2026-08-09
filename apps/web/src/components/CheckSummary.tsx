@@ -8,6 +8,10 @@ function statusOf(summary: SpecificationSummary): SpecStatus {
   // Ordered by how much the counts can be trusted: an unchecked specification has no counts at
   // all, so it can never be mistaken for one that ran and matched nothing.
   if (!summary.checked) return "not-checked";
+  // Before the count check, because a required specification that matched nothing has failed —
+  // and its counts are the same zeroes a clean model produces. An optional one falls through to
+  // "matched nothing", which is a real and passing answer.
+  if (summary.cardinalityFailure !== null) return "failed";
   if (summary.applicableCount === 0) return "not-applied";
   return summary.failedCount > 0 ? "failed" : "passed";
 }
@@ -163,6 +167,16 @@ export function CheckSummary({
                               </li>
                             ))}
                         </ul>
+                      </td>
+                    </tr>
+                  )}
+
+                  {summary.cardinalityFailure !== null && (
+                    <tr className="spec-cardinality">
+                      <td colSpan={5}>
+                        {/* Failed as a whole, with no failing element to show for it — so the
+                            reason has to be stated, or the row reads as an empty accusation. */}
+                        <p role="alert">{summary.cardinalityFailure}</p>
                       </td>
                     </tr>
                   )}

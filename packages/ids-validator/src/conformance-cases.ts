@@ -111,12 +111,17 @@ export async function runCase(entry: ConformanceCase): Promise<CaseResult> {
         .flatMap((outcome) => outcome.unsupported.map((item) => item.construct))
         .join(", ");
     } else {
-      const failed = outcomes.filter((outcome) => outcome.failedCount > 0);
+      // A specification can fail without any element failing: its applicability
+      // has a cardinality, and "required" is the default.
+      const failed = outcomes.filter(
+        (outcome) => outcome.failedCount > 0 || outcome.cardinalityFailure !== null
+      );
       actual = failed.length > 0 ? "fail" : "pass";
       detail = outcomes
         .map(
           (outcome) =>
-            `${outcome.applicableCount} applicable, ${outcome.passedCount} passed, ${outcome.failedCount} failed`
+            `${outcome.applicableCount} applicable, ${outcome.passedCount} passed, ${outcome.failedCount} failed` +
+            (outcome.cardinalityFailure === null ? "" : ` (${outcome.cardinalityFailure})`)
         )
         .join("; ");
     }

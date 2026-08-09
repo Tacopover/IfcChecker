@@ -30,6 +30,7 @@ function summary(overrides: Partial<SpecificationSummary> = {}): SpecificationSu
     passedCount: 2,
     failedCount: 1,
     violations: [violation()],
+    cardinalityFailure: null,
     ...overrides,
   };
 }
@@ -56,6 +57,30 @@ describe("CheckSummary", () => {
 
     expect(screen.getByText("matched nothing")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("nothing was checked");
+  });
+
+  // IDS defaults an applicability to required, so "nothing matched" is the rule failing, not the
+  // model being clean. The counts are the same zeroes either way, which is the whole problem.
+  it("fails a required specification that matched nothing, and says why", () => {
+    render(
+      <CheckSummary
+        summaries={[
+          summary({
+            applicableCount: 0,
+            passedCount: 0,
+            failedCount: 0,
+            violations: [],
+            cardinalityFailure:
+              "This specification requires at least one matching element, and the model has none.",
+          }),
+        ]}
+      />
+    );
+
+    expect(screen.getByText("failing")).toBeInTheDocument();
+    expect(screen.queryByText("matched nothing")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("requires at least one matching element");
+    expect(screen.getByRole("status")).toHaveTextContent("1 failing");
   });
 
   it("does not call a fully compliant specification unchecked", () => {

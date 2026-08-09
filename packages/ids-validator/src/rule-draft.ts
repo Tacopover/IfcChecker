@@ -4,7 +4,7 @@ import type {
   ParsedRestriction,
   ParsedSpecification,
 } from "./parse-ids.js";
-import { patternRestriction } from "./parse-ids.js";
+import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
 
 export type ConditionOperator =
   | "exists"
@@ -142,6 +142,12 @@ function compileCondition(condition: ConditionDraft): ParsedRequirementFacet {
 export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
   return rules.map((rule) => ({
     name: rule.name,
+    // Authored rules are written minOccurs="1"; imported ones keep their source's occurs
+    // attributes, so both read back the same way parseIdsXml would read the built XML.
+    cardinality: specificationCardinalityOf(
+      rule.imported?.applicabilityAttributes.minOccurs,
+      rule.imported?.applicabilityAttributes.maxOccurs
+    ),
     applicabilityEntityNames: rule.entityTypes.map((entityType) => entityType.toUpperCase()),
     requirements: rule.conditions.map(compileCondition),
     // Authored rules can say nothing the builder cannot; imported ones carry what it could not read.
