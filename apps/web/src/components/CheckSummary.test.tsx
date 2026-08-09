@@ -30,6 +30,7 @@ function summary(overrides: Partial<SpecificationSummary> = {}): SpecificationSu
     passedCount: 2,
     failedCount: 1,
     violations: [violation()],
+    cardinalityFailure: null,
     ...overrides,
   };
 }
@@ -56,6 +57,30 @@ describe("CheckSummary", () => {
 
     expect(screen.getByText("matched nothing")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("nothing was checked");
+  });
+
+  // IDS defaults an applicability to required, so "nothing matched" is the rule failing, not the
+  // model being clean. The counts are the same zeroes either way, which is the whole problem.
+  it("fails a required specification that matched nothing, and says why", () => {
+    render(
+      <CheckSummary
+        summaries={[
+          summary({
+            applicableCount: 0,
+            passedCount: 0,
+            failedCount: 0,
+            violations: [],
+            cardinalityFailure:
+              "This specification requires at least one matching element, and the model has none.",
+          }),
+        ]}
+      />
+    );
+
+    expect(screen.getByText("failing")).toBeInTheDocument();
+    expect(screen.queryByText("matched nothing")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("requires at least one matching element");
+    expect(screen.getByRole("status")).toHaveTextContent("1 failing");
   });
 
   it("does not call a fully compliant specification unchecked", () => {
@@ -100,6 +125,38 @@ describe("CheckSummary", () => {
     const row = screen.getByText("Walls are fire rated").closest("tr");
     expect(row).toHaveTextContent("—");
     expect(row).not.toHaveTextContent("0");
+  });
+
+  // The other way a specification can be refused: its elements are selectable, but every single
+  // requirement was dropped, so it would have run and found nothing wrong with any of them.
+  it("says so when a specification is unchecked because all of its requirements were dropped", () => {
+    render(
+      <CheckSummary
+        summaries={[
+          summary({
+            checked: false,
+            applicableCount: 0,
+            passedCount: 0,
+            failedCount: 0,
+            violations: [],
+            unsupported: [
+              {
+                section: "requirements",
+                construct: "classification",
+                description: "Requires <classification>, which cannot be represented.",
+              },
+            ],
+          }),
+        ]}
+      />
+    );
+
+    expect(screen.getByText("not checked")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "every requirement it states is one this checker cannot represent"
+    );
+    // The reason has to survive: filtering the list to applicability losses left this blank.
+    expect(screen.getByText("classification")).toBeInTheDocument();
   });
 
   it("warns that a specification which ran was checked against fewer requirements than it states", () => {

@@ -1,7 +1,8 @@
 import * as WebIFC from "web-ifc";
-import type { ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
+import { simpleAttributeNamesFor, type ModelStructureNode, type NormalizedElement } from "@ifc-qa/shared-types";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
+import { identifyEntity } from "./entity-identity.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
 import { normalizePropertyValue } from "./normalize-property-value.js";
 
@@ -115,7 +116,7 @@ export async function parseWebIfcBuffer(
   const modelID = ifcApi.OpenModel(new Uint8Array(raw));
 
   try {
-    const elements: NormalizedElement[] = [];
+    const idsScope: NormalizedElement[] = [];
     const elementTypeByExpressId = new Map<number, string>();
 
     // Element expressId -> the property-definition lines that describe it.
@@ -222,6 +223,7 @@ export async function parseWebIfcBuffer(
 
     const unrecognized: UnrecognizedEntityType[] = [];
     const keptTypeNames: string[] = [];
+    const reviewerTypeNames = new Set<string>();
     const typeCodeByName = new Map<string, number>();
     for (const [typeCode, count] of countByTypeCode) {
       // web-ifc has no name for a type outside its own schema; keep whatever it
@@ -235,6 +237,7 @@ export async function parseWebIfcBuffer(
         continue;
       }
       keptTypeNames.push(typeName);
+      if (verdict === "element") reviewerTypeNames.add(typeName);
       typeCodeByName.set(typeName, typeCode);
     }
     // Sorted so the element order is a property of the model, not of whichever
@@ -245,9 +248,12 @@ export async function parseWebIfcBuffer(
 
     for (const typeName of keptTypeNames) {
       const lineIds = ifcApi.GetLineIDsWithType(modelID, typeCodeByName.get(typeName)!);
+      const isReviewerElement = reviewerTypeNames.has(typeName);
       for (let i = 0; i < lineIds.size(); i++) {
         const expressID = lineIds.get(i);
-        elementTypeByExpressId.set(expressID, typeName);
+        // Reviewer elements only: this map feeds the model-structure tree's
+        // per-storey counts, which are about what a person is looking at.
+        if (isReviewerElement) elementTypeByExpressId.set(expressID, typeName);
         const line = ifcApi.GetLine(modelID, expressID) as WebIfcLine;
 
         // Type first, instance second: IFC overrides per *property*, not per
@@ -271,16 +277,22 @@ export async function parseWebIfcBuffer(
         const globalId = normalizePropertyValue(line.GlobalId);
         const name = normalizePropertyValue(line.Name);
 
-        elements.push({
-          globalId: typeof globalId === "string" ? globalId : String(globalId ?? ""),
+        // Every attribute the schema says holds a comparable value, not the
+        // three this adapter used to hand-pick. The schema decides rather than
+        // the line's shape, so the two engines carry the same set: web-ifc
+        // returns a reference as a handle object and ifc-lite as a bare number,
+        // and neither is something a rule should compare against.
+        const attributes: Record<string, string | number | boolean | null> = {};
+        for (const attributeName of simpleAttributeNamesFor(typeName)) {
+          attributes[attributeName] = normalizePropertyValue(line[attributeName]);
+        }
+
+        idsScope.push({
+          globalId: identifyEntity(typeName, globalId, expressID),
           ifcType: typeName,
           predefinedType: stripEnumDots(line.PredefinedType),
           name: typeof name === "string" ? name : null,
-          attributes: {
-            Tag: normalizePropertyValue(line.Tag),
-            Description: normalizePropertyValue(line.Description),
-            ObjectType: normalizePropertyValue(line.ObjectType),
-          },
+          attributes,
           propertySets,
         });
       }
@@ -288,7 +300,11 @@ export async function parseWebIfcBuffer(
 
     warnAboutUnrecognizedTypes(unrecognized);
     const modelStructure = buildWebIfcModelStructure(ifcApi, modelID, elementTypeByExpressId);
-    return { elements, parseMs: performance.now() - start, modelStructure, unrecognizedTypes: unrecognized };
+    // Filtered out of the sorted superset rather than collected separately, so
+    // the element list keeps exactly the order it had before the wider scope
+    // existed — the two engines have to agree element-for-element.
+    const elements = idsScope.filter((entity) => reviewerTypeNames.has(entity.ifcType));
+    return { elements, idsScope, parseMs: performance.now() - start, modelStructure, unrecognizedTypes: unrecognized };
   } finally {
     ifcApi.CloseModel(modelID);
   }

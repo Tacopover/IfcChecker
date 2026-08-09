@@ -231,7 +231,6 @@ describe("idsXmlToDrafts document metadata", () => {
       ifcVersion: "IFC2X3 IFC4",
       description: "Spec-level prose the builder has no field for.",
       instructions: "Fill these in from the wall schedule.",
-      minOccurs: "1",
     });
     expect(rule.imported?.applicabilityAttributes).toEqual({ minOccurs: "0", maxOccurs: "unbounded" });
     expect(rule.imported?.requirementsAttributes).toEqual({
@@ -251,7 +250,7 @@ describe("idsXmlToDrafts document metadata", () => {
     const { title, extraInfo } = idsXmlToDrafts(MIXED);
 
     expect(title).toBe("Mixed fidelity");
-    expect(extraInfo).toEqual(["<author>taco@mepover.com</author>", "<version>1.1</version>"]);
+    expect(extraInfo).toEqual(["<version>1.1</version>", "<author>taco@mepover.com</author>"]);
   });
 
   it("returns nothing for a document with no specifications", () => {

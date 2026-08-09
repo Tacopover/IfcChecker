@@ -6,9 +6,10 @@ import {
   type IfcDataStore,
 } from "@ifc-lite/parser";
 import { IfcTypeEnumToString, type SpatialNode } from "@ifc-lite/data";
-import type { ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
+import { simpleAttributeNamesFor, type ModelStructureNode, type NormalizedElement } from "@ifc-qa/shared-types";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
+import { identifyEntity } from "./entity-identity.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
 import { normalizePropertyValue } from "./normalize-property-value.js";
 
@@ -64,7 +65,7 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
     raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer
   );
 
-  const elements: NormalizedElement[] = [];
+  const idsScope: NormalizedElement[] = [];
   const elementTypeByExpressId = new Map<number, string>();
 
   // store.entityIndex.byType is keyed by the raw type name the file carries, so
@@ -73,11 +74,16 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
   // IfcDuctFitting — silently produced nothing.
   const unrecognized: UnrecognizedEntityType[] = [];
   const keptTypeNames: string[] = [];
+  const reviewerTypeNames = new Set<string>();
   for (const [typeName, expressIds] of store.entityIndex.byType) {
     const verdict = classifyEntityType(typeName);
     if (verdict === "ignored") continue;
-    if (verdict === "unrecognized") unrecognized.push({ ifcType: typeName.toUpperCase(), count: expressIds.length });
-    else keptTypeNames.push(typeName.toUpperCase());
+    if (verdict === "unrecognized") {
+      unrecognized.push({ ifcType: typeName.toUpperCase(), count: expressIds.length });
+      continue;
+    }
+    keptTypeNames.push(typeName.toUpperCase());
+    if (verdict === "element") reviewerTypeNames.add(typeName.toUpperCase());
   }
   // Sorted so element order is a property of the model rather than of this
   // engine's internal index order — the two adapters have to agree
@@ -88,8 +94,12 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
   for (const typeName of keptTypeNames) {
     const expressIds = store.entityIndex.byType.get(typeName) ?? [];
 
+    const isReviewerElement = reviewerTypeNames.has(typeName);
+
     for (const expressId of expressIds) {
-      elementTypeByExpressId.set(expressId, typeName);
+      // Reviewer elements only: this map feeds the model-structure tree's
+      // per-storey counts, which are about what a person is looking at.
+      if (isReviewerElement) elementTypeByExpressId.set(expressId, typeName);
       // Type first, instance second: a property the model states once on the
       // IfcTypeObject reaches its occurrences only through IFCRELDEFINESBYTYPE,
       // and IFC overrides per *property*, not per set — so a set named on both
@@ -119,18 +129,27 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
       const attrs = extractAllEntityAttributes(store, expressId);
       const findAttr = (name: string) => attrs.find((a) => a.name === name)?.value ?? null;
 
-      const name = store.entities.getName(expressId);
+      // Every attribute the schema says holds a comparable value, not the three
+      // this adapter used to hand-pick. A rule may name any of them —
+      // IsCritical on an IfcTaskTime, RefractionIndex on a surface style — and
+      // an attribute we did not carry read as one the model was missing.
+      const attributes: Record<string, string | number | boolean | null> = {};
+      for (const attributeName of simpleAttributeNamesFor(typeName)) {
+        attributes[attributeName] = normalizePropertyValue(findAttr(attributeName));
+      }
 
-      elements.push({
-        globalId: store.entities.getGlobalId(expressId),
+      // store.entities is indexed for object definitions; it answers nothing
+      // for relationships or property sets, so an IfcPropertySet arrived
+      // nameless while web-ifc read its name. extractAllEntityAttributes covers
+      // any entity because it re-derives from the source buffer.
+      const name = normalizePropertyValue(store.entities.getName(expressId) || findAttr("Name"));
+
+      idsScope.push({
+        globalId: identifyEntity(typeName, store.entities.getGlobalId(expressId), expressId),
         ifcType: typeName,
         predefinedType: stripEnumDots(findAttr("PredefinedType")),
-        name: name === "" ? null : name,
-        attributes: {
-          Tag: normalizePropertyValue(findAttr("Tag")),
-          Description: normalizePropertyValue(findAttr("Description")),
-          ObjectType: normalizePropertyValue(findAttr("ObjectType")),
-        },
+        name: typeof name === "string" && name !== "" ? name : null,
+        attributes,
         propertySets,
       });
     }
@@ -138,5 +157,9 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
 
   warnAboutUnrecognizedTypes(unrecognized);
   const modelStructure = buildIfcLiteModelStructure(store, elementTypeByExpressId);
-  return { elements, parseMs: performance.now() - start, modelStructure, unrecognizedTypes: unrecognized };
+  // Filtered out of the sorted superset rather than collected separately, so
+  // the element list keeps exactly the order it had before the wider scope
+  // existed — the two engines have to agree element-for-element.
+  const elements = idsScope.filter((entity) => reviewerTypeNames.has(entity.ifcType));
+  return { elements, idsScope, parseMs: performance.now() - start, modelStructure, unrecognizedTypes: unrecognized };
 }

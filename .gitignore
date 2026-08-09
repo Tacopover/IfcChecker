@@ -5,3 +5,5 @@ dist/
 docker/pgdata/
 apps/web/public/wasm/
 .verify-output/
+.conformance/
+.conformance-clone/

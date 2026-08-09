@@ -8,6 +8,10 @@ function statusOf(summary: SpecificationSummary): SpecStatus {
   // Ordered by how much the counts can be trusted: an unchecked specification has no counts at
   // all, so it can never be mistaken for one that ran and matched nothing.
   if (!summary.checked) return "not-checked";
+  // Before the count check, because a required specification that matched nothing has failed —
+  // and its counts are the same zeroes a clean model produces. An optional one falls through to
+  // "matched nothing", which is a real and passing answer.
+  if (summary.cardinalityFailure !== null) return "failed";
   if (summary.applicableCount === 0) return "not-applied";
   return summary.failedCount > 0 ? "failed" : "passed";
 }
@@ -22,6 +26,17 @@ const STATUS_LABEL: Record<SpecStatus, string> = {
 /** Losses that weakened a specification that did run, as opposed to ones that stopped it. */
 function droppedRequirements(summary: SpecificationSummary) {
   return summary.unsupported.filter((entry) => entry.section === "requirements");
+}
+
+/**
+ * Which half of a refused specification stopped it. An unreadable applicability comes first
+ * because it decides the subject: once we cannot say which elements a rule is about, what it
+ * asks of them no longer matters.
+ */
+function refusalCause(summary: SpecificationSummary): "applicability" | "requirements" {
+  return summary.unsupported.some((entry) => entry.section === "applicability")
+    ? "applicability"
+    : "requirements";
 }
 
 // The first failing specification opens by itself: a summary that shows only counts leaves the
@@ -134,22 +149,34 @@ export function CheckSummary({
                   {status === "not-checked" && (
                     <tr className="spec-not-checked">
                       <td colSpan={5}>
-                        {/* The worst failure mode there is: this specification selects its elements
-                            in a way we cannot read, so running it would have matched nothing and
-                            reported the model clean against a rule that never applied. */}
+                        {/* The worst failure mode there is, and it arrives from two directions: a
+                            rule whose elements we cannot select matches nothing, and a rule whose
+                            every requirement we had to drop finds nothing wrong. Both report a
+                            clean model for a check that never happened, so both say which it was. */}
                         <p role="alert">
-                          This specification was not run: it selects elements in a way this checker
-                          cannot represent, so any result would have been a false pass.
+                          {refusalCause(summary) === "applicability"
+                            ? "This specification was not run: it selects elements in a way this checker cannot represent, so any result would have been a false pass."
+                            : "This specification was not run: every requirement it states is one this checker cannot represent, so a pass would have meant nothing was checked."}
                         </p>
                         <ul className="unsupported-list">
                           {summary.unsupported
-                            .filter((entry) => entry.section === "applicability")
+                            .filter((entry) => entry.section === refusalCause(summary))
                             .map((entry, position) => (
                               <li key={`${entry.construct}#${position}`}>
                                 <code>{entry.construct}</code> — {entry.description}
                               </li>
                             ))}
                         </ul>
+                      </td>
+                    </tr>
+                  )}
+
+                  {summary.cardinalityFailure !== null && (
+                    <tr className="spec-cardinality">
+                      <td colSpan={5}>
+                        {/* Failed as a whole, with no failing element to show for it — so the
+                            reason has to be stated, or the row reads as an empty accusation. */}
+                        <p role="alert">{summary.cardinalityFailure}</p>
                       </td>
                     </tr>
                   )}

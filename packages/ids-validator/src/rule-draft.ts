@@ -4,7 +4,7 @@ import type {
   ParsedRestriction,
   ParsedSpecification,
 } from "./parse-ids.js";
-import { patternRestriction } from "./parse-ids.js";
+import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
 
 export type ConditionOperator =
   | "exists"
@@ -51,12 +51,20 @@ export interface PassThrough {
  * rules authored here, where by construction there is nothing the builder cannot say.
  *
  * Attributes are carried as raw maps rather than named fields on purpose: naming them means
- * silently dropping the ones we did not think of, and real files carry `minOccurs` on
- * `<specification>` and `description` on `<requirements>` in places the schema barely advertises.
+ * silently dropping the ones we did not think of, and real files carry `identifier` and
+ * `instructions` on `<specification>`, `minOccurs` on `<applicability>` and `description` on
+ * `<requirements>` in places the schema barely advertises. Carried verbatim also means carried
+ * when the source was wrong: an attribute `ids.xsd` does not allow goes back out as it came in.
  */
 export interface ImportedRuleSource {
   /** `<specification>` attributes except `name`, which the builder owns. Includes `ifcVersion`. */
   attributes: Record<string, string>;
+  /**
+   * Whether the source listed its entity types as an `xs:enumeration` rather than a single
+   * `<simpleValue>`. Only tells the two forms apart for a one-type rule, where both are legal and
+   * mean the same thing — but rewriting one as the other is still editing the author's document.
+   */
+  entityNamesAsEnumeration: boolean;
   applicabilityAttributes: Record<string, string>;
   /** `null` when the source had no `<requirements>` element at all — an applicability-only rule. */
   requirementsAttributes: Record<string, string> | null;
@@ -134,6 +142,12 @@ function compileCondition(condition: ConditionDraft): ParsedRequirementFacet {
 export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
   return rules.map((rule) => ({
     name: rule.name,
+    // Authored rules are written minOccurs="1"; imported ones keep their source's occurs
+    // attributes, so both read back the same way parseIdsXml would read the built XML.
+    cardinality: specificationCardinalityOf(
+      rule.imported?.applicabilityAttributes.minOccurs,
+      rule.imported?.applicabilityAttributes.maxOccurs
+    ),
     applicabilityEntityNames: rule.entityTypes.map((entityType) => entityType.toUpperCase()),
     requirements: rule.conditions.map(compileCondition),
     // Authored rules can say nothing the builder cannot; imported ones carry what it could not read.

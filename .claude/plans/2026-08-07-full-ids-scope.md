@@ -99,7 +99,7 @@ happens to be larger.
 | entity (requirements) | none — always required | n/a |
 | partOf | `required`, `prohibited` | ❌ |
 | classification, attribute, property, material | `required`, `prohibited`, `optional` | required + prohibited |
-| applicability (`minOccurs`) | 0 = subset optional, 1 = at least one must exist | always emits 1 |
+| applicability (`minOccurs`) | 0 = subset optional, 1 = at least one must exist | ✅ read and enforced (2026-08-09) |
 
 `optional` means "if present it must comply, but it may be absent" — a genuinely different check we
 currently pass through rather than run. Hand-authored applicability: 64 say `minOccurs="0"`, 47 say
@@ -252,10 +252,9 @@ an open rule, rather than stacked. They are symmetric in the schema and the two-
 Ordered so each stage is independently shippable and testable, and so the riskiest unknown (parser
 data) is faced first rather than last.
 
-**Stage 0 — fix the multi-entity export.** Emit one `<entity>` with an `xs:enumeration` when a rule
-names more than one type. Add a schema-validity check to the gate so this class of bug cannot
-recur: validate every fixture and every round-trip output against `ids.xsd`. Small, and it should
-not ride along with anything else.
+**Stage 0 — fix the multi-entity export — DONE 2026-08-07.** Emitted as one `<entity>` with an
+`xs:enumeration`, which forced both readers to learn to read one, which turned up two more things
+the schema check then found. Written up below; the corpus still round-trips 7,784/7,784.
 
 **Stage 1 — model data for the missing facets.** Extend `NormalizedElement` with materials,
 classifications and the five partOf relationships; implement in both the ifc-lite and web-ifc
@@ -286,6 +285,41 @@ understood entity one does today.
 
 ---
 
+## What stage 0 turned up
+
+Fixing the export meant `parse-ids` and `import-ids` had to read an entity-name enumeration, since
+otherwise our own output would be a document we could not read back. That pulled two further
+problems into the light, both worse than the bug being fixed.
+
+**156 of 464 hand-authored specifications were reporting green having checked nothing.** Once an
+enumeration applicability is readable, a specification whose *every* requirement we had to drop
+still selects its elements, finds nothing wrong with any of them, and passes. That is §3e's
+false-pass exactly, sitting on the requirements side where nobody had looked. `isEvaluable` now
+refuses a specification with no checkable requirement left, and the count of runnable hand-authored
+specifications drops from 426 to 270. The 156 break down as classification 44, partOf 35, material
+32, entity 25, and 20 whose property or attribute *name* is a pattern rather than a plain name —
+which sums exactly to the facet frequencies above, so the measurement is sound.
+
+This is the strongest argument yet for the stage ordering: every one of those 156 becomes a real
+check as its facet lands, and until then it is honestly reported as unchecked.
+
+**Two smaller ones, both found by the new schema check rather than by review:**
+
+- `<info>` children have a schema-fixed order, and `buildIdsXml` appended carried-through ones
+  after `<date>`. Any imported file with an `<author>` or `<version>` came back out invalid. The
+  `mixed-fidelity.ids` fixture had the same fault, written by the same wrong assumption.
+- A single-member `xs:enumeration` of entity names was being rewritten as a `<simpleValue>`. Same
+  meaning, but a diff on the author's file — `ImportedRuleSource.entityNamesAsEnumeration` now
+  carries the form.
+
+`idsSchemaViolations()` encodes the structural rules of `ids.xsd` — element order and cardinality,
+required elements and attributes, enumerated attribute values, and the `idsValue` choice. It is not
+a full XSD validation and does not pretend to be. Three corpus files are schema-invalid on the way
+*in* (two have `<n>` where `<name>` belongs, from markdown mangling); we reproduce them faithfully
+rather than silently correcting someone else's document, and the count out equals the count in.
+
+---
+
 ## Open questions for the user
 
 1. **Two columns or stacked** for applicability vs requirements inside an open rule.
@@ -297,3 +331,212 @@ understood entity one does today.
 4. **Whether `optional` cardinality should be evaluated or kept refused.** It is the one cardinality
    whose meaning ("if present, comply") differs from what we do today, and getting it wrong fails in
    the approving direction.
+
+---
+
+## Conformance baseline — measured 2026-08-09
+
+The independent check now exists, in two tiers. Everything below is measured, not estimated.
+
+### Tier A — schema conformance, in the gate
+
+Every document we emit is validated against the real `ids.xsd` (vendored at
+`packages/ids-validator/schema/`) by libxml2 compiled to WebAssembly (`xmllint-wasm`, a
+devDependency). No Python, no native build, no network, so there is no path on which the check
+skips itself and reads green. It runs inside the existing test stage of `scripts/verify.mjs`.
+
+Coverage: the three IDS fixtures as they stand, their re-exports, and 24 generated documents
+spanning all 8 condition operators × attribute/property × 7 hostile strings × 3 entity-count
+shapes, plus 12 negative controls that must be rejected.
+
+**It found one thing on the first run.** `mixed-fidelity.ids` carried `minOccurs="1"` on
+`<specification>`, which `specificationType` does not allow — and **0 of the 7,784 corpus files do
+it either**, so the comment in `rule-draft.ts` claiming real files put `minOccurs` there was simply
+wrong. `idsSchemaViolations` never checked specification attributes beyond `name` and `ifcVersion`,
+so it could not see it. The fixture is fixed; the exporter needed no change, because carrying an
+attribute verbatim is the intended behaviour even when the source was invalid.
+
+**Decision on `idsSchemaViolations`:** kept, as the fast in-process check the browser can run per
+keystroke — the wasm validator is a 4 MB module and async, which the live preview cannot afford. It
+is demoted to a convenience: `ids.xsd` is the authority. A test asserts the two reach the same
+verdict on the whole fixture + authored + negative-control corpus, so a future divergence fails
+loudly rather than quietly.
+
+### Tier B — verdict conformance, a scoreboard with a ratchet
+
+buildingSMART's official suite, fetched by `scripts/fetch-conformance-cases.mjs` (sparse clone,
+~3 MB) rather than vendored, and run by `pnpm --filter @ifc-qa/ids-validator test:conformance`.
+Deliberately **not** in the gate: the suite is not in the repo, and a gate stage that skips when it
+is absent is worse than no stage. The recorded baseline is `conformance-baseline.json`; the only
+assertion is that no case we get right today starts failing.
+
+The suite has grown since scoping: **326 cases** at `buildingSMART/IDS@d4341b74`, not 318, and a
+third filename prefix — `invalid-` (27 cases), a specification that asks something nonsensical and
+must therefore fail. `pass-` 183, `fail-` 116.
+
+| group | cases | agreed | wrong | refused |
+| --- | --- | --- | --- | --- |
+| attribute | 56 | 34 | 18 | 4 |
+| classification | 27 | 0 | 0 | 27 |
+| entity | 25 | 0 | 0 | 25 |
+| ids | 12 | 8 | 4 | 0 |
+| material | 29 | 0 | 0 | 29 |
+| partof | 34 | 0 | 0 | 34 |
+| property | 82 | 51 | 23 | 8 |
+| restriction | 25 | 16 | 9 | 0 |
+| tolerance | 36 | 18 | 18 | 0 |
+| **total** | **326** | **127** | **72** | **127** |
+
+**127 agreed, 72 wrong, 127 refused, 0 errored.** No case crashed the parser or the validator,
+which is the one pleasant surprise.
+
+The 127 refusals are honest: `classification`, `material`, `partOf` and requirement-side `entity`
+are whole facets we do not implement, and 12 more are a property or attribute *name* given as a
+pattern. They map exactly onto the facet table above. **Refusal is counted separately from a wrong
+answer on purpose** — "we do not know" and "we got it wrong" are different failures, and folding
+them together would hide both.
+
+### The 72 wrong answers, split by direction
+
+**34 false passes** (we approve what must fail — the dangerous direction): attribute 16,
+property 10, restriction 5, ids 3.
+**38 false fails** (we reject what must pass): tolerance 18, property 13, restriction 4,
+attribute 2, ids 1.
+
+**The single biggest finding: 28 of the 34 false passes report `0 applicable, 0 passed, 0 failed`.**
+This is the same false-pass shape stage 0 fixed on the requirements side, now visible on the
+applicability side — a specification that matches no element at all reports the model clean.
+
+Reading the applicability of each of those 28 splits them almost entirely one way:
+
+- **27 target an entity type `element-filter.ts` drops.** It keeps `IfcElement`, `IfcSpace` and
+  `IfcSpatialZone`; IDS targets *any* IFC entity, and the suite does — `IfcSurfaceStyleRefraction`
+  (8), `IfcTask` (3), `IfcPresentationLayerWithStyle`, `IfcPerson`, `IfcCartesianPoint`,
+  `IfcMaterial`, `IfcProject`, **`IfcWallType`** (2 each), `IfcRelConnectsPathElements`,
+  `IfcClassification`, `IfcTaskTime`, `IfcSurfaceStyleRendering` (1 each). Those elements never
+  reach the validator, so the rule matches nothing and reports clean.
+- **1 is applicability cardinality**, and only one:
+  `ids/fail-required_specifications_need_at_least_one_applicable_entity_2_2`, which targets
+  `IfcWall` — in scope, simply absent from the model. IDS defaults a specification's applicability
+  to *required*, so zero matches is itself a failure; we treat it as nothing to check.
+
+`IfcWallType` is worth pausing on: type objects are not exotic, and two property cases turn on them.
+
+So these are two independent fixes with very different weights, and the order matters. **Element
+scope is worth 27 cases; cardinality is worth 1 on its own** — but cardinality is what stops a
+zero-match rule reading green in general, so both are needed. Do element scope first and re-measure
+before touching cardinality: done together, the scoreboard cannot tell you which one worked.
+Neither is on the staged plan above. Element scope is parser work of a different kind from stage
+1's materials and classifications, and much cheaper.
+
+The rest of the wrong answers group cleanly onto stages already planned:
+
+- **tolerance, 18/18 of the wrong answers, all false fails.** Floating-point comparison needs the
+  tolerance rule from the implementers' document; we compare exactly. Nothing else in the group is
+  wrong, so this is one mechanism, not eighteen problems.
+- **restriction, 9.** Numeric bounds ignored → 3 false passes; `length`/`minLength`/`maxLength` and
+  a regex OR → 4 false fails; patterns applied to numbers rather than refused → 2. Stage 3.
+- **attribute, 18 (16 false passes).** Type-aware comparison: booleans must be lowercase strings,
+  a logical `UNKNOWN` always fails, empty lists and sets always fail, derived and inverse attributes
+  cannot be checked and must fail, numbers are compared by type casting. We compare everything as
+  strings and approve.
+- **property, 23.** Measures and `dataType`, unit conversion to IDS standard units, occurrence
+  override, and bounded values. Stage 3's unit dependency, confirmed by measurement.
+- **ids, 4.** Specification-level cardinality — a `prohibited` specification must fail when its
+  applicability matches, a `required` one must fail when nothing matches.
+
+### What this changes about "full IDS support"
+
+Three things the staged plan did not account for:
+
+1. **Element scope, not just element data.** Stage 1 was written as "add materials, classifications
+   and relationships to `NormalizedElement`". It also needs "stop dropping every entity that is not
+   a physical element", which is a separate and smaller change to `element-filter.ts` — and it is
+   worth doing first, because 27 conformance cases turn on it — including two on `IfcWallType`,
+   so this is not only about exotic entities.
+2. **Value typing is a stage of its own.** Sixteen attribute false passes and much of property come
+   from comparing IFC values as strings. That is not the `FacetDraft` refactor (stage 2) and not
+   restrictions (stage 3); it is a third axis, and it is the one that produces false *approvals*.
+3. **`tolerance` is one mechanism worth 36 cases** — the cheapest single win on the board once
+   numeric comparison exists at all, and it should ride along with stage 3 rather than wait.
+
+Suggested order by cost against false passes removed: element scope + applicability cardinality
+first (28 cases, 27 of them element scope alone, no new data model), then value typing (~26), then
+bounds/tolerance/units (~30).
+
+## Element scope and cardinality — landed and measured 2026-08-09
+
+Both shipped, separately, so the scoreboard could attribute the movement.
+
+| | agreed | false passes | of those, `0 applicable` | refused |
+| --- | --- | --- | --- | --- |
+| before | 127 | 34 | 28 | 127 |
+| after element scope | 128 | 7 | 1 | 129 |
+| after cardinality | **131** | **4** | **0** | 129 |
+
+**Element scope.** Parses everything except the `IfcRepresentationItem` subtree. Geometry was
+measured on the real 37 MB model and is the only subtree whose cost is not worth paying: 662,632 of
+691,277 instances, and normalizing it takes the parse from 1.6 s to 20.5 s. Everything else is
+~28k instances and ~1 s. Real end-to-end parse went **1,576 ms → 2,566 ms (+63%)**, elements
+unchanged at 757, `idsScope` 28,645.
+
+Two lists, not one wider list: `elements` still drives the Validate page and the explorer rail,
+`idsScope` is the superset validation runs against. A rule that names geometry is refused, not
+evaluated — the two `IfcCartesianPoint` cases moved from false pass to honest refusal, which is why
+`refused` went up by 2.
+
+`IFC_PRODUCT_PARENTS` became `IFC_ENTITY_PARENTS`, all 1,051 entities in both schemas. Ancestor
+chains now run to `IfcRoot`, so `isSubtypeOf` answers for `IfcWallType`. The generated file grew
+32 KB → 74 KB of source.
+
+**24 cases moved from agreeing to failing**, and the baseline was refreshed. Not a regression: each
+targets an entity that was never normalized, so the rule matched nothing, reported pass, and
+happened to agree with a `pass-` case. They now match and are judged on merits — and we fail them.
+This is the single most useful thing the change surfaced: **`NormalizedElement.attributes` carries
+three named fields** (`Tag`, `Description`, `ObjectType`) plus `GlobalId`/`Name`/`PredefinedType`,
+and the suite checks arbitrary attributes — `IsCritical` on an `IfcTaskTime`, for one. That belongs
+with value typing and makes it bigger than "~26".
+
+**Cardinality.** `ids.xsd` inherits XML Schema's `occurs` group, where `minOccurs` defaults to 1, so
+the plain `<applicability maxOccurs="unbounded">` nearly every real rule carries is *required*.
+Required / optional / prohibited are all read, and a prohibited specification that also states
+requirements is invalid. Carried on a new `cardinalityFailure` rather than folded into
+`failedCount`, so `passed + failed` stays the number of elements the rule applied to. `ids` group
+went 8/12 → 11/12.
+
+**Not done, and deliberately:** the 12th `ids` case is facet-level `cardinality="optional"` on a
+requirement — requirement-side, a different mechanism from applicability cardinality, still checked
+as required. The 4 remaining false passes are all property measures, units and integer formatting.
+
+## Attribute coverage — landed and measured 2026-08-09
+
+`NormalizedElement.attributes` was three hand-picked names. Now it is every attribute the schema
+says holds a comparable value, chosen from `getAttributes()` rather than from the value's shape —
+both parsers return a reference as a bare number, so filtering on the value would let a rule compare
+against an express id.
+
+| | agreed | false passes | false fails |
+| --- | --- | --- | --- |
+| after cardinality | 131 | 4 | 62 |
+| after attribute coverage | **140** | **2** | 55 |
+
+Two fixes it forced, because on its own it added three false passes:
+
+- A pattern restriction against a number now fails rather than matching its text. IDS says patterns
+  apply to strings and nothing else; `.*` against a stored 42 is the spec's own example.
+- `parse-ids.ts` was the only one of the three XML parsers still using `parseTagValue: true`, so
+  `<simpleValue>42.0</simpleValue>` arrived as the number 42 and the author's literal was gone
+  before anything compared it.
+
+Three cases moved from agreeing to failing, all false fails from the value-typing gap. Net trade:
+three false passes out, three false fails in.
+
+**Costs nothing, and the memory worry was inverted.** Parse on the 37 MB model went 2,566 ms →
+2,619 ms, and the attribute bag got *smaller*: 34,332 slots against 85,935, because the old code
+stored three nulls on every entity including the relationships and property sets that declare none.
+`ifc-entity-table.generated.ts` grew 74 KB → 140 KB of source; the web bundle is 5.9 MB, so the
+tables are noise in it.
+
+**Unverified:** the 1.6 GB federated case. +63% of normalization on a ~120 s parse scales naively to
+~+75 s, probably pessimistic because the extra work tracks non-geometry entity count rather than
+file size — but it has not been measured, and the standing note says to ask rather than extrapolate.

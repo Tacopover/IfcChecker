@@ -68,6 +68,7 @@ function Seed({ models, files }: { models: SeedModel[]; files: File[] }) {
         parseMs: failed ? null : 12,
         errorMessage: failed ? "unexpected end of file" : null,
         elements: failed ? [] : (model.elements ?? ELEMENTS),
+        idsScope: failed ? [] : (model.elements ?? ELEMENTS),
         modelStructure: null,
       });
     }

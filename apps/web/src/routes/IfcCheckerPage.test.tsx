@@ -27,6 +27,7 @@ function outcome(violations: Array<Record<string, unknown>>, overrides: Record<s
     passedCount: 0,
     failedCount: violations.length,
     violations,
+    cardinalityFailure: null,
     ...overrides,
   };
 }

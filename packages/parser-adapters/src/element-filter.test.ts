@@ -1,6 +1,6 @@
 import { getEntities } from "@ifc-lite/data";
 import { describe, expect, it } from "vitest";
-import { IFC_LEGACY_TYPE_NAMES, IFC_PRODUCT_PARENTS } from "@ifc-qa/shared-types";
+import { IFC_ENTITY_PARENTS, IFC_LEGACY_TYPE_NAMES } from "@ifc-qa/shared-types";
 import {
   PHYSICAL_ELEMENT_TYPE_NAMES,
   classifyEntityType,
@@ -29,14 +29,14 @@ describe("classifyEntityType", () => {
     }
   });
 
-  it("drops the IfcFeatureElement subtree even though it sits under IfcElement", () => {
+  it("keeps the IfcFeatureElement subtree out of the reviewer's list, but still parses it", () => {
     for (const type of ["IFCOPENINGELEMENT", "IFCOPENINGSTANDARDCASE", "IFCVOIDINGFEATURE", "IFCPROJECTIONELEMENT", "IFCSURFACEFEATURE"]) {
       expect(isPhysicalElementType(type)).toBe(false);
-      expect(classifyEntityType(type)).toBe("ignored");
+      expect(classifyEntityType(type)).toBe("auxiliary");
     }
   });
 
-  it("drops annotations, grids, ports and the spatial backbone", () => {
+  it("keeps annotations, grids, ports and the spatial backbone out of the reviewer's list", () => {
     for (const type of [
       "IFCANNOTATION",
       "IFCGRID",
@@ -47,14 +47,55 @@ describe("classifyEntityType", () => {
       "IFCBUILDING",
       "IFCBUILDINGSTOREY",
     ]) {
-      expect(classifyEntityType(type)).toBe("ignored");
+      expect(classifyEntityType(type)).toBe("auxiliary");
     }
   });
 
-  it("ignores the non-product entities that make up the bulk of a file", () => {
-    for (const type of ["IFCCARTESIANPOINT", "IFCRELAGGREGATES", "IFCPROPERTYSET", "IFCSIUNIT", "IFCOWNERHISTORY"]) {
+  // These are exactly the types an IDS applicability may name and a reviewer
+  // never checks. While they were dropped, such a rule matched nothing and
+  // reported the model clean — 27 of the 34 conformance false passes.
+  it("parses type objects, relationships and resources so a rule can be written against them", () => {
+    for (const type of [
+      "IFCWALLTYPE",
+      "IFCTYPEOBJECT",
+      "IFCTASK",
+      "IFCTASKTIME",
+      "IFCPERSON",
+      "IFCMATERIAL",
+      "IFCCLASSIFICATION",
+      "IFCRELCONNECTSPATHELEMENTS",
+      "IFCRELAGGREGATES",
+      "IFCPROPERTYSET",
+      "IFCSIUNIT",
+      "IFCOWNERHISTORY",
+      "IFCSURFACESTYLEREFRACTION",
+      "IFCPRESENTATIONLAYERWITHSTYLE",
+    ]) {
+      expect(classifyEntityType(type)).toBe("auxiliary");
+      expect(isPhysicalElementType(type)).toBe(false);
+    }
+  });
+
+  // Geometry is 96% of a real file by instance count and normalizing it took
+  // the 37 MB reference model from 1.6 s to 20.5 s. It is the only subtree
+  // whose cost is not worth paying, so it is the only thing still dropped.
+  it("ignores geometry, and nothing but geometry", () => {
+    for (const type of ["IFCCARTESIANPOINT", "IFCPOLYLOOP", "IFCFACE", "IFCSTYLEDITEM", "IFCEXTRUDEDAREASOLID"]) {
       expect(classifyEntityType(type)).toBe("ignored");
     }
+
+    const ignored = Object.keys(IFC_ENTITY_PARENTS).filter(
+      (name) => classifyEntityType(name) === "ignored"
+    );
+    const outsideGeometry = ignored.filter((name) => {
+      let cursor: string | null | undefined = name;
+      while (cursor) {
+        if (cursor === "IfcRepresentationItem") return false;
+        cursor = IFC_ENTITY_PARENTS[cursor];
+      }
+      return true;
+    });
+    expect(outsideGeometry).toEqual([]);
   });
 
   it("reports a type no schema in this build declares as unrecognized", () => {
@@ -72,8 +113,9 @@ describe("classifyEntityType", () => {
     expect(classifyEntityType("IFCELECTRICALELEMENT")).toBe("element");
     expect(classifyEntityType("IFCEQUIPMENTELEMENT")).toBe("element");
     expect(classifyEntityType("IFCELECTRICDISTRIBUTIONPOINT")).toBe("element");
-    // ...but 2x3 feature elements stay excluded, like their IFC4 siblings.
-    expect(classifyEntityType("IFCEDGEFEATURE")).toBe("ignored");
+    // ...but 2x3 feature elements stay out of the reviewer's list, like their
+    // IFC4 siblings.
+    expect(classifyEntityType("IFCEDGEFEATURE")).toBe("auxiliary");
   });
 
   it("covers the whole element subtree, not a curated slice", () => {
@@ -104,11 +146,11 @@ describe("the committed table still agrees with @ifc-lite/data", () => {
 
     const live = new Set(subtree("IfcElement"));
     const committed = new Set(
-      Object.keys(IFC_PRODUCT_PARENTS).filter((name) => {
-        let cursor: string | null | undefined = IFC_PRODUCT_PARENTS[name];
+      Object.keys(IFC_ENTITY_PARENTS).filter((name) => {
+        let cursor: string | null | undefined = IFC_ENTITY_PARENTS[name];
         while (cursor) {
           if (cursor === "IfcElement") return true;
-          cursor = IFC_PRODUCT_PARENTS[cursor];
+          cursor = IFC_ENTITY_PARENTS[cursor];
         }
         return false;
       })
@@ -124,8 +166,8 @@ describe("the committed table still agrees with @ifc-lite/data", () => {
     const parentOf = new Map(entities.map((entity) => [entity.name, entity.parent ?? null]));
     const legacy = new Set(IFC_LEGACY_TYPE_NAMES);
 
-    const mismatches = Object.entries(IFC_PRODUCT_PARENTS)
-      .filter(([name]) => name !== "IfcProduct" && !legacy.has(name))
+    const mismatches = Object.entries(IFC_ENTITY_PARENTS)
+      .filter(([name]) => !legacy.has(name))
       .filter(([name, parent]) => parentOf.get(name) !== parent);
 
     expect(mismatches).toEqual([]);

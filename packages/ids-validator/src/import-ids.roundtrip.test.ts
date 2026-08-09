@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { XMLParser } from "fast-xml-parser";
 import { describe, expect, it } from "vitest";
 import { buildIdsXml } from "./build-ids.js";
+import { idsSchemaViolations } from "./ids-schema-shape.js";
 import { idsXmlToDrafts } from "./import-ids.js";
 import { parseIdsXml } from "./parse-ids.js";
 import type { ParsedSpecification } from "./parse-ids.js";
@@ -74,6 +75,12 @@ describe("import / export round-trip", () => {
     const original = fixture(name);
 
     expect(comparable(parseIdsXml(reexport(original)))).toEqual(comparable(parseIdsXml(original)));
+  });
+
+  // Reproducing the input and being valid are different claims, and only the first was tested
+  // until an applicability carrying two <entity> elements shipped.
+  it.each(FIXTURES)("re-exports %s as a document that still matches the schema", (name) => {
+    expect(idsSchemaViolations(reexport(fixture(name)))).toEqual([]);
   });
 
   it.each(FIXTURES)("reproduces the specifications of %s element for element", (name) => {

@@ -29,6 +29,18 @@ export interface SpecificationOutcome {
   passedCount: number;
   failedCount: number;
   violations: IdsViolation[];
+  /**
+   * Why the specification failed as a whole, independent of any element — or
+   * `null` when it did not.
+   *
+   * IDS gives the applicability a cardinality, and the default is *required*:
+   * at least one element must match. A model where nothing matches fails the
+   * rule, and that is not visible in any of the counts above — zero applicable,
+   * zero failed and an empty violation list is exactly what a clean model looks
+   * like. Kept separate from `failedCount` so `passed + failed` stays the
+   * number of elements the rule applied to.
+   */
+  cardinalityFailure: string | null;
 }
 
 /**
@@ -51,6 +63,7 @@ export function validateBySpecification(
         passedCount: 0,
         failedCount: 0,
         violations: [],
+        cardinalityFailure: null,
       };
     }
 
@@ -63,6 +76,11 @@ export function validateBySpecification(
         continue;
       }
       applicableCount += 1;
+
+      // A prohibited specification is a statement that nothing should match, so
+      // the elements it selects are the failure. There is nothing to check on
+      // them, and a document that asks for checks anyway is invalid.
+      if (specification.cardinality === "prohibited") continue;
 
       const before = violations.length;
       for (const facet of specification.requirements) {
@@ -88,8 +106,29 @@ export function validateBySpecification(
       passedCount: applicableCount - failedCount,
       failedCount,
       violations,
+      cardinalityFailure: cardinalityFailure(specification, applicableCount),
     };
   });
+}
+
+function cardinalityFailure(
+  specification: { cardinality: string; requirements: unknown[] },
+  applicableCount: number
+): string | null {
+  if (specification.cardinality === "prohibited") {
+    if (specification.requirements.length > 0) {
+      return "This specification is prohibited — nothing may match it — so it cannot also state requirements. The document is invalid.";
+    }
+    return applicableCount > 0
+      ? `Nothing may match this specification, but ${applicableCount} element${applicableCount === 1 ? "" : "s"} did.`
+      : null;
+  }
+
+  if (specification.cardinality === "required" && applicableCount === 0) {
+    return "This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.";
+  }
+
+  return null;
 }
 
 export function validateElements(elements: NormalizedElement[], idsXml: string): IdsViolation[] {

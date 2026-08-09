@@ -1,4 +1,4 @@
-import { IFC_LEGACY_TYPE_NAMES, IFC_PRODUCT_PARENTS } from "@ifc-qa/shared-types";
+import { IFC_ENTITY_PARENTS, IFC_LEGACY_TYPE_NAMES } from "@ifc-qa/shared-types";
 
 export const IFC_SCHEMA = "IFC4" as const;
 
@@ -7,14 +7,19 @@ export const IFC_SCHEMA = "IFC4" as const;
 // flattened once at module load from the generated parent map rather than
 // walked on demand — and the table has to be a committed artifact, since
 // @ifc-lite/data only exposes the schema asynchronously.
+//
+// The map covers the whole schema, not just the product subtree: an
+// applicability naming IfcWallType or IfcTypeObject has to resolve, and while
+// the table stopped at IfcProduct it could not, so those rules matched nothing
+// and reported the model clean.
 const CANONICAL_BY_UPPER = new Map<string, string>();
 const ANCESTORS = new Map<string, string[]>();
 const DESCENDANTS = new Map<string, string[]>();
 const LEGACY = new Set<string>(IFC_LEGACY_TYPE_NAMES);
 
-for (const name of Object.keys(IFC_PRODUCT_PARENTS)) {
+for (const name of Object.keys(IFC_ENTITY_PARENTS)) {
   CANONICAL_BY_UPPER.set(name.toUpperCase(), name);
-  const parent = IFC_PRODUCT_PARENTS[name];
+  const parent = IFC_ENTITY_PARENTS[name];
   // The generated map is depth-first, so a parent's chain is always already
   // resolved by the time its children are read.
   const chain = parent === null ? [] : [parent, ...(ANCESTORS.get(parent) ?? [])];

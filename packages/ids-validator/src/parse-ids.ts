@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { isNormalizableEntityType } from "@ifc-qa/shared-types";
 
 export type ParsedRestriction =
   | { kind: "exact"; value: string }
@@ -34,8 +35,25 @@ export interface UnsupportedConstruct {
   description: string;
 }
 
+/**
+ * How many elements a specification's applicability is allowed to select.
+ *
+ * `<applicability minOccurs maxOccurs>`, and `ids.xsd` inherits XML Schema's
+ * `occurs` group, where **`minOccurs` defaults to 1**. So the plain
+ * `<applicability maxOccurs="unbounded">` every rule in the wild is written
+ * with is *required*: a model in which nothing matches fails the specification.
+ * That is the opposite of what an empty violation list looks like.
+ *
+ * - `required` — at least one element must match (the default).
+ * - `optional` — `minOccurs="0"`; nothing needs to match, matches are checked.
+ * - `prohibited` — `minOccurs="0" maxOccurs="0"`; nothing may match, and the
+ *   specification carries no requirements. One that does is invalid.
+ */
+export type SpecificationCardinality = "required" | "optional" | "prohibited";
+
 export interface ParsedSpecification {
   name: string;
+  cardinality: SpecificationCardinality;
   applicabilityEntityNames: string[];
   requirements: ParsedRequirementFacet[];
   /** Reported rather than logged, so a caller can show the user what was dropped. */
@@ -51,9 +69,16 @@ export interface ParsedSpecification {
  * asked for, and `matchesApplicability` over an empty name list matches *nothing* — so running one
  * anyway produces zero violations and reports a clean model for a rule that was never applied.
  * Callers must report these instead of evaluating them.
+ *
+ * The same trap sits on the requirements side: a specification whose every requirement we had to
+ * drop still selects elements, finds nothing wrong with them, and passes. "All pass" would be a
+ * verdict on nothing that was checked, so it is refused too.
  */
 export function isEvaluable(specification: ParsedSpecification): boolean {
-  return specification.applicabilityComplete && specification.applicabilityEntityNames.length > 0;
+  if (!specification.applicabilityComplete) return false;
+  if (specification.applicabilityEntityNames.length === 0) return false;
+  if (specification.requirements.length > 0) return true;
+  return !specification.unsupported.some((entry) => entry.section === "requirements");
 }
 
 // Ordered mode is what lets requirements keep their document order: an <attribute> written after a
@@ -69,7 +94,12 @@ const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   removeNSPrefix: true,
-  parseTagValue: true,
+  // Off, matching import-ids.ts and ids-schema-shape.ts. On, fast-xml-parser
+  // coerced <simpleValue>42.0</simpleValue> to the number 42, and the author's
+  // literal was gone by the time anything compared it — so a rule saying an
+  // integer attribute must equal "42.0" passed against a stored 42, which IDS
+  // says is exactly what must not happen.
+  parseTagValue: false,
   preserveOrder: true,
 });
 
@@ -206,6 +236,7 @@ function parseSpecification(specNode: OrderedNode): ParsedSpecification {
   const specChildren = childrenOf(specNode, "specification");
   const unsupported: UnsupportedConstruct[] = [];
 
+  const applicabilityNode = specChildren.find((node) => tagOf(node) === "applicability");
   const applicabilityEntityNames = readApplicability(
     descend(specChildren, "applicability"),
     unsupported
@@ -214,11 +245,65 @@ function parseSpecification(specNode: OrderedNode): ParsedSpecification {
 
   return {
     name,
+    cardinality: readSpecificationCardinality(applicabilityNode),
     applicabilityEntityNames,
     requirements,
     unsupported,
     applicabilityComplete: !unsupported.some((entry) => entry.section === "applicability"),
   };
+}
+
+/**
+ * The IFC class names a `<name>` selects: one `<simpleValue>`, or every member of an enumeration.
+ * `null` when the names cannot be listed at all — a pattern selects an open-ended set of classes,
+ * and a rule whose subject we cannot name is one we must refuse rather than guess at.
+ *
+ * An applicability holds a single `<entity>` per `ids.xsd`, so an enumeration here is how every
+ * multi-type rule in the wild is written, and how this package writes them too.
+ */
+function readEntityNames(nameChildren: OrderedNode[]): string[] | null {
+  const simpleValue = readSimpleValue(nameChildren);
+  if (simpleValue !== null) return [simpleValue];
+
+  const restrictionNode = nameChildren.find((node) => tagOf(node) === "restriction");
+  if (!restrictionNode) return null;
+
+  // Enumeration only: a pattern alongside it would narrow the list further, and reading just the
+  // list would select classes the source excluded.
+  const children = childrenOf(restrictionNode, "restriction");
+  if (tagsOf(children).some((tag) => tag !== "enumeration" && tag !== "annotation")) return null;
+
+  const enumerations = nodesNamed(children, "enumeration");
+  if (enumerations.length === 0) return null;
+  return enumerations.map((node) => String(attributesOf(node)["@_value"] ?? ""));
+}
+
+/**
+ * The cardinality an `<applicability minOccurs maxOccurs>` states.
+ *
+ * Exported because the rule builder compiles drafts straight to
+ * `ParsedSpecification` without serialising, and has to read the numbers the
+ * same way this parser would — an imported rule carries its source's occurs
+ * attributes verbatim.
+ */
+export function specificationCardinalityOf(
+  minOccursRaw: string | undefined,
+  maxOccursRaw: string | undefined
+): SpecificationCardinality {
+  // Absent means 1, per the XML Schema `occurs` group ids.xsd pulls in — the
+  // default is "required", not "whatever happens to match".
+  const minOccurs = Number(minOccursRaw ?? 1);
+  const maxOccurs = maxOccursRaw === "unbounded" ? Infinity : Number(maxOccursRaw ?? 1);
+
+  if (minOccurs === 0 && maxOccurs === 0) return "prohibited";
+  return minOccurs === 0 ? "optional" : "required";
+}
+
+function readSpecificationCardinality(
+  applicabilityNode: OrderedNode | undefined
+): SpecificationCardinality {
+  const attributes = applicabilityNode ? attributesOf(applicabilityNode) : {};
+  return specificationCardinalityOf(attributes["@_minOccurs"], attributes["@_maxOccurs"]);
 }
 
 /**
@@ -246,22 +331,34 @@ function readApplicability(
     }
 
     const children = childrenOf(node, "entity");
-    const entityName = readSimpleValue(descend(children, "name"));
-    if (entityName === null) {
+    const names = readEntityNames(descend(children, "name"));
+    if (names === null) {
       unsupported.push({
         section: "applicability",
         construct: "entity/name",
-        description: "Gives its entity types as a pattern or list rather than plain names.",
+        description: "Gives its entity types as a pattern rather than plain names.",
       });
       continue;
     }
-    entityNames.push(entityName);
+    entityNames.push(...names);
+
+    // Geometry is the one part of the schema a parse never normalizes, so a
+    // rule aimed at it would select nothing and report every model clean. Said
+    // out loud instead: refusing is honest, a silent pass is not.
+    const unparsed = names.filter((name) => !isNormalizableEntityType(name));
+    if (unparsed.length > 0) {
+      unsupported.push({
+        section: "applicability",
+        construct: "entity/name",
+        description: `Selects <${unparsed.join(", ")}>, geometry this build does not read.`,
+      });
+    }
 
     if (children.some((child) => tagOf(child) === "predefinedType")) {
       unsupported.push({
         section: "applicability",
         construct: "entity/predefinedType",
-        description: `Narrows <${entityName}> to one predefined type, which cannot be represented.`,
+        description: `Narrows <${names.join(", ")}> to one predefined type, which cannot be represented.`,
       });
     }
   }

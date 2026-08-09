@@ -30,6 +30,7 @@ const PARSE_BY_ENGINE: Record<
   EngineId,
   (buffer: Uint8Array) => Promise<{
     elements: NormalizedElement[];
+    idsScope: NormalizedElement[];
     parseMs: number;
     modelStructure: ModelStructureNode | null;
   }>
@@ -44,13 +45,14 @@ const PARSE_BY_ENGINE: Record<
 export async function parseFile(file: File, engine: EngineId): Promise<ParseOutcome> {
   try {
     const buffer = new Uint8Array(await file.arrayBuffer());
-    const { elements, parseMs, modelStructure } = await PARSE_BY_ENGINE[engine](buffer);
+    const { elements, idsScope, parseMs, modelStructure } = await PARSE_BY_ENGINE[engine](buffer);
     return {
       status: "succeeded",
       engine,
       parseMs,
       errorMessage: null,
       elements,
+      idsScope: idsScope ?? elements,
       modelStructure: modelStructure ?? null,
     };
   } catch (error) {
@@ -60,6 +62,7 @@ export async function parseFile(file: File, engine: EngineId): Promise<ParseOutc
       parseMs: null,
       errorMessage: error instanceof Error ? error.message : String(error),
       elements: [],
+      idsScope: [],
       modelStructure: null,
     };
   }
@@ -69,7 +72,8 @@ export interface ParsedModel {
   /** Identity, as the store defines it — file names collide, so results cannot join back on one. */
   key: string;
   fileName: string;
-  elements: NormalizedElement[];
+  /** Checking runs against the wider IDS scope, not the reviewer element list. */
+  idsScope: NormalizedElement[];
 }
 
 export interface CheckRow extends ElementResult {
@@ -87,6 +91,15 @@ export interface SpecificationSummary {
   passedCount: number;
   failedCount: number;
   violations: CheckRow[];
+  /**
+   * Why the specification failed as a whole rather than on any element — most often that its
+   * applicability is required and nothing in the model matched it. Null when it did not.
+   *
+   * Across a batch this is the first model that failed it: cardinality is a question about one
+   * model, and summing applicable counts over files would let a file full of walls cover for a
+   * file with none.
+   */
+  cardinalityFailure: string | null;
 }
 
 /**
@@ -117,14 +130,16 @@ export function validateParsedModels(
     passedCount: 0,
     failedCount: 0,
     violations: [],
+    cardinalityFailure: null,
   }));
 
   for (const model of models) {
-    validateBySpecification(model.elements, idsXml).forEach((outcome, index) => {
+    validateBySpecification(model.idsScope, idsXml).forEach((outcome, index) => {
       const summary = summaries[index];
       summary.applicableCount += outcome.applicableCount;
       summary.passedCount += outcome.passedCount;
       summary.failedCount += outcome.failedCount;
+      summary.cardinalityFailure ??= outcome.cardinalityFailure;
       summary.violations.push(
         ...outcome.violations.map<CheckRow>((violation, position) => ({
           // No real FileJob exists in this client-only path — fileName stands in for

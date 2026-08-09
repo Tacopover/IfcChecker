@@ -67,6 +67,105 @@ describe("adapter parity", () => {
     expect(webIfcResult.unrecognizedTypes).toEqual([]);
   });
 
+  // The wider scope has to agree engine-for-engine too, or an IDS check would
+  // give different answers depending on which parser the user picked — and the
+  // conformance suite only ever exercises one of them.
+  it("both engines produce the same IDS scope, in the same order", async () => {
+    const path = fixturePath("mep-systems.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    expect(ifcLiteResult.idsScope).toEqual(webIfcResult.idsScope);
+  });
+
+  it("the IDS scope is a superset of the elements, and carries what a reviewer never sees", async () => {
+    const path = fixturePath("mep-systems.ifc");
+
+    for (const result of [
+      await new WebIfcAdapter().parse(path),
+      await new IfcLiteAdapter().parse(path),
+    ]) {
+      expect(result.idsScope.length).toBeGreaterThan(result.elements.length);
+      // Identity, not deep equality: the element list is filtered out of the
+      // scope, so the two must be the same objects in the same order.
+      expect(result.idsScope.filter((entity) => result.elements.includes(entity))).toEqual(
+        result.elements
+      );
+
+      const scopeTypes = new Set(result.idsScope.map((entity) => entity.ifcType));
+      const elementTypes = new Set(result.elements.map((entity) => entity.ifcType));
+      // The spatial backbone, the openings and the port: parsed for IDS,
+      // deliberately absent from what the Validate page lists.
+      for (const type of ["IFCPROJECT", "IFCBUILDINGSTOREY", "IFCOPENINGELEMENT", "IFCDISTRIBUTIONPORT"]) {
+        expect(scopeTypes.has(type)).toBe(true);
+        expect(elementTypes.has(type)).toBe(false);
+      }
+      // ...and geometry is in neither, which is what keeps the cost payable.
+      expect(scopeTypes.has("IFCCARTESIANPOINT")).toBe(false);
+    }
+  });
+
+  // The bag used to be three hand-picked names, so a rule against any other
+  // attribute read as one the model was missing. Both engines have to carry the
+  // same set, or the same rule set answers differently per engine.
+  it("both engines carry every attribute the schema says holds a value", async () => {
+    const path = fixturePath("mep-systems.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const storeyOf = (result: typeof webIfcResult) =>
+      result.idsScope.find((entity) => entity.ifcType === "IFCBUILDINGSTOREY")?.attributes;
+
+    // Elevation is a number and CompositionType an enum; neither survived the
+    // old Tag/Description/ObjectType bag.
+    expect(ifcLiteResult.idsScope.length).toBeGreaterThan(0);
+    expect(storeyOf(ifcLiteResult)).toMatchObject({ Elevation: 0, CompositionType: "ELEMENT" });
+    expect(storeyOf(ifcLiteResult)).toEqual(storeyOf(webIfcResult));
+  });
+
+  // Both parsers hand a reference back as a bare number, so carrying one would
+  // let a rule compare against an express id and quietly pass.
+  it("neither engine carries a reference-valued attribute", async () => {
+    const path = fixturePath("mep-systems.ifc");
+
+    for (const result of [
+      await new WebIfcAdapter().parse(path),
+      await new IfcLiteAdapter().parse(path),
+    ]) {
+      const relationship = result.idsScope.find((entity) => entity.ifcType === "IFCRELAGGREGATES");
+      expect(relationship).toBeDefined();
+      expect(relationship!.attributes).not.toHaveProperty("RelatingObject");
+      expect(relationship!.attributes).not.toHaveProperty("RelatedObjects");
+
+      const propertySet = result.idsScope.find((entity) => entity.ifcType === "IFCPROPERTYSET");
+      expect(propertySet!.attributes).not.toHaveProperty("HasProperties");
+    }
+  });
+
+  // The wider bag must not disturb what a reviewer sees: IfcWall declares no
+  // simple attribute beyond the three, so its elements are byte-identical.
+  it("leaves a wall's attributes exactly as they were", async () => {
+    const { elements } = await new IfcLiteAdapter().parse(fixturePath("mep-systems.ifc"));
+    const wall = elements.find((element) => element.ifcType === "IFCWALL");
+
+    expect(Object.keys(wall!.attributes).sort()).toEqual(["Description", "ObjectType", "Tag"]);
+  });
+
+  it("both engines give a non-rooted entity the same synthetic identity", async () => {
+    const path = fixturePath("mep-systems.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const synthetic = (result: typeof webIfcResult) =>
+      result.idsScope.filter((entity) => entity.globalId.startsWith("#"));
+
+    // IfcMaterial, IfcPerson and the presentation resources have no GlobalId
+    // attribute at all; the STEP line number stands in, and both engines read
+    // it from the same file.
+    expect(synthetic(ifcLiteResult).length).toBeGreaterThan(0);
+    expect(synthetic(ifcLiteResult)).toEqual(synthetic(webIfcResult));
+  });
+
   it("both engines agree on the per-storey counts of a full MEP model", async () => {
     const path = fixturePath("mep-systems.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);
