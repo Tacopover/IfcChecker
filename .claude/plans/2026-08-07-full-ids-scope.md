@@ -508,6 +508,35 @@ went 8/12 → 11/12.
 requirement — requirement-side, a different mechanism from applicability cardinality, still checked
 as required. The 4 remaining false passes are all property measures, units and integer formatting.
 
+## Attribute coverage — landed and measured 2026-08-09
+
+`NormalizedElement.attributes` was three hand-picked names. Now it is every attribute the schema
+says holds a comparable value, chosen from `getAttributes()` rather than from the value's shape —
+both parsers return a reference as a bare number, so filtering on the value would let a rule compare
+against an express id.
+
+| | agreed | false passes | false fails |
+| --- | --- | --- | --- |
+| after cardinality | 131 | 4 | 62 |
+| after attribute coverage | **140** | **2** | 55 |
+
+Two fixes it forced, because on its own it added three false passes:
+
+- A pattern restriction against a number now fails rather than matching its text. IDS says patterns
+  apply to strings and nothing else; `.*` against a stored 42 is the spec's own example.
+- `parse-ids.ts` was the only one of the three XML parsers still using `parseTagValue: true`, so
+  `<simpleValue>42.0</simpleValue>` arrived as the number 42 and the author's literal was gone
+  before anything compared it.
+
+Three cases moved from agreeing to failing, all false fails from the value-typing gap. Net trade:
+three false passes out, three false fails in.
+
+**Costs nothing, and the memory worry was inverted.** Parse on the 37 MB model went 2,566 ms →
+2,619 ms, and the attribute bag got *smaller*: 34,332 slots against 85,935, because the old code
+stored three nulls on every entity including the relationships and property sets that declare none.
+`ifc-entity-table.generated.ts` grew 74 KB → 140 KB of source; the web bundle is 5.9 MB, so the
+tables are noise in it.
+
 **Unverified:** the 1.6 GB federated case. +63% of normalization on a ~120 s parse scales naively to
 ~+75 s, probably pessimistic because the extra work tracks non-geometry entity count rather than
 file size — but it has not been measured, and the standing note says to ask rather than extrapolate.
