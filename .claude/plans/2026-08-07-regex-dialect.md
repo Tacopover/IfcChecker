@@ -1,5 +1,13 @@
 # Session: XSD regular expressions are not JavaScript regular expressions
 
+> ⚠️ **Demoted 2026-08-09** by the conformance baseline. The question this note exists to settle is
+> settled, and the answer is small: XSD-vs-JavaScript regex dialect is worth **3 conformance cases**
+> — `restriction/invalid-patterns_always_fail_on_any_number` and
+> `restriction/invalid-patterns_only_work_on_strings_and_nothing_else` (both false passes: a pattern
+> applied to a number must fail, not match), plus `restriction/pass-regex_patterns_work_in_OR_2_3`
+> (a false fail). Still real; no longer a session of its own. See the baseline at the end of
+> `2026-08-07-full-ids-scope.md`.
+
 **Goal:** stop the builder exporting patterns that mean something different to an external checker
 than they do in our own preview.
 

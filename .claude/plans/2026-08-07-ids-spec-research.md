@@ -1,5 +1,11 @@
 # Session: the total picture of IDS 1.0
 
+> ⚠️ **Mostly subsumed 2026-08-09.** The official conformance suite turned out to be the enumeration
+> this note set out to assemble — 326 cases, scored one by one, in `conformance-baseline.json`. The
+> residue still worth reading is the `tolerance` and units implementers' documents, and both are now
+> pinpointed by specific failing cases. Fold that into the numeric-comparison workstream rather than
+> running this as a session of its own.
+
 **Goal:** one document that says what an IDS implementation must do, what we currently do, and what
 the builder can realistically offer a user — complete enough that no more surprises arrive one at a
 time.

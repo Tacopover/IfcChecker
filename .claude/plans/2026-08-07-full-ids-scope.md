@@ -403,23 +403,31 @@ property 10, restriction 5, ids 3.
 **38 false fails** (we reject what must pass): tolerance 18, property 13, restriction 4,
 attribute 2, ids 1.
 
-**The single biggest finding: 27 of the 34 false passes report `0 applicable, 0 passed, 0 failed`.**
+**The single biggest finding: 28 of the 34 false passes report `0 applicable, 0 passed, 0 failed`.**
 This is the same false-pass shape stage 0 fixed on the requirements side, now visible on the
-applicability side — a specification that matches no element at all reports the model clean. Two
-independent causes, and they must not be confused:
+applicability side — a specification that matches no element at all reports the model clean.
 
-1. **Applicability cardinality is not evaluated.** IDS defaults a specification's applicability to
-   *required*, meaning at least one element must match; zero matches is itself a failure. We treat
-   zero matches as nothing to check. (`ids/fail-required_specifications_need_at_least_one_applicable_entity_2_2`.)
-2. **Our element scope is narrower than IDS's.** `element-filter.ts` keeps `IfcElement`, `IfcSpace`
-   and `IfcSpatialZone`. IDS can target *any* IFC entity, and the suite does:
-   `IfcPresentationLayerWithStyle`, `IfcProject`, `IfcMaterial`, `IfcContext`. Those elements never
-   reach the validator, so the rule matches nothing.
+Reading the applicability of each of those 28 splits them almost entirely one way:
 
-Fixing (1) alone would flip most of those 27 to agreement **for the wrong reason** — right verdict,
-wrong mechanism, and the score would look like progress it is not. Both need doing, and (2) is not
-on the staged plan above at all: it is parser work of a different kind from stage 1's materials and
-classifications, and cheaper.
+- **27 target an entity type `element-filter.ts` drops.** It keeps `IfcElement`, `IfcSpace` and
+  `IfcSpatialZone`; IDS targets *any* IFC entity, and the suite does — `IfcSurfaceStyleRefraction`
+  (8), `IfcTask` (3), `IfcPresentationLayerWithStyle`, `IfcPerson`, `IfcCartesianPoint`,
+  `IfcMaterial`, `IfcProject`, **`IfcWallType`** (2 each), `IfcRelConnectsPathElements`,
+  `IfcClassification`, `IfcTaskTime`, `IfcSurfaceStyleRendering` (1 each). Those elements never
+  reach the validator, so the rule matches nothing and reports clean.
+- **1 is applicability cardinality**, and only one:
+  `ids/fail-required_specifications_need_at_least_one_applicable_entity_2_2`, which targets
+  `IfcWall` — in scope, simply absent from the model. IDS defaults a specification's applicability
+  to *required*, so zero matches is itself a failure; we treat it as nothing to check.
+
+`IfcWallType` is worth pausing on: type objects are not exotic, and two property cases turn on them.
+
+So these are two independent fixes with very different weights, and the order matters. **Element
+scope is worth 27 cases; cardinality is worth 1 on its own** — but cardinality is what stops a
+zero-match rule reading green in general, so both are needed. Do element scope first and re-measure
+before touching cardinality: done together, the scoreboard cannot tell you which one worked.
+Neither is on the staged plan above. Element scope is parser work of a different kind from stage
+1's materials and classifications, and much cheaper.
 
 The rest of the wrong answers group cleanly onto stages already planned:
 
@@ -444,7 +452,8 @@ Three things the staged plan did not account for:
 1. **Element scope, not just element data.** Stage 1 was written as "add materials, classifications
    and relationships to `NormalizedElement`". It also needs "stop dropping every entity that is not
    a physical element", which is a separate and smaller change to `element-filter.ts` — and it is
-   worth doing first, because 27 conformance cases turn on it.
+   worth doing first, because 27 conformance cases turn on it — including two on `IfcWallType`,
+   so this is not only about exotic entities.
 2. **Value typing is a stage of its own.** Sixteen attribute false passes and much of property come
    from comparing IFC values as strings. That is not the `FacetDraft` refactor (stage 2) and not
    restrictions (stage 3); it is a third axis, and it is the one that produces false *approvals*.
@@ -452,4 +461,5 @@ Three things the staged plan did not account for:
    numeric comparison exists at all, and it should ride along with stage 3 rather than wait.
 
 Suggested order by cost against false passes removed: element scope + applicability cardinality
-first (27 cases, no new data model), then value typing (~26), then bounds/tolerance/units (~30).
+first (28 cases, 27 of them element scope alone, no new data model), then value typing (~26), then
+bounds/tolerance/units (~30).

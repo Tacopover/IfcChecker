@@ -1,5 +1,11 @@
 # Session: `<info>` is not preserved across an import/export round trip
 
+> ⚠️ **Demoted 2026-08-09** by the conformance work. Tier A now validates the whole document against
+> the real `ids.xsd`, not just the `<specifications>` subtree, so the `<info>` element-order rule is
+> enforced by the schema itself and can no longer regress unnoticed. What remains is genuine but
+> narrower than this note assumed: `<date>` is still overwritten with today's date on export, so a
+> whole-document round trip is not byte-faithful. Fidelity, not a wrong verdict.
+
 **Goal:** a file the user only opened should come back out unchanged, including its header.
 
 **Size:** small. Self-contained, and the fix is obvious once the decision below is made.

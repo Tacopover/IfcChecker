@@ -1,5 +1,12 @@
 # Session: web-ifc reads only one of the six IFC property value kinds
 
+> ℹ️ **Still independent, and worth widening — 2026-08-09.** Tier B of the conformance work runs on
+> ifc-lite only. Running the same 326 cases through both adapters would score engine divergence
+> against an objective answer key instead of against each other, which is exactly what
+> `adapter-parity.test.ts` cannot do — and it is cheap now that the harness exists. This note also
+> wants to land *before* `2026-08-09-value-typing.md`: typed comparison will make the two engines
+> disagree more visibly, not less.
+
 **Goal:** the two engines should agree, and both should read the property kinds IDS says it checks.
 
 **Size:** medium. Adapter work, plus a decision about what a non-scalar property value *is* in our
