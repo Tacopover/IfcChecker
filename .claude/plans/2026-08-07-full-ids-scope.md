@@ -99,7 +99,7 @@ happens to be larger.
 | entity (requirements) | none — always required | n/a |
 | partOf | `required`, `prohibited` | ❌ |
 | classification, attribute, property, material | `required`, `prohibited`, `optional` | required + prohibited |
-| applicability (`minOccurs`) | 0 = subset optional, 1 = at least one must exist | always emits 1 |
+| applicability (`minOccurs`) | 0 = subset optional, 1 = at least one must exist | ✅ read and enforced (2026-08-09) |
 
 `optional` means "if present it must comply, but it may be absent" — a genuinely different check we
 currently pass through rather than run. Hand-authored applicability: 64 say `minOccurs="0"`, 47 say
@@ -463,3 +463,51 @@ Three things the staged plan did not account for:
 Suggested order by cost against false passes removed: element scope + applicability cardinality
 first (28 cases, 27 of them element scope alone, no new data model), then value typing (~26), then
 bounds/tolerance/units (~30).
+
+## Element scope and cardinality — landed and measured 2026-08-09
+
+Both shipped, separately, so the scoreboard could attribute the movement.
+
+| | agreed | false passes | of those, `0 applicable` | refused |
+| --- | --- | --- | --- | --- |
+| before | 127 | 34 | 28 | 127 |
+| after element scope | 128 | 7 | 1 | 129 |
+| after cardinality | **131** | **4** | **0** | 129 |
+
+**Element scope.** Parses everything except the `IfcRepresentationItem` subtree. Geometry was
+measured on the real 37 MB model and is the only subtree whose cost is not worth paying: 662,632 of
+691,277 instances, and normalizing it takes the parse from 1.6 s to 20.5 s. Everything else is
+~28k instances and ~1 s. Real end-to-end parse went **1,576 ms → 2,566 ms (+63%)**, elements
+unchanged at 757, `idsScope` 28,645.
+
+Two lists, not one wider list: `elements` still drives the Validate page and the explorer rail,
+`idsScope` is the superset validation runs against. A rule that names geometry is refused, not
+evaluated — the two `IfcCartesianPoint` cases moved from false pass to honest refusal, which is why
+`refused` went up by 2.
+
+`IFC_PRODUCT_PARENTS` became `IFC_ENTITY_PARENTS`, all 1,051 entities in both schemas. Ancestor
+chains now run to `IfcRoot`, so `isSubtypeOf` answers for `IfcWallType`. The generated file grew
+32 KB → 74 KB of source.
+
+**24 cases moved from agreeing to failing**, and the baseline was refreshed. Not a regression: each
+targets an entity that was never normalized, so the rule matched nothing, reported pass, and
+happened to agree with a `pass-` case. They now match and are judged on merits — and we fail them.
+This is the single most useful thing the change surfaced: **`NormalizedElement.attributes` carries
+three named fields** (`Tag`, `Description`, `ObjectType`) plus `GlobalId`/`Name`/`PredefinedType`,
+and the suite checks arbitrary attributes — `IsCritical` on an `IfcTaskTime`, for one. That belongs
+with value typing and makes it bigger than "~26".
+
+**Cardinality.** `ids.xsd` inherits XML Schema's `occurs` group, where `minOccurs` defaults to 1, so
+the plain `<applicability maxOccurs="unbounded">` nearly every real rule carries is *required*.
+Required / optional / prohibited are all read, and a prohibited specification that also states
+requirements is invalid. Carried on a new `cardinalityFailure` rather than folded into
+`failedCount`, so `passed + failed` stays the number of elements the rule applied to. `ids` group
+went 8/12 → 11/12.
+
+**Not done, and deliberately:** the 12th `ids` case is facet-level `cardinality="optional"` on a
+requirement — requirement-side, a different mechanism from applicability cardinality, still checked
+as required. The 4 remaining false passes are all property measures, units and integer formatting.
+
+**Unverified:** the 1.6 GB federated case. +63% of normalization on a ~120 s parse scales naively to
+~+75 s, probably pessimistic because the extra work tracks non-geometry entity count rather than
+file size — but it has not been measured, and the standing note says to ask rather than extrapolate.
