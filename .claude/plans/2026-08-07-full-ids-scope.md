@@ -331,3 +331,125 @@ rather than silently correcting someone else's document, and the count out equal
 4. **Whether `optional` cardinality should be evaluated or kept refused.** It is the one cardinality
    whose meaning ("if present, comply") differs from what we do today, and getting it wrong fails in
    the approving direction.
+
+---
+
+## Conformance baseline — measured 2026-08-09
+
+The independent check now exists, in two tiers. Everything below is measured, not estimated.
+
+### Tier A — schema conformance, in the gate
+
+Every document we emit is validated against the real `ids.xsd` (vendored at
+`packages/ids-validator/schema/`) by libxml2 compiled to WebAssembly (`xmllint-wasm`, a
+devDependency). No Python, no native build, no network, so there is no path on which the check
+skips itself and reads green. It runs inside the existing test stage of `scripts/verify.mjs`.
+
+Coverage: the three IDS fixtures as they stand, their re-exports, and 24 generated documents
+spanning all 8 condition operators × attribute/property × 7 hostile strings × 3 entity-count
+shapes, plus 12 negative controls that must be rejected.
+
+**It found one thing on the first run.** `mixed-fidelity.ids` carried `minOccurs="1"` on
+`<specification>`, which `specificationType` does not allow — and **0 of the 7,784 corpus files do
+it either**, so the comment in `rule-draft.ts` claiming real files put `minOccurs` there was simply
+wrong. `idsSchemaViolations` never checked specification attributes beyond `name` and `ifcVersion`,
+so it could not see it. The fixture is fixed; the exporter needed no change, because carrying an
+attribute verbatim is the intended behaviour even when the source was invalid.
+
+**Decision on `idsSchemaViolations`:** kept, as the fast in-process check the browser can run per
+keystroke — the wasm validator is a 4 MB module and async, which the live preview cannot afford. It
+is demoted to a convenience: `ids.xsd` is the authority. A test asserts the two reach the same
+verdict on the whole fixture + authored + negative-control corpus, so a future divergence fails
+loudly rather than quietly.
+
+### Tier B — verdict conformance, a scoreboard with a ratchet
+
+buildingSMART's official suite, fetched by `scripts/fetch-conformance-cases.mjs` (sparse clone,
+~3 MB) rather than vendored, and run by `pnpm --filter @ifc-qa/ids-validator test:conformance`.
+Deliberately **not** in the gate: the suite is not in the repo, and a gate stage that skips when it
+is absent is worse than no stage. The recorded baseline is `conformance-baseline.json`; the only
+assertion is that no case we get right today starts failing.
+
+The suite has grown since scoping: **326 cases** at `buildingSMART/IDS@d4341b74`, not 318, and a
+third filename prefix — `invalid-` (27 cases), a specification that asks something nonsensical and
+must therefore fail. `pass-` 183, `fail-` 116.
+
+| group | cases | agreed | wrong | refused |
+| --- | --- | --- | --- | --- |
+| attribute | 56 | 34 | 18 | 4 |
+| classification | 27 | 0 | 0 | 27 |
+| entity | 25 | 0 | 0 | 25 |
+| ids | 12 | 8 | 4 | 0 |
+| material | 29 | 0 | 0 | 29 |
+| partof | 34 | 0 | 0 | 34 |
+| property | 82 | 51 | 23 | 8 |
+| restriction | 25 | 16 | 9 | 0 |
+| tolerance | 36 | 18 | 18 | 0 |
+| **total** | **326** | **127** | **72** | **127** |
+
+**127 agreed, 72 wrong, 127 refused, 0 errored.** No case crashed the parser or the validator,
+which is the one pleasant surprise.
+
+The 127 refusals are honest: `classification`, `material`, `partOf` and requirement-side `entity`
+are whole facets we do not implement, and 12 more are a property or attribute *name* given as a
+pattern. They map exactly onto the facet table above. **Refusal is counted separately from a wrong
+answer on purpose** — "we do not know" and "we got it wrong" are different failures, and folding
+them together would hide both.
+
+### The 72 wrong answers, split by direction
+
+**34 false passes** (we approve what must fail — the dangerous direction): attribute 16,
+property 10, restriction 5, ids 3.
+**38 false fails** (we reject what must pass): tolerance 18, property 13, restriction 4,
+attribute 2, ids 1.
+
+**The single biggest finding: 27 of the 34 false passes report `0 applicable, 0 passed, 0 failed`.**
+This is the same false-pass shape stage 0 fixed on the requirements side, now visible on the
+applicability side — a specification that matches no element at all reports the model clean. Two
+independent causes, and they must not be confused:
+
+1. **Applicability cardinality is not evaluated.** IDS defaults a specification's applicability to
+   *required*, meaning at least one element must match; zero matches is itself a failure. We treat
+   zero matches as nothing to check. (`ids/fail-required_specifications_need_at_least_one_applicable_entity_2_2`.)
+2. **Our element scope is narrower than IDS's.** `element-filter.ts` keeps `IfcElement`, `IfcSpace`
+   and `IfcSpatialZone`. IDS can target *any* IFC entity, and the suite does:
+   `IfcPresentationLayerWithStyle`, `IfcProject`, `IfcMaterial`, `IfcContext`. Those elements never
+   reach the validator, so the rule matches nothing.
+
+Fixing (1) alone would flip most of those 27 to agreement **for the wrong reason** — right verdict,
+wrong mechanism, and the score would look like progress it is not. Both need doing, and (2) is not
+on the staged plan above at all: it is parser work of a different kind from stage 1's materials and
+classifications, and cheaper.
+
+The rest of the wrong answers group cleanly onto stages already planned:
+
+- **tolerance, 18/18 of the wrong answers, all false fails.** Floating-point comparison needs the
+  tolerance rule from the implementers' document; we compare exactly. Nothing else in the group is
+  wrong, so this is one mechanism, not eighteen problems.
+- **restriction, 9.** Numeric bounds ignored → 3 false passes; `length`/`minLength`/`maxLength` and
+  a regex OR → 4 false fails; patterns applied to numbers rather than refused → 2. Stage 3.
+- **attribute, 18 (16 false passes).** Type-aware comparison: booleans must be lowercase strings,
+  a logical `UNKNOWN` always fails, empty lists and sets always fail, derived and inverse attributes
+  cannot be checked and must fail, numbers are compared by type casting. We compare everything as
+  strings and approve.
+- **property, 23.** Measures and `dataType`, unit conversion to IDS standard units, occurrence
+  override, and bounded values. Stage 3's unit dependency, confirmed by measurement.
+- **ids, 4.** Specification-level cardinality — a `prohibited` specification must fail when its
+  applicability matches, a `required` one must fail when nothing matches.
+
+### What this changes about "full IDS support"
+
+Three things the staged plan did not account for:
+
+1. **Element scope, not just element data.** Stage 1 was written as "add materials, classifications
+   and relationships to `NormalizedElement`". It also needs "stop dropping every entity that is not
+   a physical element", which is a separate and smaller change to `element-filter.ts` — and it is
+   worth doing first, because 27 conformance cases turn on it.
+2. **Value typing is a stage of its own.** Sixteen attribute false passes and much of property come
+   from comparing IFC values as strings. That is not the `FacetDraft` refactor (stage 2) and not
+   restrictions (stage 3); it is a third axis, and it is the one that produces false *approvals*.
+3. **`tolerance` is one mechanism worth 36 cases** — the cheapest single win on the board once
+   numeric comparison exists at all, and it should ride along with stage 3 rather than wait.
+
+Suggested order by cost against false passes removed: element scope + applicability cardinality
+first (27 cases, no new data model), then value typing (~26), then bounds/tolerance/units (~30).

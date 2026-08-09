@@ -51,8 +51,10 @@ export interface PassThrough {
  * rules authored here, where by construction there is nothing the builder cannot say.
  *
  * Attributes are carried as raw maps rather than named fields on purpose: naming them means
- * silently dropping the ones we did not think of, and real files carry `minOccurs` on
- * `<specification>` and `description` on `<requirements>` in places the schema barely advertises.
+ * silently dropping the ones we did not think of, and real files carry `identifier` and
+ * `instructions` on `<specification>`, `minOccurs` on `<applicability>` and `description` on
+ * `<requirements>` in places the schema barely advertises. Carried verbatim also means carried
+ * when the source was wrong: an attribute `ids.xsd` does not allow goes back out as it came in.
  */
 export interface ImportedRuleSource {
   /** `<specification>` attributes except `name`, which the builder owns. Includes `ifcVersion`. */

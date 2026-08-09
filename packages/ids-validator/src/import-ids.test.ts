@@ -231,7 +231,6 @@ describe("idsXmlToDrafts document metadata", () => {
       ifcVersion: "IFC2X3 IFC4",
       description: "Spec-level prose the builder has no field for.",
       instructions: "Fill these in from the wall schedule.",
-      minOccurs: "1",
     });
     expect(rule.imported?.applicabilityAttributes).toEqual({ minOccurs: "0", maxOccurs: "unbounded" });
     expect(rule.imported?.requirementsAttributes).toEqual({
