@@ -67,6 +67,59 @@ describe("adapter parity", () => {
     expect(webIfcResult.unrecognizedTypes).toEqual([]);
   });
 
+  // The wider scope has to agree engine-for-engine too, or an IDS check would
+  // give different answers depending on which parser the user picked — and the
+  // conformance suite only ever exercises one of them.
+  it("both engines produce the same IDS scope, in the same order", async () => {
+    const path = fixturePath("mep-systems.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    expect(ifcLiteResult.idsScope).toEqual(webIfcResult.idsScope);
+  });
+
+  it("the IDS scope is a superset of the elements, and carries what a reviewer never sees", async () => {
+    const path = fixturePath("mep-systems.ifc");
+
+    for (const result of [
+      await new WebIfcAdapter().parse(path),
+      await new IfcLiteAdapter().parse(path),
+    ]) {
+      expect(result.idsScope.length).toBeGreaterThan(result.elements.length);
+      // Identity, not deep equality: the element list is filtered out of the
+      // scope, so the two must be the same objects in the same order.
+      expect(result.idsScope.filter((entity) => result.elements.includes(entity))).toEqual(
+        result.elements
+      );
+
+      const scopeTypes = new Set(result.idsScope.map((entity) => entity.ifcType));
+      const elementTypes = new Set(result.elements.map((entity) => entity.ifcType));
+      // The spatial backbone, the openings and the port: parsed for IDS,
+      // deliberately absent from what the Validate page lists.
+      for (const type of ["IFCPROJECT", "IFCBUILDINGSTOREY", "IFCOPENINGELEMENT", "IFCDISTRIBUTIONPORT"]) {
+        expect(scopeTypes.has(type)).toBe(true);
+        expect(elementTypes.has(type)).toBe(false);
+      }
+      // ...and geometry is in neither, which is what keeps the cost payable.
+      expect(scopeTypes.has("IFCCARTESIANPOINT")).toBe(false);
+    }
+  });
+
+  it("both engines give a non-rooted entity the same synthetic identity", async () => {
+    const path = fixturePath("mep-systems.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const synthetic = (result: typeof webIfcResult) =>
+      result.idsScope.filter((entity) => entity.globalId.startsWith("#"));
+
+    // IfcMaterial, IfcPerson and the presentation resources have no GlobalId
+    // attribute at all; the STEP line number stands in, and both engines read
+    // it from the same file.
+    expect(synthetic(ifcLiteResult).length).toBeGreaterThan(0);
+    expect(synthetic(ifcLiteResult)).toEqual(synthetic(webIfcResult));
+  });
+
   it("both engines agree on the per-storey counts of a full MEP model", async () => {
     const path = fixturePath("mep-systems.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);

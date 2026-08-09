@@ -30,6 +30,7 @@ const PARSE_BY_ENGINE: Record<
   EngineId,
   (buffer: Uint8Array) => Promise<{
     elements: NormalizedElement[];
+    idsScope: NormalizedElement[];
     parseMs: number;
     modelStructure: ModelStructureNode | null;
   }>
@@ -44,13 +45,14 @@ const PARSE_BY_ENGINE: Record<
 export async function parseFile(file: File, engine: EngineId): Promise<ParseOutcome> {
   try {
     const buffer = new Uint8Array(await file.arrayBuffer());
-    const { elements, parseMs, modelStructure } = await PARSE_BY_ENGINE[engine](buffer);
+    const { elements, idsScope, parseMs, modelStructure } = await PARSE_BY_ENGINE[engine](buffer);
     return {
       status: "succeeded",
       engine,
       parseMs,
       errorMessage: null,
       elements,
+      idsScope: idsScope ?? elements,
       modelStructure: modelStructure ?? null,
     };
   } catch (error) {
@@ -60,6 +62,7 @@ export async function parseFile(file: File, engine: EngineId): Promise<ParseOutc
       parseMs: null,
       errorMessage: error instanceof Error ? error.message : String(error),
       elements: [],
+      idsScope: [],
       modelStructure: null,
     };
   }
@@ -69,7 +72,8 @@ export interface ParsedModel {
   /** Identity, as the store defines it — file names collide, so results cannot join back on one. */
   key: string;
   fileName: string;
-  elements: NormalizedElement[];
+  /** Checking runs against the wider IDS scope, not the reviewer element list. */
+  idsScope: NormalizedElement[];
 }
 
 export interface CheckRow extends ElementResult {
@@ -120,7 +124,7 @@ export function validateParsedModels(
   }));
 
   for (const model of models) {
-    validateBySpecification(model.elements, idsXml).forEach((outcome, index) => {
+    validateBySpecification(model.idsScope, idsXml).forEach((outcome, index) => {
       const summary = summaries[index];
       summary.applicableCount += outcome.applicableCount;
       summary.passedCount += outcome.passedCount;

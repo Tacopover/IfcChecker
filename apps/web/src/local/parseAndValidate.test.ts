@@ -54,7 +54,7 @@ describe("parseFile", () => {
     const elements = [
       { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
     ];
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements, parseMs: 9, modelStructure });
+    parseWebIfcBuffer.mockResolvedValueOnce({ elements, idsScope: elements, parseMs: 9, modelStructure });
 
     const outcome = await parseFile(makeFile("model-a.ifc"), "web-ifc");
 
@@ -64,6 +64,7 @@ describe("parseFile", () => {
       parseMs: 9,
       errorMessage: null,
       elements,
+      idsScope: elements,
       modelStructure,
     });
     expect(validateBySpecification).not.toHaveBeenCalled();
@@ -71,7 +72,7 @@ describe("parseFile", () => {
   });
 
   it("routes to the ifc-lite engine and normalises a missing model structure to null", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 4 });
+    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], idsScope: [], parseMs: 4 });
 
     const outcome = await parseFile(makeFile("model-b.ifc"), "ifc-lite");
 
@@ -89,6 +90,7 @@ describe("parseFile", () => {
     expect(outcome.errorMessage).toBe("unexpected EOF");
     expect(outcome.parseMs).toBeNull();
     expect(outcome.elements).toEqual([]);
+    expect(outcome.idsScope).toEqual([]);
     expect(outcome.modelStructure).toBeNull();
   });
 });
@@ -117,7 +119,7 @@ describe("validateParsedModels", () => {
       { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
     ];
     const summaries = validateParsedModels(
-      [{ key: "model-a.ifc:12:99", fileName: "model-a.ifc", elements }],
+      [{ key: "model-a.ifc:12:99", fileName: "model-a.ifc", idsScope: elements }],
       "<ids/>"
     );
 
@@ -152,8 +154,8 @@ describe("validateParsedModels", () => {
 
     const [summary] = validateParsedModels(
       [
-        { key: "model.ifc:10:1", fileName: "model.ifc", elements: [] },
-        { key: "model.ifc:20:2", fileName: "model.ifc", elements: [] },
+        { key: "model.ifc:10:1", fileName: "model.ifc", idsScope: [] },
+        { key: "model.ifc:20:2", fileName: "model.ifc", idsScope: [] },
       ],
       "<ids/>"
     );
@@ -169,8 +171,8 @@ describe("validateParsedModels", () => {
 
     const [summary] = validateParsedModels(
       [
-        { key: "a", fileName: "a.ifc", elements: [] },
-        { key: "b", fileName: "b.ifc", elements: [] },
+        { key: "a", fileName: "a.ifc", idsScope: [] },
+        { key: "b", fileName: "b.ifc", idsScope: [] },
       ],
       "<ids/>"
     );
@@ -186,7 +188,7 @@ describe("validateParsedModels", () => {
     ]);
     validateBySpecification.mockReturnValueOnce([outcome({ name: "Walls are fire rated" })]);
 
-    const summaries = validateParsedModels([{ key: "a", fileName: "a.ifc", elements: [] }], "<ids/>");
+    const summaries = validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [] }], "<ids/>");
 
     expect(summaries).toHaveLength(1);
     expect(summaries[0]).toMatchObject({
@@ -209,7 +211,7 @@ describe("validateParsedModels", () => {
       outcome({ name: "Load-bearing walls", checked: false, unsupported }),
     ]);
 
-    const [summary] = validateParsedModels([{ key: "a", fileName: "a.ifc", elements: [] }], "<ids/>");
+    const [summary] = validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [] }], "<ids/>");
 
     // Whether a rule can run is decided by the rule set, not by any one model, so it survives
     // the merge across files rather than being recomputed per outcome.
@@ -221,7 +223,7 @@ describe("validateParsedModels", () => {
     parseIdsXml.mockReturnValue([]);
 
     expect(() =>
-      validateParsedModels([{ key: "a", fileName: "a.ifc", elements: [] }], "<not-really-ids/>")
+      validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [] }], "<not-really-ids/>")
     ).toThrow(InvalidIdsRuleSetError);
     expect(validateBySpecification).not.toHaveBeenCalled();
   });

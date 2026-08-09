@@ -17,6 +17,13 @@ export interface LoadedModel {
   parseMs: number | null;
   errorMessage: string | null;
   elements: NormalizedElement[];
+  /**
+   * A superset of `elements` adding the entities a reviewer does not check but
+   * an IDS rule may still name — type objects, relationships, the spatial
+   * backbone, materials. Checking reads this; the element list and the
+   * builder's explorer rail stay the shorter, human-facing one.
+   */
+  idsScope: NormalizedElement[];
   modelStructure: ModelStructureNode | null;
 }
 
@@ -27,7 +34,7 @@ export function modelKey(file: File): string {
 
 export type ParseOutcome = Pick<
   LoadedModel,
-  "status" | "engine" | "parseMs" | "errorMessage" | "elements" | "modelStructure"
+  "status" | "engine" | "parseMs" | "errorMessage" | "elements" | "idsScope" | "modelStructure"
 >;
 
 interface LoadedModelsValue {
@@ -58,6 +65,7 @@ export function LoadedModelsProvider({ children }: { children: ReactNode }) {
           parseMs: null,
           errorMessage: null,
           elements: [],
+          idsScope: [],
           modelStructure: null,
         }));
       return added.length === 0 ? previous : [...previous, ...added];

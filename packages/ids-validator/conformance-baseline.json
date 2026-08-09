@@ -2,17 +2,17 @@
   "generated": "2026-08-09",
   "totals": {
     "cases": 326,
-    "agreed": 127,
-    "wrong": 72,
-    "refused": 127,
+    "agreed": 128,
+    "wrong": 69,
+    "refused": 129,
     "errored": 0
   },
   "groups": {
     "attribute": {
       "total": 56,
-      "agreed": 34,
-      "wrong": 18,
-      "refused": 4,
+      "agreed": 31,
+      "wrong": 19,
+      "refused": 6,
       "errored": 0
     },
     "classification": {
@@ -52,15 +52,15 @@
     },
     "property": {
       "total": 82,
-      "agreed": 51,
-      "wrong": 23,
+      "agreed": 54,
+      "wrong": 20,
       "refused": 8,
       "errored": 0
     },
     "restriction": {
       "total": 25,
-      "agreed": 16,
-      "wrong": 9,
+      "agreed": 17,
+      "wrong": 8,
       "refused": 0,
       "errored": 0
     },
@@ -77,34 +77,31 @@
     "attribute/fail-an_optional_attribute_fails_if_empty",
     "attribute/fail-attributes_are_not_inherited_by_the_occurrence",
     "attribute/fail-attributes_should_check_strings_case_sensitively_2_2",
+    "attribute/fail-attributes_with_a_logical_unknown_always_fail",
+    "attribute/fail-attributes_with_an_empty_list_always_fail",
+    "attribute/fail-attributes_with_an_empty_set_always_fail",
     "attribute/fail-attributes_with_empty_strings_always_fail",
     "attribute/fail-attributes_with_null_values_always_fail",
+    "attribute/fail-booleans_must_be_specified_as_lowercase_strings_1_3",
+    "attribute/fail-dates_are_treated_as_strings_1_2",
+    "attribute/fail-durations_are_treated_as_strings_2_2",
+    "attribute/fail-ids_does_not_handle_string_truncation_such_as_for_identifiers",
+    "attribute/fail-numeric_values_are_checked_using_type_casting_4_4",
     "attribute/fail-value_restrictions_may_be_used_3_3",
+    "attribute/invalid-booleans_must_be_specified_as_lowercase_strings_2_3",
     "attribute/invalid-integers_cannot_be_expressed_as_floating_point_numbers_2_2",
     "attribute/invalid-invalid_attribute_names_always_fail",
+    "attribute/invalid-inverse_attributes_cannot_be_checked_and_always_fail",
+    "attribute/invalid-only_specifically_formatted_numbers_are_allowed_1_4",
+    "attribute/invalid-only_specifically_formatted_numbers_are_allowed_2_4",
+    "attribute/invalid-value_checks_always_fail_for_objects",
+    "attribute/invalid-value_checks_always_fail_for_selects",
     "attribute/pass-a_required_facet_checks_all_parameters_as_normal",
     "attribute/pass-an_optional_attribute_passes_if_specified",
-    "attribute/pass-attributes_referencing_an_object_should_pass",
     "attribute/pass-attributes_should_check_strings_case_sensitively_1_2",
-    "attribute/pass-attributes_with_a_boolean_false_should_pass",
-    "attribute/pass-attributes_with_a_boolean_true_should_pass",
-    "attribute/pass-attributes_with_a_select_referencing_a_primitive_should_pass",
-    "attribute/pass-attributes_with_a_select_referencing_an_object_should_pass",
     "attribute/pass-attributes_with_a_string_value_should_pass",
-    "attribute/pass-attributes_with_a_zero_duration_should_pass",
-    "attribute/pass-attributes_with_a_zero_number_have_meaning_and_should_pass",
-    "attribute/pass-booleans_must_be_specified_as_lowercase_strings_3_3",
-    "attribute/pass-dates_are_treated_as_strings_2_2",
-    "attribute/pass-durations_are_treated_as_strings_1_2",
     "attribute/pass-globalids_are_treated_as_strings_and_not_expanded",
     "attribute/pass-non_ascii_characters_are_treated_without_encoding",
-    "attribute/pass-numeric_values_are_checked_using_type_casting_1_4",
-    "attribute/pass-numeric_values_are_checked_using_type_casting_2_4",
-    "attribute/pass-numeric_values_are_checked_using_type_casting_3_4",
-    "attribute/pass-only_specifically_formatted_numbers_are_allowed_3_4",
-    "attribute/pass-only_specifically_formatted_numbers_are_allowed_4_4",
-    "attribute/pass-strict_numeric_checking_may_be_done_with_a_bounds_restriction",
-    "attribute/pass-typecast_checking_may_also_occur_within_enumeration_restrictions",
     "attribute/pass-value_restrictions_may_be_used_1_3",
     "attribute/pass-value_restrictions_may_be_used_2_3",
     "ids/fail-a_minimal_ids_can_check_a_minimal_ifc_1_2",
@@ -129,8 +126,14 @@
     "property/fail-elements_with_a_matching_pset_but_no_property_also_fail",
     "property/fail-elements_with_no_properties_always_fail",
     "property/fail-ids_does_not_handle_string_truncation_such_as_for_identifiers",
+    "property/fail-material_properties_that_are_absent_fail_under_ifc2x3",
+    "property/fail-material_properties_that_are_absent_fail_under_ifc4",
     "property/fail-no_matching_value_in_an_enumerated_property_will_fail_3_3",
     "property/fail-predefined_properties_are_supported_but_discouraged_2_2",
+    "property/fail-project_properties_that_are_absent_fail_under_ifc2x3_via_ifcobject",
+    "property/fail-project_properties_that_are_absent_fail_under_ifc4_via_ifccontext",
+    "property/fail-properties_can_be_associated_to_relevant_object_types",
+    "property/fail-properties_can_be_overriden_by_an_occurrence_2_2",
     "property/fail-properties_with_a_null_value_fail",
     "property/fail-quantities_must_also_match_the_appropriate_measure",
     "property/fail-reference_properties_are_treated_as_objects_and_not_supported",
@@ -151,8 +154,6 @@
     "property/pass-dates_are_treated_as_strings_1_2",
     "property/pass-durations_are_treated_as_strings_2_2",
     "property/pass-integer_values_are_checked_using_type_casting_1_4",
-    "property/pass-material_properties_are_supported_under_ifc2x3_via_extendedmaterialproperties",
-    "property/pass-material_properties_are_supported_under_ifc4_via_ifcmaterialproperties",
     "property/pass-measures_are_used_to_specify_an_ifc_data_type_2_2",
     "property/pass-non_ascii_characters_are_treated_without_encoding",
     "property/pass-only_specifically_formatted_numbers_are_allowed_3_4",
@@ -160,12 +161,14 @@
     "property/pass-project_properties_are_supported_under_ifc2x3_via_ifcobject",
     "property/pass-project_properties_are_supported_under_ifc4_via_ifccontext",
     "property/pass-properties_can_be_inherited_from_the_type_1_2",
-    "property/pass-properties_can_be_inherited_from_the_type_2_2",
     "property/pass-properties_can_be_overriden_by_an_occurrence_1_2",
     "property/pass-real_values_are_checked_using_type_casting_1_3",
     "property/pass-real_values_are_checked_using_type_casting_2_3",
     "property/pass-real_values_are_checked_using_type_casting_3_3",
     "property/pass-specifying_a_value_performs_a_case_sensitive_match_1_2",
+    "restriction/fail-a_bound_can_be_exclusive_1_3",
+    "restriction/fail-a_bound_can_be_exclusive_3_3",
+    "restriction/fail-a_bound_can_be_inclusive_4_4",
     "restriction/fail-an_enumeration_matches_case_sensitively_3_3",
     "restriction/fail-an_enumeration_matches_case_sensitively_4_3",
     "restriction/fail-length_checks_can_be_used_1_2",
@@ -173,10 +176,8 @@
     "restriction/fail-max_and_min_length_checks_can_be_used_4_3",
     "restriction/fail-regex_patterns_can_be_used_3_3",
     "restriction/fail-regex_patterns_work_in_OR_3_3",
-    "restriction/pass-a_bound_can_be_exclusive_2_3",
-    "restriction/pass-a_bound_can_be_inclusive_1_4",
-    "restriction/pass-a_bound_can_be_inclusive_2_4",
-    "restriction/pass-a_bound_can_be_inclusive_3_4",
+    "restriction/invalid-patterns_always_fail_on_any_number",
+    "restriction/invalid-patterns_only_work_on_strings_and_nothing_else",
     "restriction/pass-an_enumeration_matches_case_sensitively_1_3",
     "restriction/pass-an_enumeration_matches_case_sensitively_2_3",
     "restriction/pass-regex_patterns_can_be_used_1_3",
@@ -203,82 +204,10 @@
   ],
   "disagreeing": [
     {
-      "case": "attribute/fail-attributes_with_a_logical_unknown_always_fail",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/fail-attributes_with_an_empty_list_always_fail",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/fail-attributes_with_an_empty_set_always_fail",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/fail-booleans_must_be_specified_as_lowercase_strings_1_3",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/fail-dates_are_treated_as_strings_1_2",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/fail-durations_are_treated_as_strings_2_2",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/fail-ids_does_not_handle_string_truncation_such_as_for_identifiers",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/fail-numeric_values_are_checked_using_type_casting_4_4",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/invalid-booleans_must_be_specified_as_lowercase_strings_2_3",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
       "case": "attribute/invalid-derived_attributes_cannot_be_checked_and_always_fail",
       "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/invalid-inverse_attributes_cannot_be_checked_and_always_fail",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/invalid-only_specifically_formatted_numbers_are_allowed_1_4",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/invalid-only_specifically_formatted_numbers_are_allowed_2_4",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
+      "actual": "refused",
+      "detail": "entity/name"
     },
     {
       "case": "attribute/invalid-specifying_a_float_when_the_value_is_an_integer_is_invalid",
@@ -289,23 +218,71 @@
     {
       "case": "attribute/invalid-value_checks_always_fail_for_lists",
       "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/invalid-value_checks_always_fail_for_objects",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "attribute/invalid-value_checks_always_fail_for_selects",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
+      "actual": "refused",
+      "detail": "entity/name"
     },
     {
       "case": "attribute/pass-an_optional_attribute_passes_if_null",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-attributes_referencing_an_object_should_pass",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-attributes_with_a_boolean_false_should_pass",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-attributes_with_a_boolean_true_should_pass",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-attributes_with_a_select_referencing_a_primitive_should_pass",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-attributes_with_a_select_referencing_an_object_should_pass",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-attributes_with_a_zero_duration_should_pass",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-attributes_with_a_zero_number_have_meaning_and_should_pass",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-booleans_must_be_specified_as_lowercase_strings_3_3",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-dates_are_treated_as_strings_2_2",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-durations_are_treated_as_strings_1_2",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"
@@ -333,6 +310,48 @@
       "expected": "pass",
       "actual": "refused",
       "detail": "attribute/name"
+    },
+    {
+      "case": "attribute/pass-numeric_values_are_checked_using_type_casting_1_4",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-numeric_values_are_checked_using_type_casting_2_4",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-numeric_values_are_checked_using_type_casting_3_4",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-only_specifically_formatted_numbers_are_allowed_3_4",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-only_specifically_formatted_numbers_are_allowed_4_4",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-strict_numeric_checking_may_be_done_with_a_bounds_restriction",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "attribute/pass-typecast_checking_may_also_occur_within_enumeration_restrictions",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
       "case": "classification/fail-a_classification_facet_with_no_data_matches_any_classification_1_2",
@@ -1067,46 +1086,10 @@
       "detail": "property/name"
     },
     {
-      "case": "property/fail-material_properties_that_are_absent_fail_under_ifc2x3",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "property/fail-material_properties_that_are_absent_fail_under_ifc4",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
       "case": "property/fail-measures_are_used_to_specify_an_ifc_data_type_1_2",
       "expected": "fail",
       "actual": "pass",
       "detail": "1 applicable, 1 passed, 0 failed"
-    },
-    {
-      "case": "property/fail-project_properties_that_are_absent_fail_under_ifc2x3_via_ifcobject",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "property/fail-project_properties_that_are_absent_fail_under_ifc4_via_ifccontext",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "property/fail-properties_can_be_associated_to_relevant_object_types",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "property/fail-properties_can_be_overriden_by_an_occurrence_2_2",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
     },
     {
       "case": "property/fail-unit_conversions_shall_take_place_to_ids_nominated_standard_units_1_2",
@@ -1223,7 +1206,25 @@
       "detail": "property/name"
     },
     {
+      "case": "property/pass-material_properties_are_supported_under_ifc2x3_via_extendedmaterialproperties",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "property/pass-material_properties_are_supported_under_ifc4_via_ifcmaterialproperties",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
       "case": "property/pass-predefined_properties_are_supported_but_discouraged_1_2",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
+    },
+    {
+      "case": "property/pass-properties_can_be_inherited_from_the_type_2_2",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"
@@ -1235,34 +1236,28 @@
       "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
-      "case": "restriction/fail-a_bound_can_be_exclusive_1_3",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
+      "case": "restriction/pass-a_bound_can_be_exclusive_2_3",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
-      "case": "restriction/fail-a_bound_can_be_exclusive_3_3",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
+      "case": "restriction/pass-a_bound_can_be_inclusive_1_4",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
-      "case": "restriction/fail-a_bound_can_be_inclusive_4_4",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
+      "case": "restriction/pass-a_bound_can_be_inclusive_2_4",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
-      "case": "restriction/invalid-patterns_always_fail_on_any_number",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
-    },
-    {
-      "case": "restriction/invalid-patterns_only_work_on_strings_and_nothing_else",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "0 applicable, 0 passed, 0 failed"
+      "case": "restriction/pass-a_bound_can_be_inclusive_3_4",
+      "expected": "pass",
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
       "case": "restriction/pass-length_checks_can_be_used_2_2",

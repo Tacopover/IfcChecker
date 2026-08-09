@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { isNormalizableEntityType } from "@ifc-qa/shared-types";
 
 export type ParsedRestriction =
   | { kind: "exact"; value: string }
@@ -288,6 +289,18 @@ function readApplicability(
       continue;
     }
     entityNames.push(...names);
+
+    // Geometry is the one part of the schema a parse never normalizes, so a
+    // rule aimed at it would select nothing and report every model clean. Said
+    // out loud instead: refusing is honest, a silent pass is not.
+    const unparsed = names.filter((name) => !isNormalizableEntityType(name));
+    if (unparsed.length > 0) {
+      unsupported.push({
+        section: "applicability",
+        construct: "entity/name",
+        description: `Selects <${unparsed.join(", ")}>, geometry this build does not read.`,
+      });
+    }
 
     if (children.some((child) => tagOf(child) === "predefinedType")) {
       unsupported.push({

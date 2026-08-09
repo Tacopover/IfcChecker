@@ -3,17 +3,17 @@ import type { IfcParserAdapter } from "./types.js";
 
 class FakeAdapter implements IfcParserAdapter {
   async parse(filePath: string) {
+    const wall = {
+      globalId: "g1",
+      ifcType: "IFCWALL",
+      predefinedType: null,
+      name: filePath,
+      attributes: {},
+      propertySets: {},
+    };
     return {
-      elements: [
-        {
-          globalId: "g1",
-          ifcType: "IFCWALL",
-          predefinedType: null,
-          name: filePath,
-          attributes: {},
-          propertySets: {},
-        },
-      ],
+      elements: [wall],
+      idsScope: [wall],
       parseMs: 1,
       modelStructure: null,
       unrecognizedTypes: [],

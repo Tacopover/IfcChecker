@@ -98,8 +98,8 @@ export async function runCase(entry: ConformanceCase): Promise<CaseResult> {
   let detail: string;
 
   try {
-    const { elements } = await parseIfcLiteBuffer(readFileSync(entry.ifcPath));
-    const outcomes = validateBySpecification(elements, readFileSync(entry.idsPath, "utf8"));
+    const { idsScope } = await parseIfcLiteBuffer(readFileSync(entry.ifcPath));
+    const outcomes = validateBySpecification(idsScope, readFileSync(entry.idsPath, "utf8"));
 
     if (outcomes.length === 0) {
       actual = "refused";

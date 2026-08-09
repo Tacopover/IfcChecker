@@ -1,21 +1,30 @@
-import { IFC_PRODUCT_PARENTS, IFC_RECOGNISED_ENTITY_NAMES } from "@ifc-qa/shared-types";
+import {
+  IFC_ENTITY_PARENTS,
+  IFC_RECOGNISED_ENTITY_NAMES,
+  isNormalizableEntityType,
+} from "@ifc-qa/shared-types";
 
 /**
  * What a parser should do with an entity type it found in a file.
  *
- * - `element` — normalize it into the element list.
- * - `ignored` — a type this build knows and deliberately drops (geometry,
- *   relationships, units, ports, openings, the spatial backbone).
+ * - `element` — a thing a reviewer checks. Goes in the element list the
+ *   Validate page and the explorer rail are built around.
+ * - `auxiliary` — normalized too, but kept out of that list: type objects,
+ *   relationships, the spatial backbone, materials, actors, presentation
+ *   resources. An IDS applicability may name any of these, and a rule whose
+ *   target never became an element used to report the model clean.
+ * - `ignored` — geometry, and only geometry. See `IFC_UNPARSED_SUBTREE_ROOT`
+ *   for why that one subtree pays for itself and nothing else does.
  * - `unrecognized` — a type no schema this build carries declares. It may well
  *   be a real element from a newer schema or a vendor extension, so it must be
  *   reported rather than silently dropped: a hand-written allowlist swallowed
  *   most of an MEP model for months precisely because nothing said so.
  */
-export type EntityTypeVerdict = "element" | "ignored" | "unrecognized";
+export type EntityTypeVerdict = "element" | "auxiliary" | "ignored" | "unrecognized";
 
 // STEP files spell type names in upper case; the schema table is PascalCase.
 const PARENT_BY_UPPER = new Map<string, string | null>();
-for (const [name, parent] of Object.entries(IFC_PRODUCT_PARENTS)) {
+for (const [name, parent] of Object.entries(IFC_ENTITY_PARENTS)) {
   PARENT_BY_UPPER.set(name.toUpperCase(), parent === null ? null : parent.toUpperCase());
 }
 
@@ -28,14 +37,14 @@ const KEPT_ROOTS = ["IFCELEMENT", "IFCSPACE", "IFCSPATIALZONE"];
 
 // Openings, voids and projections are modifiers of other elements' geometry,
 // not elements in their own right — and they sit *under* IfcElement, so
-// dropping them takes an explicit rule.
-const DROPPED_SUBTREES = ["IFCFEATUREELEMENT"];
+// keeping them out of the reviewer's list takes an explicit rule.
+const AUXILIARY_SUBTREES = ["IFCFEATUREELEMENT"];
 
 // None of these are under a kept root today, so this list is belt-and-braces:
 // it pins the decision in one readable place and survives a schema that
 // re-parents something. IfcProject/Site/Building/BuildingStorey already drive
 // the separate model-structure tree; ports are connection points, not parts.
-const DROPPED_TYPES = new Set([
+const AUXILIARY_TYPES = new Set([
   "IFCANNOTATION",
   "IFCGRID",
   "IFCPORT",
@@ -57,13 +66,14 @@ function isUnder(upper: string, rootUpper: string): boolean {
 
 function decide(upper: string): EntityTypeVerdict {
   if (!PARENT_BY_UPPER.has(upper)) return RECOGNIZED.has(upper) ? "ignored" : "unrecognized";
-  if (DROPPED_TYPES.has(upper)) return "ignored";
-  if (DROPPED_SUBTREES.some((root) => isUnder(upper, root))) return "ignored";
-  return KEPT_ROOTS.some((root) => isUnder(upper, root)) ? "element" : "ignored";
+  if (!isNormalizableEntityType(upper)) return "ignored";
+  if (AUXILIARY_TYPES.has(upper)) return "auxiliary";
+  if (AUXILIARY_SUBTREES.some((root) => isUnder(upper, root))) return "auxiliary";
+  return KEPT_ROOTS.some((root) => isUnder(upper, root)) ? "element" : "auxiliary";
 }
 
-// The whole product subtree is only ~190 names, so classifying it once at load
-// keeps the parsers' inner loop a single Map hit no matter how large the file.
+// Both schemas together are ~1050 names, so classifying them once at load keeps
+// the parsers' inner loop a single Map hit no matter how large the file.
 const VERDICT_BY_UPPER = new Map<string, EntityTypeVerdict>();
 for (const upper of PARENT_BY_UPPER.keys()) VERDICT_BY_UPPER.set(upper, decide(upper));
 

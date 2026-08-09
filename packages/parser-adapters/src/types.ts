@@ -6,7 +6,21 @@ export interface UnrecognizedEntityType {
 }
 
 export interface IfcParseResult {
+  /** What a reviewer checks: physical elements, spaces and spatial zones. */
   elements: NormalizedElement[];
+  /**
+   * What an IDS specification may be written against — a **superset** of
+   * `elements`, adding type objects, relationships, the spatial backbone,
+   * materials, actors and presentation resources.
+   *
+   * Two lists rather than one wider list because the two questions differ: the
+   * element list drives the Validate page and the explorer rail and would be
+   * unusable flooded with relationships, while an applicability naming
+   * `IfcWallType` has to find something. Validation reads this one so it cannot
+   * accidentally be run against the narrow set — which reported a model clean
+   * whenever a rule's target was not a physical element.
+   */
+  idsScope: NormalizedElement[];
   parseMs: number;
   modelStructure: ModelStructureNode | null;
   /**

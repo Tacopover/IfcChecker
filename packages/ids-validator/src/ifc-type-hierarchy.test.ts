@@ -30,6 +30,9 @@ describe("canonicalIfcType", () => {
 });
 
 describe("ancestorsOf", () => {
+  // The chain runs to IfcRoot, not to IfcProduct. It used to stop there, which
+  // is why an applicability naming IfcTypeObject or IfcObjectDefinition
+  // resolved to nothing and reported every model clean.
   it("walks the full MEP chain, immediate parent first", () => {
     expect(ancestorsOf("IfcDuctSegment")).toEqual([
       "IfcFlowSegment",
@@ -37,15 +40,38 @@ describe("ancestorsOf", () => {
       "IfcDistributionElement",
       "IfcElement",
       "IfcProduct",
+      "IfcObject",
+      "IfcObjectDefinition",
+      "IfcRoot",
     ]);
   });
 
   it("is case-insensitive", () => {
-    expect(ancestorsOf("IFCWALL")).toEqual(["IfcBuildingElement", "IfcElement", "IfcProduct"]);
+    expect(ancestorsOf("IFCWALL")).toEqual([
+      "IfcBuildingElement",
+      "IfcElement",
+      "IfcProduct",
+      "IfcObject",
+      "IfcObjectDefinition",
+      "IfcRoot",
+    ]);
   });
 
-  it("returns an empty list for the root and for unknown types", () => {
-    expect(ancestorsOf("IfcProduct")).toEqual([]);
+  it("reaches type objects, which are not products at all", () => {
+    expect(ancestorsOf("IfcWallType")).toEqual([
+      "IfcBuildingElementType",
+      "IfcElementType",
+      "IfcTypeProduct",
+      "IfcTypeObject",
+      "IfcObjectDefinition",
+      "IfcRoot",
+    ]);
+    expect(isSubtypeOf("IfcWallType", "IfcTypeObject")).toBe(true);
+    expect(isSubtypeOf("IfcWallType", "IfcWall")).toBe(false);
+  });
+
+  it("returns an empty list for a root and for unknown types", () => {
+    expect(ancestorsOf("IfcRoot")).toEqual([]);
     expect(ancestorsOf("IfcMadeUpThing")).toEqual([]);
   });
 });
