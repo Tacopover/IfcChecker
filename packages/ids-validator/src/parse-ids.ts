@@ -94,7 +94,12 @@ const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   removeNSPrefix: true,
-  parseTagValue: true,
+  // Off, matching import-ids.ts and ids-schema-shape.ts. On, fast-xml-parser
+  // coerced <simpleValue>42.0</simpleValue> to the number 42, and the author's
+  // literal was gone by the time anything compared it — so a rule saying an
+  // integer attribute must equal "42.0" passed against a stored 42, which IDS
+  // says is exactly what must not happen.
+  parseTagValue: false,
   preserveOrder: true,
 });
 

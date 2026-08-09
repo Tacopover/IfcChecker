@@ -83,6 +83,38 @@ describe("evaluateRequirement — attribute facet", () => {
     expect(result.message).toContain("W-\\d+");
   });
 
+  // IDS: a pattern applies to strings and nothing else. Stringifying first made
+  // `.*` match a number, which is the specification's own example of a check
+  // that must fail — and it only became reachable once numeric attributes were
+  // carried at all.
+  it("fails a pattern applied to a number rather than matching its text", () => {
+    const anything: ParsedAttributeFacet = attributeFacet({
+      name: "RefractionIndex",
+      restriction: { kind: "pattern", source: ".*", regex: /^(?:.*)$/ },
+    });
+    const result = evaluateRequirement(
+      makeElement({ attributes: { RefractionIndex: 42 } }),
+      anything
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain("a number");
+  });
+
+  it("fails a pattern applied to a boolean too", () => {
+    const anything: ParsedAttributeFacet = attributeFacet({
+      name: "IsCritical",
+      restriction: { kind: "pattern", source: ".*", regex: /^(?:.*)$/ },
+    });
+    const result = evaluateRequirement(
+      makeElement({ attributes: { IsCritical: true } }),
+      anything
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain("a boolean");
+  });
+
   it("fails when the attribute is missing entirely", () => {
     const result = evaluateRequirement(makeElement({ attributes: {} }), attributeFacet({ name: "Tag" }));
     expect(result).toEqual({ passed: false, message: 'Attribute "Tag" is missing' });

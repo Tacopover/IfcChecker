@@ -105,6 +105,52 @@ describe("adapter parity", () => {
     }
   });
 
+  // The bag used to be three hand-picked names, so a rule against any other
+  // attribute read as one the model was missing. Both engines have to carry the
+  // same set, or the same rule set answers differently per engine.
+  it("both engines carry every attribute the schema says holds a value", async () => {
+    const path = fixturePath("mep-systems.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const storeyOf = (result: typeof webIfcResult) =>
+      result.idsScope.find((entity) => entity.ifcType === "IFCBUILDINGSTOREY")?.attributes;
+
+    // Elevation is a number and CompositionType an enum; neither survived the
+    // old Tag/Description/ObjectType bag.
+    expect(ifcLiteResult.idsScope.length).toBeGreaterThan(0);
+    expect(storeyOf(ifcLiteResult)).toMatchObject({ Elevation: 0, CompositionType: "ELEMENT" });
+    expect(storeyOf(ifcLiteResult)).toEqual(storeyOf(webIfcResult));
+  });
+
+  // Both parsers hand a reference back as a bare number, so carrying one would
+  // let a rule compare against an express id and quietly pass.
+  it("neither engine carries a reference-valued attribute", async () => {
+    const path = fixturePath("mep-systems.ifc");
+
+    for (const result of [
+      await new WebIfcAdapter().parse(path),
+      await new IfcLiteAdapter().parse(path),
+    ]) {
+      const relationship = result.idsScope.find((entity) => entity.ifcType === "IFCRELAGGREGATES");
+      expect(relationship).toBeDefined();
+      expect(relationship!.attributes).not.toHaveProperty("RelatingObject");
+      expect(relationship!.attributes).not.toHaveProperty("RelatedObjects");
+
+      const propertySet = result.idsScope.find((entity) => entity.ifcType === "IFCPROPERTYSET");
+      expect(propertySet!.attributes).not.toHaveProperty("HasProperties");
+    }
+  });
+
+  // The wider bag must not disturb what a reviewer sees: IfcWall declares no
+  // simple attribute beyond the three, so its elements are byte-identical.
+  it("leaves a wall's attributes exactly as they were", async () => {
+    const { elements } = await new IfcLiteAdapter().parse(fixturePath("mep-systems.ifc"));
+    const wall = elements.find((element) => element.ifcType === "IFCWALL");
+
+    expect(Object.keys(wall!.attributes).sort()).toEqual(["Description", "ObjectType", "Tag"]);
+  });
+
   it("both engines give a non-rooted entity the same synthetic identity", async () => {
     const path = fixturePath("mep-systems.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);

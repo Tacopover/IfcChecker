@@ -1,5 +1,5 @@
 import * as WebIFC from "web-ifc";
-import type { ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
+import { simpleAttributeNamesFor, type ModelStructureNode, type NormalizedElement } from "@ifc-qa/shared-types";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { identifyEntity } from "./entity-identity.js";
@@ -277,16 +277,22 @@ export async function parseWebIfcBuffer(
         const globalId = normalizePropertyValue(line.GlobalId);
         const name = normalizePropertyValue(line.Name);
 
+        // Every attribute the schema says holds a comparable value, not the
+        // three this adapter used to hand-pick. The schema decides rather than
+        // the line's shape, so the two engines carry the same set: web-ifc
+        // returns a reference as a handle object and ifc-lite as a bare number,
+        // and neither is something a rule should compare against.
+        const attributes: Record<string, string | number | boolean | null> = {};
+        for (const attributeName of simpleAttributeNamesFor(typeName)) {
+          attributes[attributeName] = normalizePropertyValue(line[attributeName]);
+        }
+
         idsScope.push({
           globalId: identifyEntity(typeName, globalId, expressID),
           ifcType: typeName,
           predefinedType: stripEnumDots(line.PredefinedType),
           name: typeof name === "string" ? name : null,
-          attributes: {
-            Tag: normalizePropertyValue(line.Tag),
-            Description: normalizePropertyValue(line.Description),
-            ObjectType: normalizePropertyValue(line.ObjectType),
-          },
+          attributes,
           propertySets,
         });
       }

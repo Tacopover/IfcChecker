@@ -6,7 +6,7 @@ import {
   type IfcDataStore,
 } from "@ifc-lite/parser";
 import { IfcTypeEnumToString, type SpatialNode } from "@ifc-lite/data";
-import type { ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
+import { simpleAttributeNamesFor, type ModelStructureNode, type NormalizedElement } from "@ifc-qa/shared-types";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { identifyEntity } from "./entity-identity.js";
@@ -129,6 +129,15 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
       const attrs = extractAllEntityAttributes(store, expressId);
       const findAttr = (name: string) => attrs.find((a) => a.name === name)?.value ?? null;
 
+      // Every attribute the schema says holds a comparable value, not the three
+      // this adapter used to hand-pick. A rule may name any of them —
+      // IsCritical on an IfcTaskTime, RefractionIndex on a surface style — and
+      // an attribute we did not carry read as one the model was missing.
+      const attributes: Record<string, string | number | boolean | null> = {};
+      for (const attributeName of simpleAttributeNamesFor(typeName)) {
+        attributes[attributeName] = normalizePropertyValue(findAttr(attributeName));
+      }
+
       // store.entities is indexed for object definitions; it answers nothing
       // for relationships or property sets, so an IfcPropertySet arrived
       // nameless while web-ifc read its name. extractAllEntityAttributes covers
@@ -140,11 +149,7 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
         ifcType: typeName,
         predefinedType: stripEnumDots(findAttr("PredefinedType")),
         name: typeof name === "string" && name !== "" ? name : null,
-        attributes: {
-          Tag: normalizePropertyValue(findAttr("Tag")),
-          Description: normalizePropertyValue(findAttr("Description")),
-          ObjectType: normalizePropertyValue(findAttr("ObjectType")),
-        },
+        attributes,
         propertySets,
       });
     }

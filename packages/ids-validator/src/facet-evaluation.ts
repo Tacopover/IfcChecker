@@ -63,8 +63,9 @@ function missingMessage(facet: ParsedRequirementFacet): string {
 function restrictionFailure(
   facet: ParsedRequirementFacet,
   restriction: ParsedRestriction,
-  value: string
+  raw: PropertyValue
 ): string | null {
+  const value = String(raw);
   switch (restriction.kind) {
     case "exact":
       return value === restriction.value
@@ -75,6 +76,12 @@ function restrictionFailure(
         ? null
         : `${facetLabel(facet)} value "${value}" is not one of: ${restriction.values.join(", ")}`;
     case "pattern":
+      // IDS: a pattern applies to strings and nothing else. Stringifying first
+      // made `.*` match a number, which is the specification's own example of
+      // what must fail.
+      if (typeof raw !== "string") {
+        return `${facetLabel(facet)} holds ${typeof raw === "number" ? "a number" : "a boolean"} (${value}), and a pattern can only be matched against a string`;
+      }
       return restriction.regex.test(value)
         ? null
         : `${facetLabel(facet)} value "${value}" does not match required pattern "${restriction.source}"`;
@@ -102,7 +109,7 @@ export function evaluateRequirement(
   }
 
   if (facet.restriction) {
-    const failure = restrictionFailure(facet, facet.restriction, String(value));
+    const failure = restrictionFailure(facet, facet.restriction, value as PropertyValue);
     if (failure) return { passed: false, message: failure };
   }
 

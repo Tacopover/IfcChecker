@@ -25,7 +25,7 @@ const OUTPUT = join(ROOT, "packages/shared-types/src/ifc-entity-table.generated.
 const CHECK = process.argv.includes("--check");
 
 const require = createRequire(join(ROOT, "packages/parser-adapters/package.json"));
-const { getEntities } = await import(require.resolve("@ifc-lite/data"));
+const { getEntities, getAttributes } = await import(require.resolve("@ifc-lite/data"));
 
 // IFC4 is the schema this tool targets. IFC2X3 is merged in because Revit and
 // Archicad still export it in the field, and dropping its names would gut a
@@ -94,6 +94,44 @@ legacyOnly.sort();
 // shouting about, the first is routine.
 const recognised = [...new Set([...base, ...legacy].map((entity) => entity.name.toUpperCase()))].sort();
 
+// Which of an entity's attributes hold a value a rule can be compared against,
+// as opposed to a reference to another entity or an aggregate of them. The
+// schema is the only thing that can answer this: both parsers hand back a
+// reference as a bare number, indistinguishable from a real numeric attribute,
+// so filtering on the value alone would let a rule compare against an express
+// id. `getAttributes` reports it per entity and already accounts for
+// inheritance, which is why this is a flat map rather than own-attributes-only
+// — 30 entities disagree with what walking the parent chain would produce.
+//
+// GlobalId, Name and PredefinedType are left out: they have dedicated fields on
+// NormalizedElement, and carrying them twice would cost memory on every entity
+// in a model to say the same thing.
+const PROMOTED_TO_FIELDS = new Set(["GlobalId", "Name", "PredefinedType"]);
+
+async function simpleAttributesByEntity(version) {
+  const byEntity = new Map();
+  for (const attribute of await getAttributes(version)) {
+    if (PROMOTED_TO_FIELDS.has(attribute.name)) continue;
+    for (const entity of attribute.simpleValueEntities ?? []) {
+      const bucket = byEntity.get(entity);
+      if (bucket) bucket.add(attribute.name);
+      else byEntity.set(entity, new Set([attribute.name]));
+    }
+  }
+  return byEntity;
+}
+
+const baseAttributes = await simpleAttributesByEntity(BASE_VERSION);
+const legacyAttributes = await simpleAttributesByEntity(LEGACY_VERSION);
+// IFC4 wins where the two disagree, matching how the parent map is merged.
+const simpleAttributes = new Map(baseAttributes);
+for (const [entity, names] of legacyAttributes) {
+  if (!simpleAttributes.has(entity)) simpleAttributes.set(entity, names);
+}
+const simpleAttributeEntries = [...simpleAttributes]
+  .map(([entity, names]) => [entity, [...names].sort()])
+  .sort(([left], [right]) => left.localeCompare(right));
+
 const header = `// GENERATED FILE — do not edit by hand.
 // Regenerate with: node scripts/generate-ifc-entity-table.mjs
 // Source: @ifc-lite/data schema tables, ${BASE_VERSION} merged with ${LEGACY_VERSION}-only names.
@@ -130,6 +168,25 @@ ${legacyOnly.map((name) => `  ${JSON.stringify(name)},`).join("\n")}
 export const IFC_RECOGNISED_ENTITY_NAMES: readonly string[] = \`
 ${recognised.join("\n")}
 \`.trim().split("\\n");
+
+/**
+ * Per entity, the attributes that hold a comparable value rather than a
+ * reference to another entity or an aggregate of them. Upper-case entity names,
+ * as a STEP file spells them; attribute names in their schema spelling.
+ *
+ * Only the schema can draw this line: both parsers hand back a reference as a
+ * bare number, so filtering on the value alone would let a rule compare against
+ * an express id. Inheritance is already accounted for, so each list is complete
+ * on its own.
+ *
+ * \`GlobalId\`, \`Name\` and \`PredefinedType\` are deliberately absent — they have
+ * dedicated fields on \`NormalizedElement\`.
+ */
+export const IFC_SIMPLE_ATTRIBUTE_NAMES: Readonly<Record<string, readonly string[]>> = {
+${simpleAttributeEntries
+  .map(([entity, names]) => `  ${JSON.stringify(entity)}: [${names.map((n) => JSON.stringify(n)).join(", ")}],`)
+  .join("\n")}
+};
 `;
 
 const previous = (() => {
@@ -152,6 +209,7 @@ if (CHECK) {
 writeFileSync(OUTPUT, body);
 console.log(
   `wrote ${OUTPUT}\n  ${parents.size} entity types across both schemas` +
+    `\n  ${simpleAttributeEntries.length} entities with simple-valued attributes` +
     `\n  ${legacyOnly.length} ${LEGACY_VERSION}-only: ${legacyOnly.join(", ")}` +
     `\n  ${recognised.length} recognised entity names`
 );
