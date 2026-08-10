@@ -16,6 +16,7 @@ import {
   type NormalizedValue,
 } from "@ifc-qa/shared-types";
 import type { ClassificationReference } from "@ifc-qa/shared-types";
+import { resolvePartOf } from "./part-of.js";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { identifyEntity } from "./entity-identity.js";
@@ -131,6 +132,9 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
   );
 
   const idsScope: NormalizedElement[] = [];
+  // Kept parallel to idsScope so partOf can be resolved in a second pass: the walk needs every
+  // entity's identity, including wholes that appear later in the type-sorted order.
+  const scopeExpressIds: number[] = [];
   const elementTypeByExpressId = new Map<number, string>();
 
   // ifc-lite already resolves the whole IfcUnitAssignment — SI prefixes, derived, conversion-based
@@ -251,7 +255,38 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
         classifications: readClassifications(store, expressId),
         materials: readMaterials(store, expressId),
       });
+      scopeExpressIds.push(expressId);
     }
+  }
+
+  // Second pass: every normalized entity's identity is known, so a whole can be described with the
+  // same predefinedType the element itself would report. An ancestor outside the normalized set
+  // falls back to the type the entity index names, with no predefined type to offer.
+  const identityByExpressId = new Map(
+    scopeExpressIds.map((expressId, index) => [
+      expressId,
+      { ifcType: idsScope[index].ifcType, predefinedType: idsScope[index].predefinedType },
+    ])
+  );
+  // ifc-lite's graph maps IFCRELNESTS onto the same `Aggregates` edge type as IFCRELAGGREGATES —
+  // sensible for a viewer, a false pass for IDS, which asks about one or the other. The edge
+  // carries the relationship entity's express id, so its real type is recoverable here without
+  // patching the library.
+  const wholesOf = resolvePartOf(
+    (expressId) =>
+      store.relationships.inverse.getEdges(expressId).flatMap((edge) => {
+        const relation = store.entityIndex.byId.get(edge.relationshipId)?.type?.toUpperCase();
+        return relation === undefined ? [] : [{ relation, wholeId: edge.target }];
+      }),
+    (expressId) => {
+      const known = identityByExpressId.get(expressId);
+      if (known) return known;
+      const indexed = store.entityIndex.byId.get(expressId);
+      return indexed ? { ifcType: indexed.type.toUpperCase(), predefinedType: null } : null;
+    }
+  );
+  for (const [index, expressId] of scopeExpressIds.entries()) {
+    idsScope[index].partOf = wholesOf(expressId);
   }
 
   warnAboutUnrecognizedTypes(unrecognized);

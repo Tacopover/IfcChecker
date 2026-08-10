@@ -60,6 +60,25 @@ export const ClassificationReferenceSchema = z.object({
 });
 export type ClassificationReference = z.infer<typeof ClassificationReferenceSchema>;
 
+/**
+ * One whole this element is a part of, and the relationship that makes it one.
+ *
+ * `relation` is the IFC relationship entity's own name rather than a normalized category, because
+ * IDS distinguishes aggregation from nesting — and ifc-lite's relationship graph deliberately
+ * files both under one edge type, so a checker reading that would approve a nested element
+ * against an `IFCRELAGGREGATES` rule.
+ *
+ * Ancestors are included, but only through chains of a **single** relation: a beam contained in a
+ * space that is aggregated into a building is not part of that building by aggregation, and the
+ * suite states that document as one that must fail.
+ */
+export const PartOfRelationSchema = z.object({
+  relation: z.string(),
+  ifcType: z.string(),
+  predefinedType: z.string().nullable(),
+});
+export type PartOfRelation = z.infer<typeof PartOfRelationSchema>;
+
 export const NormalizedElementSchema = z.object({
   globalId: z.string(),
   ifcType: z.string(),
@@ -86,6 +105,12 @@ export const NormalizedElementSchema = z.object({
    * material, so `null` fails it and `[]` passes it while still failing any value check.
    */
   materials: z.array(z.string()).nullable().optional(),
+  /**
+   * Every whole the element is a part of, direct and ancestral. Empty for an element that is part
+   * of nothing — including the container of everything else, which is why "the container itself"
+   * fails a containment facet.
+   */
+  partOf: z.array(PartOfRelationSchema).optional(),
 });
 export type NormalizedElement = z.infer<typeof NormalizedElementSchema>;
 

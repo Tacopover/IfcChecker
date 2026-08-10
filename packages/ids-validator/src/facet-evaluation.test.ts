@@ -5,6 +5,7 @@ import type {
   ParsedAttributeFacet,
   ParsedClassificationFacet,
   ParsedMaterialFacet,
+  ParsedPartOfFacet,
   ParsedPropertyFacet,
 } from "./parse-ids.js";
 
@@ -781,5 +782,84 @@ describe("evaluateRequirement — material", () => {
     expect(evaluateRequirement(makeElement({ materials: ["Steel"] }), facet).passed).toBe(false);
     expect(evaluateRequirement(makeElement({ materials: ["Concrete"] }), facet).passed).toBe(true);
     expect(evaluateRequirement(makeElement({ materials: null }), facet).passed).toBe(true);
+  });
+});
+
+describe("evaluateRequirement — partOf", () => {
+  function partOfFacet(overrides: Partial<ParsedPartOfFacet> = {}): ParsedPartOfFacet {
+    return {
+      kind: "partOf",
+      relations: [],
+      entityName: null,
+      predefinedType: null,
+      cardinality: "required",
+      ...overrides,
+    };
+  }
+
+  const nestedInFurniture = makeElement({
+    partOf: [{ relation: "IFCRELNESTS", ifcType: "IFCFURNITURE", predefinedType: "WATERBOTTLE" }],
+  });
+
+  it("does not let a nested element satisfy an aggregate facet", () => {
+    // ifc-lite files IFCRELNESTS under the same graph edge as IFCRELAGGREGATES, so a checker
+    // reading the edge rather than the relationship entity would approve this.
+    expect(
+      evaluateRequirement(nestedInFurniture, partOfFacet({ relations: ["IFCRELAGGREGATES"] })).passed
+    ).toBe(false);
+    expect(
+      evaluateRequirement(nestedInFurniture, partOfFacet({ relations: ["IFCRELNESTS"] })).passed
+    ).toBe(true);
+  });
+
+  it("accepts any relation when the facet names none", () => {
+    expect(evaluateRequirement(nestedInFurniture, partOfFacet()).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ partOf: [] }), partOfFacet()).passed).toBe(false);
+  });
+
+  // "IFCRELVOIDSELEMENT IFCRELFILLSELEMENT" is a single enumeration value in ids.xsd — one string
+  // containing a space — meaning either relationship.
+  it("treats the two-name enumeration value as either relationship", () => {
+    const facet = partOfFacet({ relations: ["IFCRELVOIDSELEMENT", "IFCRELFILLSELEMENT"] });
+    const opening = makeElement({
+      partOf: [{ relation: "IFCRELVOIDSELEMENT", ifcType: "IFCWALL", predefinedType: "STANDARD" }],
+    });
+    expect(evaluateRequirement(opening, facet).passed).toBe(true);
+    expect(evaluateRequirement(nestedInFurniture, facet).passed).toBe(false);
+  });
+
+  it("matches the whole's entity name exactly rather than by subtype", () => {
+    const inGroup = makeElement({
+      partOf: [{ relation: "IFCRELASSIGNSTOGROUP", ifcType: "IFCSYSTEM", predefinedType: null }],
+    });
+    // An applicability entity name matches subtypes; a partOf entity name does not — the suite
+    // says the group's entity "must match exactly".
+    expect(
+      evaluateRequirement(inGroup, partOfFacet({ entityName: { kind: "exact", value: "IFCGROUP" } })).passed
+    ).toBe(false);
+    expect(
+      evaluateRequirement(inGroup, partOfFacet({ entityName: { kind: "exact", value: "IFCSYSTEM" } })).passed
+    ).toBe(true);
+  });
+
+  it("requires the whole's predefined type when the facet states one", () => {
+    expect(
+      evaluateRequirement(
+        nestedInFurniture,
+        partOfFacet({ predefinedType: { kind: "exact", value: "WATERBOTTLE" } })
+      ).passed
+    ).toBe(true);
+    expect(
+      evaluateRequirement(
+        nestedInFurniture,
+        partOfFacet({ predefinedType: { kind: "exact", value: "CHAIR" } })
+      ).passed
+    ).toBe(false);
+  });
+
+  it("inverts for a prohibited facet", () => {
+    const facet = partOfFacet({ relations: ["IFCRELNESTS"], cardinality: "prohibited" });
+    expect(evaluateRequirement(nestedInFurniture, facet).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ partOf: [] }), facet).passed).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import type {
   ParsedBound,
   ParsedClassificationFacet,
   ParsedMaterialFacet,
+  ParsedPartOfFacet,
   ParsedPropertyFacet,
   ParsedRequirementFacet,
   ParsedRestriction,
@@ -403,6 +404,45 @@ function evaluateMaterial(
   };
 }
 
+function partOfLabel(facet: ParsedPartOfFacet): string {
+  const entity = facet.entityName === null ? "anything" : `a ${restrictionLabel(facet.entityName)}`;
+  const predefined =
+    facet.predefinedType === null ? "" : ` of predefined type ${restrictionLabel(facet.predefinedType)}`;
+  const via = facet.relations.length === 0 ? "" : ` by ${facet.relations.join(" or ")}`;
+  return `part of ${entity}${predefined}${via}`;
+}
+
+/**
+ * Whether the element is a part of a whole the facet accepts.
+ *
+ * The entity is matched on its type name **exactly**, not by subtype: the suite says a group's
+ * entity "must match exactly", so an `IfcGroup` rule is not satisfied by an `IfcSystem`. That is
+ * the opposite of how an applicability entity name works, and deliberately so.
+ *
+ * Chaining through ancestors is the adapter's job; by the time a facet sees `element.partOf` the
+ * ancestral wholes are already listed, each tagged with the relation that reaches it.
+ */
+function evaluatePartOf(element: NormalizedElement, facet: ParsedPartOfFacet): FacetCheckResult {
+  const matching = (element.partOf ?? []).filter((whole) => {
+    if (facet.relations.length > 0 && !facet.relations.includes(whole.relation)) return false;
+    if (!admitsAny(facet.entityName, [whole.ifcType])) return false;
+    return admitsAny(
+      facet.predefinedType,
+      whole.predefinedType === null ? [] : [whole.predefinedType]
+    );
+  });
+
+  if (facet.cardinality === "prohibited") {
+    return matching.length === 0
+      ? { passed: true, message: "" }
+      : { passed: false, message: `Element must not be ${partOfLabel(facet)}` };
+  }
+
+  return matching.length > 0
+    ? { passed: true, message: "" }
+    : { passed: false, message: `Element is not ${partOfLabel(facet)}` };
+}
+
 export function evaluateRequirement(
   element: NormalizedElement,
   facet: ParsedRequirementFacet,
@@ -411,6 +451,7 @@ export function evaluateRequirement(
 ): FacetCheckResult {
   if (facet.kind === "classification") return evaluateClassification(element, facet);
   if (facet.kind === "material") return evaluateMaterial(element, facet);
+  if (facet.kind === "partOf") return evaluatePartOf(element, facet);
 
   const slot = readFacetValue(element, facet);
   const filledIn = isFilledIn(slot);

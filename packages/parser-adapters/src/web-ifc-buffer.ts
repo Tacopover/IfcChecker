@@ -12,6 +12,7 @@ import { identifyEntity } from "./entity-identity.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
 import { normalizePropertyValue, normalizeValue } from "./normalize-property-value.js";
 import { UnitScaleCollector, siUnitScale } from "./unit-scales.js";
+import { resolvePartOf } from "./part-of.js";
 
 type WebIfcLine = Record<string, any>;
 
@@ -182,6 +183,9 @@ export async function parseWebIfcBuffer(
 
   try {
     const idsScope: NormalizedElement[] = [];
+    // Kept parallel to idsScope so partOf can be resolved in a second pass, once every entity's
+    // identity is known — a whole is often normalized after the part that points at it.
+    const scopeExpressIds: number[] = [];
     const elementTypeByExpressId = new Map<number, string>();
     const unitScales = new UnitScaleCollector(webIfcUnitScales(ifcApi, modelID));
 
@@ -379,6 +383,54 @@ export async function parseWebIfcBuffer(
       return names;
     }
 
+    // Part expressId -> the wholes it belongs to, one entry per relationship. ifc-lite reads this
+    // off its relationship graph; web-ifc has no graph, so the six relationships IDS names are
+    // walked directly. Each names its whole and its parts through different attributes, which is
+    // the only reason this is a table rather than a loop over one shape.
+    const PART_OF_RELATIONSHIPS = [
+      { type: WebIFC.IFCRELAGGREGATES, name: "IFCRELAGGREGATES", whole: "RelatingObject", parts: "RelatedObjects" },
+      { type: WebIFC.IFCRELNESTS, name: "IFCRELNESTS", whole: "RelatingObject", parts: "RelatedObjects" },
+      {
+        type: WebIFC.IFCRELCONTAINEDINSPATIALSTRUCTURE,
+        name: "IFCRELCONTAINEDINSPATIALSTRUCTURE",
+        whole: "RelatingStructure",
+        parts: "RelatedElements",
+      },
+      { type: WebIFC.IFCRELASSIGNSTOGROUP, name: "IFCRELASSIGNSTOGROUP", whole: "RelatingGroup", parts: "RelatedObjects" },
+      {
+        type: WebIFC.IFCRELVOIDSELEMENT,
+        name: "IFCRELVOIDSELEMENT",
+        whole: "RelatingBuildingElement",
+        parts: "RelatedOpeningElement",
+      },
+      {
+        type: WebIFC.IFCRELFILLSELEMENT,
+        name: "IFCRELFILLSELEMENT",
+        whole: "RelatingOpeningElement",
+        parts: "RelatedBuildingElement",
+      },
+    ] as const;
+
+    const wholesByPart = new Map<number, Array<{ relation: string; wholeId: number }>>();
+    for (const shape of PART_OF_RELATIONSHIPS) {
+      if (shape.type === undefined) continue;
+      const relIds = ifcApi.GetLineIDsWithType(modelID, shape.type);
+      for (let i = 0; i < relIds.size(); i++) {
+        const rel = ifcApi.GetLine(modelID, relIds.get(i)) as WebIfcLine;
+        const wholeId = (rel[shape.whole] as WebIfcLine | undefined)?.value;
+        if (typeof wholeId !== "number") continue;
+        // Voids and fills name a single part; the other four name a list.
+        const partRefs = rel[shape.parts];
+        for (const ref of Array.isArray(partRefs) ? partRefs : [partRefs]) {
+          const partId = (ref as WebIfcLine | undefined)?.value;
+          if (typeof partId !== "number") continue;
+          const bucket = wholesByPart.get(partId);
+          if (bucket) bucket.push({ relation: shape.name, wholeId });
+          else wholesByPart.set(partId, [{ relation: shape.name, wholeId }]);
+        }
+      }
+    }
+
     // One property set is typically shared by many elements, so reading and
     // flattening it once per definition rather than once per element saves the
     // dominant remaining cost.
@@ -547,7 +599,30 @@ export async function parseWebIfcBuffer(
           classifications,
           materials,
         });
+        scopeExpressIds.push(expressID);
       }
+    }
+
+    const identityByExpressId = new Map(
+      scopeExpressIds.map((expressId, index) => [
+        expressId,
+        { ifcType: idsScope[index].ifcType, predefinedType: idsScope[index].predefinedType },
+      ])
+    );
+    const wholesOf = resolvePartOf(
+      (expressId) => wholesByPart.get(expressId) ?? [],
+      (expressId) => {
+        const known = identityByExpressId.get(expressId);
+        if (known) return known;
+        // A whole outside the normalized set can still be named by type; it has no predefined
+        // type to offer, so a facet asking for one correctly fails against it.
+        const line = ifcApi.GetLine(modelID, expressId) as WebIfcLine | null;
+        const typeName = line ? (ifcApi.GetNameFromTypeCode(line.type) ?? "").toUpperCase() : "";
+        return typeName === "" ? null : { ifcType: typeName, predefinedType: null };
+      }
+    );
+    for (const [index, expressId] of scopeExpressIds.entries()) {
+      idsScope[index].partOf = wholesOf(expressId);
     }
 
     warnAboutUnrecognizedTypes(unrecognized);

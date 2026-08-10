@@ -285,6 +285,46 @@ describe("adapter parity", () => {
     expect(fromIfcLite.elementCounts.IFCSPACE).toBeUndefined();
   });
 
+  it("both engines walk the same partOf chains, and keep nesting distinct from aggregation", async () => {
+    const path = fixturePath("part-of-relations.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const wholesOf = (result: typeof webIfcResult, name: string) =>
+      (result.idsScope.find((entity) => entity.name === name)?.partOf ?? [])
+        .map((whole) => `${whole.relation}:${whole.ifcType}:${whole.predefinedType ?? "-"}`)
+        .sort();
+
+    // Two levels of aggregation: the ancestral whole counts as well as the direct one.
+    expect(wholesOf(ifcLiteResult, "PL-001")).toEqual([
+      "IFCRELAGGREGATES:IFCELEMENTASSEMBLY:ACCESSORY_ASSEMBLY",
+      "IFCRELAGGREGATES:IFCELEMENTASSEMBLY:NOTDEFINED",
+    ]);
+
+    // Nesting must never surface as aggregation — ifc-lite's graph files both under one edge
+    // type, so reading the edge instead of the relationship entity would report AGGREGATES here.
+    expect(wholesOf(ifcLiteResult, "Bolt")).toEqual([
+      "IFCRELNESTS:IFCDISCRETEACCESSORY:NOTDEFINED",
+      "IFCRELNESTS:IFCFURNITURE:NOTDEFINED",
+    ]);
+
+    // The beam is contained in a space that is aggregated into the storey. The chain may not
+    // change relation halfway, so the storey is not among its wholes.
+    expect(wholesOf(ifcLiteResult, "B-001")).toEqual([
+      "IFCRELASSIGNSTOGROUP:IFCGROUP:-",
+      "IFCRELCONTAINEDINSPATIALSTRUCTURE:IFCSPACE:INTERNAL",
+    ]);
+
+    expect(wholesOf(ifcLiteResult, "OP-001")).toEqual(["IFCRELVOIDSELEMENT:IFCWALL:STANDARD"]);
+    expect(wholesOf(ifcLiteResult, "D-001")).toEqual([
+      "IFCRELFILLSELEMENT:IFCOPENINGELEMENT:OPENING",
+    ]);
+
+    for (const name of ["PL-001", "Bolt", "B-001", "OP-001", "D-001", "Outer assembly"]) {
+      expect([name, wholesOf(webIfcResult, name)]).toEqual([name, wholesOf(ifcLiteResult, name)]);
+    }
+  });
+
   it("both engines flatten every material shape to the same matchable strings", async () => {
     const path = fixturePath("material-shapes.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);

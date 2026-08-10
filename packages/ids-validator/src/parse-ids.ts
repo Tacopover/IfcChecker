@@ -58,11 +58,31 @@ export interface ParsedMaterialFacet {
   cardinality: FacetCardinality;
 }
 
+/**
+ * A whole the element must be a part of.
+ *
+ * `relations` is the set of IFC relationship names the facet accepts, empty meaning any of them.
+ * It is a set rather than a single name because `ids.xsd` gives the `relations` enumeration a
+ * member that is itself two names separated by a space —
+ * `"IFCRELVOIDSELEMENT IFCRELFILLSELEMENT"` — one value meaning either.
+ *
+ * The nested `<entity>` is matched by name and optionally by predefined type, both as restrictions
+ * because the suite writes an "any whole at all" check as a `.*` pattern on the name.
+ */
+export interface ParsedPartOfFacet {
+  kind: "partOf";
+  relations: string[];
+  entityName: ParsedRestriction | null;
+  predefinedType: ParsedRestriction | null;
+  cardinality: FacetCardinality;
+}
+
 export type ParsedRequirementFacet =
   | ParsedAttributeFacet
   | ParsedPropertyFacet
   | ParsedClassificationFacet
-  | ParsedMaterialFacet;
+  | ParsedMaterialFacet
+  | ParsedPartOfFacet;
 
 /** Something the source document asked for that this parser cannot represent. */
 export interface UnsupportedConstruct {
@@ -466,7 +486,8 @@ function readRequirements(
       tag !== "attribute" &&
       tag !== "property" &&
       tag !== "classification" &&
-      tag !== "material"
+      tag !== "material" &&
+      tag !== "partOf"
     ) {
       unsupported.push({
         section: "requirements",
@@ -478,6 +499,11 @@ function readRequirements(
 
     if (tag === "classification") {
       requirements.push(parseClassificationFacet(node, unsupported));
+      continue;
+    }
+
+    if (tag === "partOf") {
+      requirements.push(parsePartOfFacet(node, unsupported));
       continue;
     }
 
@@ -518,6 +544,28 @@ function parseAttributeFacet(
     kind: "attribute",
     name,
     restriction: parseRestriction(children, "value", unsupported),
+    cardinality: readCardinality(node),
+  };
+}
+
+/**
+ * The `relation` attribute splits on whitespace, because one member of the schema's enumeration is
+ * two relationship names in a single value. An absent attribute states no constraint at all, which
+ * is not the same as an empty list of accepted relations — hence `[]` meaning "any".
+ */
+function parsePartOfFacet(
+  node: OrderedNode,
+  unsupported: UnsupportedConstruct[]
+): ParsedPartOfFacet {
+  const children = childrenOf(node, "partOf");
+  const entityChildren = descend(children, "entity");
+  const relation = attributesOf(node)["@_relation"];
+
+  return {
+    kind: "partOf",
+    relations: relation === undefined ? [] : relation.trim().split(/\s+/).filter(Boolean),
+    entityName: parseRestriction(entityChildren, "name", unsupported),
+    predefinedType: parseRestriction(entityChildren, "predefinedType", unsupported),
     cardinality: readCardinality(node),
   };
 }
