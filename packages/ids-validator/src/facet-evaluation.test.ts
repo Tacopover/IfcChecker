@@ -93,7 +93,7 @@ describe("evaluateRequirement — attribute facet", () => {
       restriction: { kind: "pattern", source: ".*", regex: /^(?:.*)$/ },
     });
     const result = evaluateRequirement(
-      makeElement({ attributes: { RefractionIndex: 42 } }),
+      makeElement({ attributes: { RefractionIndex: { value: 42 } } }),
       anything
     );
 
@@ -107,7 +107,7 @@ describe("evaluateRequirement — attribute facet", () => {
       restriction: { kind: "pattern", source: ".*", regex: /^(?:.*)$/ },
     });
     const result = evaluateRequirement(
-      makeElement({ attributes: { IsCritical: true } }),
+      makeElement({ attributes: { IsCritical: { value: true } } }),
       anything
     );
 
@@ -122,7 +122,7 @@ describe("evaluateRequirement — attribute facet", () => {
 
   it("treats an empty string as not filled in", () => {
     const result = evaluateRequirement(
-      makeElement({ attributes: { Tag: "" } }),
+      makeElement({ attributes: { Tag: { value: "" } } }),
       attributeFacet({ name: "Tag" })
     );
     expect(result.passed).toBe(false);
@@ -130,7 +130,7 @@ describe("evaluateRequirement — attribute facet", () => {
 
   it("falls back to the attributes bag for non-top-level attribute names", () => {
     const result = evaluateRequirement(
-      makeElement({ attributes: { Tag: "W-001" } }),
+      makeElement({ attributes: { Tag: { value: "W-001" } } }),
       attributeFacet({ name: "Tag" })
     );
     expect(result).toEqual({ passed: true, message: "" });
@@ -138,16 +138,16 @@ describe("evaluateRequirement — attribute facet", () => {
 
   it("matches an attribute key case-insensitively when the exact key is absent", () => {
     const facet = attributeFacet({ name: "Tag" });
-    expect(evaluateRequirement(makeElement({ attributes: { tag: "W-1" } }), facet)).toEqual({
+    expect(evaluateRequirement(makeElement({ attributes: { tag: { value: "W-1" } } }), facet)).toEqual({
       passed: true,
       message: "",
     });
-    expect(evaluateRequirement(makeElement({ attributes: { Tag: "W-1" } }), facet)).toEqual({
+    expect(evaluateRequirement(makeElement({ attributes: { Tag: { value: "W-1" } } }), facet)).toEqual({
       passed: true,
       message: "",
     });
     expect(
-      evaluateRequirement(makeElement({ attributes: { OBJECTTYPE: "Basic" } }), attributeFacet({ name: "ObjectType" }))
+      evaluateRequirement(makeElement({ attributes: { OBJECTTYPE: { value: "Basic" } } }), attributeFacet({ name: "ObjectType" }))
         .passed
     ).toBe(true);
   });
@@ -157,7 +157,7 @@ describe("evaluateRequirement — attribute facet", () => {
       name: "Tag",
       restriction: { kind: "exact", value: "exact-hit" },
     });
-    const element = makeElement({ attributes: { tag: "loose-hit", Tag: "exact-hit" } });
+    const element = makeElement({ attributes: { tag: { value: "loose-hit" }, Tag: { value: "exact-hit" } } });
     expect(evaluateRequirement(element, facet).passed).toBe(true);
   });
 
@@ -180,7 +180,7 @@ describe("evaluateRequirement — attribute facet", () => {
 
 describe("evaluateRequirement — property facet", () => {
   it("passes when the property set and base name are present", () => {
-    const element = makeElement({ propertySets: { Pset_WallCommon: { FireRating: "REI60" } } });
+    const element = makeElement({ propertySets: { Pset_WallCommon: { FireRating: { value: "REI60" } } } });
     expect(evaluateRequirement(element, propertyFacet())).toEqual({ passed: true, message: "" });
   });
 
@@ -201,8 +201,8 @@ describe("evaluateRequirement — property facet", () => {
 
   it("applies an enum restriction to the property value", () => {
     const facet = propertyFacet({ restriction: { kind: "enum", values: ["60", "90"] } });
-    const good = makeElement({ propertySets: { Pset_WallCommon: { FireRating: "90" } } });
-    const bad = makeElement({ propertySets: { Pset_WallCommon: { FireRating: "30" } } });
+    const good = makeElement({ propertySets: { Pset_WallCommon: { FireRating: { value: "90" } } } });
+    const bad = makeElement({ propertySets: { Pset_WallCommon: { FireRating: { value: "30" } } } });
 
     expect(evaluateRequirement(good, facet).passed).toBe(true);
     const failure = evaluateRequirement(bad, facet);
@@ -215,7 +215,7 @@ describe("evaluateRequirement — property facet", () => {
     const facet = propertyFacet({
       restriction: { kind: "pattern", source: "REI\\d+", regex: /^(?:REI\d+)$/ },
     });
-    const bad = makeElement({ propertySets: { Pset_WallCommon: { FireRating: "unknown" } } });
+    const bad = makeElement({ propertySets: { Pset_WallCommon: { FireRating: { value: "unknown" } } } });
     expect(evaluateRequirement(bad, facet).passed).toBe(false);
   });
 });
@@ -228,7 +228,7 @@ describe("evaluateRequirement — prohibited cardinality", () => {
       passed: true,
       message: "",
     });
-    const failure = evaluateRequirement(makeElement({ attributes: { Tag: "W-1" } }), facet);
+    const failure = evaluateRequirement(makeElement({ attributes: { Tag: { value: "W-1" } } }), facet);
     expect(failure.passed).toBe(false);
     expect(failure.message).toContain("must not be filled in");
     expect(failure.message).toContain("W-1");
@@ -239,7 +239,7 @@ describe("evaluateRequirement — prohibited cardinality", () => {
     expect(evaluateRequirement(makeElement({ propertySets: {} }), facet).passed).toBe(true);
     expect(
       evaluateRequirement(
-        makeElement({ propertySets: { Pset_WallCommon: { FireRating: "REI60" } } }),
+        makeElement({ propertySets: { Pset_WallCommon: { FireRating: { value: "REI60" } } } }),
         facet
       ).passed
     ).toBe(false);
@@ -251,6 +251,6 @@ describe("evaluateRequirement — prohibited cardinality", () => {
       cardinality: "prohibited",
       restriction: { kind: "exact", value: "W-1" },
     });
-    expect(evaluateRequirement(makeElement({ attributes: { Tag: "W-1" } }), facet).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ attributes: { Tag: { value: "W-1" } } }), facet).passed).toBe(false);
   });
 });

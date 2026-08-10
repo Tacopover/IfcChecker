@@ -28,9 +28,13 @@ describe.each(adapters)("type-inherited property sets (%s)", (_engine, makeAdapt
       // '3.6 NL-SfB code' exists only on the type and 'Q Lengte' only on the
       // occurrence, so a merge that replaced the set wholesale would drop one
       // of them whichever way round it went.
-      ASML: { "3.5 Type": "instance", "3.6 NL-SfB code": "21.11", "Q Lengte": 3000 },
-      Pset_ManufacturerTypeInformation: { Manufacturer: "Acme" },
-      Pset_TypeViaRelation: { TypeRelProp: "fromRel" },
+      ASML: {
+        "3.5 Type": { value: "instance", dataType: "IFCLABEL" },
+        "3.6 NL-SfB code": { value: "21.11", dataType: "IFCTEXT" },
+        "Q Lengte": { value: 3000, dataType: "IFCLENGTHMEASURE" },
+      },
+      Pset_ManufacturerTypeInformation: { Manufacturer: { value: "Acme", dataType: "IFCLABEL" } },
+      Pset_TypeViaRelation: { TypeRelProp: { value: "fromRel", dataType: "IFCLABEL" } },
     });
   });
 
@@ -38,16 +42,21 @@ describe.each(adapters)("type-inherited property sets (%s)", (_engine, makeAdapt
     const walls = await wallsByName(makeAdapter);
 
     expect(walls.get("W-002")?.propertySets).toEqual({
-      ASML: { "3.5 Type": "type", "3.6 NL-SfB code": "21.11" },
-      Pset_ManufacturerTypeInformation: { Manufacturer: "Acme" },
-      Pset_TypeViaRelation: { TypeRelProp: "fromRel" },
+      ASML: {
+        "3.5 Type": { value: "type", dataType: "IFCLABEL" },
+        "3.6 NL-SfB code": { value: "21.11", dataType: "IFCTEXT" },
+      },
+      Pset_ManufacturerTypeInformation: { Manufacturer: { value: "Acme", dataType: "IFCLABEL" } },
+      Pset_TypeViaRelation: { TypeRelProp: { value: "fromRel", dataType: "IFCLABEL" } },
     });
   });
 
   it("leaves an untyped occurrence with only its own sets", async () => {
     const walls = await wallsByName(makeAdapter);
 
-    expect(walls.get("W-003")?.propertySets).toEqual({ Pset_WallCommon: { IsExternal: true } });
+    expect(walls.get("W-003")?.propertySets).toEqual({
+      Pset_WallCommon: { IsExternal: { value: true, dataType: "IFCBOOLEAN" } },
+    });
   });
 
   // Qto_WallBaseQuantities shares the type's HasPropertySets list. Quantity sets

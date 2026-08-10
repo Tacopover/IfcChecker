@@ -8,13 +8,33 @@ export const PropertyValueSchema = z.union([
 ]);
 export type PropertyValue = z.infer<typeof PropertyValueSchema>;
 
+/**
+ * One attribute or property slot, with the typing IFC gives it.
+ *
+ * `value` is what a person reads and what a single-valued comparison uses — for the five
+ * multi-valued IfcProperty subtypes it stays the parser's display string ("3000 [1000 – 5000]"),
+ * so the element panel is unchanged. `values` carries the candidates behind that string, because
+ * IDS passes a multi-valued property when *any* candidate matches. `dataType` is the IFC measure
+ * type the file actually stored (IFCMASSMEASURE, IFCREAL), which is the only thing that can answer
+ * whether a stored value is the type the specification asked for.
+ */
+export const NormalizedValueSchema = z.object({
+  value: PropertyValueSchema,
+  /** Candidates for bounded / list / table / enumerated properties. Absent for a single value. */
+  values: z.array(PropertyValueSchema).optional(),
+  /** Absent when the value carries no measure semantics, and for every attribute. */
+  dataType: z.string().optional(),
+  unit: z.string().optional(),
+});
+export type NormalizedValue = z.infer<typeof NormalizedValueSchema>;
+
 export const NormalizedElementSchema = z.object({
   globalId: z.string(),
   ifcType: z.string(),
   predefinedType: z.string().nullable(),
   name: z.string().nullable(),
-  attributes: z.record(z.string(), PropertyValueSchema),
-  propertySets: z.record(z.string(), z.record(z.string(), PropertyValueSchema)),
+  attributes: z.record(z.string(), NormalizedValueSchema),
+  propertySets: z.record(z.string(), z.record(z.string(), NormalizedValueSchema)),
 });
 export type NormalizedElement = z.infer<typeof NormalizedElementSchema>;
 

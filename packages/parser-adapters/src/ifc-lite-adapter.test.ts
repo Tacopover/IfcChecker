@@ -16,11 +16,11 @@ describe("IfcLiteAdapter", () => {
     expect(wall.ifcType).toBe("IFCWALL");
     expect(wall.predefinedType).toBe("STANDARD");
     expect(wall.name).toBe("W-001");
-    expect(wall.attributes.Tag).toBe("TAG-001");
-    expect(wall.attributes.Description).toBe("Fixture wall for QA tool tests");
+    expect(wall.attributes.Tag).toEqual({ value: "TAG-001" });
+    expect(wall.attributes.Description).toEqual({ value: "Fixture wall for QA tool tests" });
     expect(wall.propertySets.Pset_WallCommon).toEqual({
-      IsExternal: true,
-      FireRating: "REI60",
+      IsExternal: { value: true, dataType: "IFCBOOLEAN" },
+      FireRating: { value: "REI60", dataType: "IFCLABEL" },
     });
   });
 
@@ -75,7 +75,10 @@ describe("parseIfcLiteBuffer", () => {
     expect(valve?.ifcType).toBe("IFCVALVE");
     expect(valve?.predefinedType).toBe("ISOLATING");
     expect(valve?.name).toBe("V-001");
-    expect(valve?.propertySets.Pset_MEPCommon).toEqual({ SystemAbbreviation: "CHW", Insulation: "19mm" });
+    expect(valve?.propertySets.Pset_MEPCommon).toEqual({
+      SystemAbbreviation: { value: "CHW", dataType: "IFCLABEL" },
+      Insulation: { value: "19mm", dataType: "IFCLABEL" },
+    });
   });
 
   it("leaves openings, ports and annotations out of the element list", async () => {

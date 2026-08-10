@@ -6,12 +6,17 @@ import {
   type IfcDataStore,
 } from "@ifc-lite/parser";
 import { IfcTypeEnumToString, type SpatialNode } from "@ifc-lite/data";
-import { simpleAttributeNamesFor, type ModelStructureNode, type NormalizedElement } from "@ifc-qa/shared-types";
+import {
+  simpleAttributeNamesFor,
+  type ModelStructureNode,
+  type NormalizedElement,
+  type NormalizedValue,
+} from "@ifc-qa/shared-types";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { identifyEntity } from "./entity-identity.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
-import { normalizePropertyValue } from "./normalize-property-value.js";
+import { normalizePropertyValue, normalizeValue } from "./normalize-property-value.js";
 
 function stripEnumDots(value: unknown): string | null {
   const normalized = normalizePropertyValue(value);
@@ -107,12 +112,24 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
       // on any shared key. extractTypePropertiesOnDemand walks the type
       // relationship and reads both the type's inline HasPropertySets and any
       // IFC4 IFCRELDEFINESBYPROPERTIES aimed at it.
-      const propertySets: Record<string, Record<string, string | number | boolean | null>> = {};
-      const addPsets = (psets: Array<{ name: string; properties: Array<{ name: string; value: unknown }> }>) => {
+      // ifc-lite already reads all six IfcProperty subtypes and hands back the candidates behind a
+      // multi-valued one plus the stored measure type; taking only `value` here threw both away and
+      // left a bounded property as the display string "3000 [1000 – 5000]" with nothing to compare.
+      const propertySets: Record<string, Record<string, NormalizedValue>> = {};
+      const addPsets = (
+        psets: Array<{
+          name: string;
+          properties: Array<{ name: string; value: unknown; values?: unknown[]; dataType?: string; unit?: string }>;
+        }>
+      ) => {
         for (const pset of psets) {
-          const props: Record<string, string | number | boolean | null> = { ...propertySets[pset.name] };
+          const props: Record<string, NormalizedValue> = { ...propertySets[pset.name] };
           for (const prop of pset.properties) {
-            props[prop.name] = normalizePropertyValue(prop.value);
+            props[prop.name] = normalizeValue(prop.value, {
+              values: prop.values,
+              dataType: prop.dataType,
+              unit: prop.unit,
+            });
           }
           propertySets[pset.name] = props;
         }
@@ -133,9 +150,9 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
       // this adapter used to hand-pick. A rule may name any of them —
       // IsCritical on an IfcTaskTime, RefractionIndex on a surface style — and
       // an attribute we did not carry read as one the model was missing.
-      const attributes: Record<string, string | number | boolean | null> = {};
+      const attributes: Record<string, NormalizedValue> = {};
       for (const attributeName of simpleAttributeNamesFor(typeName)) {
-        attributes[attributeName] = normalizePropertyValue(findAttr(attributeName));
+        attributes[attributeName] = normalizeValue(findAttr(attributeName));
       }
 
       // store.entities is indexed for object definitions; it answers nothing

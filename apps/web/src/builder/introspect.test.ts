@@ -196,12 +196,15 @@ describe("introspectModel — resolveTypes", () => {
 
 const FIELD_MODEL: NormalizedElement[] = [
   ...many("IFCDUCTSEGMENT", 4, (i) => ({
-    attributes: { Tag: `DS-${i}`, Description: i === 0 ? "Supply air" : null },
-    propertySets: { MEP_Data: { SystemAbbreviation: i < 3 ? "SA" : "RA" } },
+    attributes: { Tag: { value: `DS-${i}` }, Description: { value: i === 0 ? "Supply air" : null } },
+    propertySets: { MEP_Data: { SystemAbbreviation: { value: i < 3 ? "SA" : "RA" } } },
   })),
   ...many("IFCPIPESEGMENT", 2, (i) => ({
-    attributes: { Tag: i === 0 ? `PS-${i}` : null },
-    propertySets: { MEP_Data: { SystemAbbreviation: "CHWS" }, Pset_PipeSegmentTypeCommon: { Status: "New" } },
+    attributes: { Tag: { value: i === 0 ? `PS-${i}` : null } },
+    propertySets: {
+      MEP_Data: { SystemAbbreviation: { value: "CHWS" } },
+      Pset_PipeSegmentTypeCommon: { Status: { value: "New" } },
+    },
   })),
 ];
 

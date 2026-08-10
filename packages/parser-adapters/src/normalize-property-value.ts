@@ -1,4 +1,4 @@
-import type { PropertyValue } from "@ifc-qa/shared-types";
+import type { NormalizedValue, PropertyValue } from "@ifc-qa/shared-types";
 
 /**
  * Coerces a raw value read from either engine into NormalizedElement's
@@ -19,4 +19,23 @@ export function normalizePropertyValue(value: unknown): PropertyValue {
     return normalizePropertyValue((value as { value: unknown }).value);
   }
   return String(value);
+}
+
+/**
+ * Wraps a raw value into the slot NormalizedElement stores. The extras are optional because most
+ * slots have none: an attribute carries no measure type, and a single-valued property carries no
+ * candidate list. Omitting them rather than storing `undefined` keeps the parsed shape small on a
+ * model with hundreds of thousands of entities.
+ */
+export function normalizeValue(
+  value: unknown,
+  extras: { values?: unknown[]; dataType?: string; unit?: string } = {}
+): NormalizedValue {
+  const slot: NormalizedValue = { value: normalizePropertyValue(value) };
+  if (extras.values !== undefined && extras.values.length > 0) {
+    slot.values = extras.values.map(normalizePropertyValue);
+  }
+  if (extras.dataType !== undefined) slot.dataType = extras.dataType;
+  if (extras.unit !== undefined) slot.unit = extras.unit;
+  return slot;
 }

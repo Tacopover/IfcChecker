@@ -85,8 +85,8 @@ describe("evaluateRuleDraft — operators", () => {
 
 describe("evaluateRuleDraft — notExists is prohibited, not inverted-presence-only", () => {
   const walls = [
-    element("IFCWALL", { propertySets: { Pset_WallCommon: { Status: "Demolish" } } }),
-    element("IFCWALL", { propertySets: { Pset_WallCommon: { Status: "" } } }),
+    element("IFCWALL", { propertySets: { Pset_WallCommon: { Status: { value: "Demolish" } } } }),
+    element("IFCWALL", { propertySets: { Pset_WallCommon: { Status: { value: "" } } } }),
     element("IFCWALL", { propertySets: { Pset_WallCommon: {} } }),
     element("IFCWALL", {}),
   ];
@@ -177,11 +177,11 @@ describe("evaluateRuleDraft — empty rule", () => {
 // Each element fails a different, known condition, so the mapping from
 // requirement slot back to condition slot is pinned rather than assumed.
 const INTERLEAVED_MODEL: NormalizedElement[] = [
-  element("IFCWALL", { name: "OK", propertySets: { Pset_Wall: { FireRating: "60", LoadBearing: "true" } } }),
-  element("IFCWALL", { name: "OK", propertySets: { Pset_Wall: { FireRating: "60" } } }),
+  element("IFCWALL", { name: "OK", propertySets: { Pset_Wall: { FireRating: { value: "60" }, LoadBearing: { value: "true" } } } }),
+  element("IFCWALL", { name: "OK", propertySets: { Pset_Wall: { FireRating: { value: "60" } } } }),
   element("IFCWALL", { name: "OK", propertySets: { Pset_Wall: {} } }),
-  element("IFCWALL", { name: "NO", propertySets: { Pset_Wall: { FireRating: "60" } } }),
-  element("IFCWALL", { name: "OK", propertySets: { Pset_Wall: { LoadBearing: "true" } } }),
+  element("IFCWALL", { name: "NO", propertySets: { Pset_Wall: { FireRating: { value: "60" } } } }),
+  element("IFCWALL", { name: "OK", propertySets: { Pset_Wall: { LoadBearing: { value: "true" } } } }),
 ];
 
 describe("evaluateRuleDraft — condition alignment", () => {

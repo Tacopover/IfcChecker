@@ -1,12 +1,13 @@
-import type { NormalizedElement, PropertyValue } from "@ifc-qa/shared-types";
+import type { NormalizedElement, NormalizedValue } from "@ifc-qa/shared-types";
 
-function formatValue(value: PropertyValue): { text: string; missing: boolean } {
+function formatValue(slot: NormalizedValue): { text: string; missing: boolean } {
+  const value = slot.value;
   if (value === null || value === "") return { text: "not set", missing: true };
   if (typeof value === "boolean") return { text: value ? "true" : "false", missing: false };
   return { text: String(value), missing: false };
 }
 
-function ValueRows({ values }: { values: Record<string, PropertyValue> }) {
+function ValueRows({ values }: { values: Record<string, NormalizedValue> }) {
   const names = Object.keys(values).sort((a, b) => a.localeCompare(b));
   return (
     <>

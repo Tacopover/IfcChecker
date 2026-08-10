@@ -1,16 +1,33 @@
 import * as WebIFC from "web-ifc";
-import { simpleAttributeNamesFor, type ModelStructureNode, type NormalizedElement } from "@ifc-qa/shared-types";
+import {
+  simpleAttributeNamesFor,
+  type ModelStructureNode,
+  type NormalizedElement,
+  type NormalizedValue,
+} from "@ifc-qa/shared-types";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { identifyEntity } from "./entity-identity.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
-import { normalizePropertyValue } from "./normalize-property-value.js";
+import { normalizePropertyValue, normalizeValue } from "./normalize-property-value.js";
 
 type WebIfcLine = Record<string, any>;
 
 function stripEnumDots(value: unknown): string | null {
   const normalized = normalizePropertyValue(value);
   return typeof normalized === "string" ? normalized.replace(/^\.|\.$/g, "") : null;
+}
+
+/**
+ * web-ifc wraps a defined type as `{ name: "IFCMASSMEASURE", value }`, so the measure type the
+ * file stored survives on this engine too — it is the only thing that can say whether a stored
+ * value is the type the specification asked for. Wrappers with no measure semantics (IFCLABEL on
+ * a plain string) are kept as well; the comparison decides what to do with them.
+ */
+function measureTypeOf(raw: unknown): string | undefined {
+  if (raw === null || typeof raw !== "object") return undefined;
+  const name = (raw as { name?: unknown }).name;
+  return typeof name === "string" && name !== "" ? name : undefined;
 }
 
 // The spatial-structure backbone every IFC model is expected to declare,
@@ -157,7 +174,7 @@ export async function parseWebIfcBuffer(
     // One property set is typically shared by many elements, so reading and
     // flattening it once per definition rather than once per element saves the
     // dominant remaining cost.
-    const propertySetCache = new Map<number, [string, Record<string, string | number | boolean | null>] | null>();
+    const propertySetCache = new Map<number, [string, Record<string, NormalizedValue>] | null>();
     function readPropertySet(defId: number) {
       const cached = propertySetCache.get(defId);
       if (cached !== undefined) return cached;
@@ -169,13 +186,18 @@ export async function parseWebIfcBuffer(
       // Quantities instead; without this guard those arrive as a named set with
       // no properties in it. Quantities are not read at either level today.
       const isPropertySet = Array.isArray(propSet.HasProperties);
-      let entry: [string, Record<string, string | number | boolean | null>] | null = null;
+      let entry: [string, Record<string, NormalizedValue>] | null = null;
       if (typeof psetName === "string" && isPropertySet) {
-        const props: Record<string, string | number | boolean | null> = {};
+        const props: Record<string, NormalizedValue> = {};
         for (const prop of propSet.HasProperties ?? []) {
           const propName = normalizePropertyValue(prop.Name);
           if (typeof propName !== "string") continue;
-          props[propName] = normalizePropertyValue(prop.NominalValue);
+          // Only NominalValue, so only IfcPropertySingleValue: the other five subtypes still read
+          // as absent here where ifc-lite reads them. `values` is therefore never populated on this
+          // engine, and adapter-parity.test.ts states that gap rather than leaving it to be found.
+          props[propName] = normalizeValue(prop.NominalValue, {
+            dataType: measureTypeOf(prop.NominalValue),
+          });
         }
         entry = [psetName, props];
       }
@@ -187,7 +209,7 @@ export async function parseWebIfcBuffer(
     // HasPropertySets, and — IFC4 only — via an IFCRELDEFINESBYPROPERTIES aimed
     // at the type, which the instance-level sweep above already collected under
     // the type's own expressId. Read once per type, not once per occurrence.
-    const typePropertySetsCache = new Map<number, Array<[string, Record<string, string | number | boolean | null>]>>();
+    const typePropertySetsCache = new Map<number, Array<[string, Record<string, NormalizedValue>]>>();
     function readTypePropertySets(typeId: number) {
       const cached = typePropertySetsCache.get(typeId);
       if (cached !== undefined) return cached;
@@ -200,7 +222,7 @@ export async function parseWebIfcBuffer(
 
       const entries = defIds
         .map(readPropertySet)
-        .filter((entry): entry is [string, Record<string, string | number | boolean | null>] => entry !== null);
+        .filter((entry): entry is [string, Record<string, NormalizedValue>] => entry !== null);
       typePropertySetsCache.set(typeId, entries);
       return entries;
     }
@@ -262,7 +284,7 @@ export async function parseWebIfcBuffer(
         // set wholesale instead would keep hiding every type-only property in
         // it. Copied, not aliased: the caches exist to avoid re-reading a line,
         // and elements must not share a mutable bag with each other.
-        const propertySets: Record<string, Record<string, string | number | boolean | null>> = {};
+        const propertySets: Record<string, Record<string, NormalizedValue>> = {};
         const typeId = typeIdByElement.get(expressID);
         if (typeId !== undefined) {
           for (const [setName, props] of readTypePropertySets(typeId)) {
@@ -282,9 +304,13 @@ export async function parseWebIfcBuffer(
         // the line's shape, so the two engines carry the same set: web-ifc
         // returns a reference as a handle object and ifc-lite as a bare number,
         // and neither is something a rule should compare against.
-        const attributes: Record<string, string | number | boolean | null> = {};
+        const attributes: Record<string, NormalizedValue> = {};
         for (const attributeName of simpleAttributeNamesFor(typeName)) {
-          attributes[attributeName] = normalizePropertyValue(line[attributeName]);
+          // No dataType here on purpose: IDS declares `dataType` on <property> and never on
+          // <attribute>, so reading web-ifc's wrapper name for an attribute would carry an
+          // IFCIDENTIFIER or IFCTEXT that nothing consults, and diverge from ifc-lite — which
+          // reports a type for property values only — on every attribute in the model.
+          attributes[attributeName] = normalizeValue(line[attributeName]);
         }
 
         idsScope.push({

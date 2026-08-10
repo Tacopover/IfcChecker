@@ -7,7 +7,7 @@
     "attributes": {},
     "propertySets": {
       "Pset_WallCommon": {
-        "FireRating": "REI60"
+        "FireRating": { "value": "REI60" }
       }
     }
   },

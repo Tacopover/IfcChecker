@@ -276,8 +276,10 @@ describe("IfcCheckerPage", () => {
           ifcType: "IFCWALL",
           predefinedType: "STANDARD",
           name: "Wall-1",
-          attributes: { Tag: "W-001" },
-          propertySets: { Pset_WallCommon: { FireRating: null, IsExternal: true } },
+          attributes: { Tag: { value: "W-001" } },
+          propertySets: {
+            Pset_WallCommon: { FireRating: { value: null }, IsExternal: { value: true } },
+          },
         },
       ],
       parseMs: 12,
