@@ -28,6 +28,20 @@ export const NormalizedValueSchema = z.object({
 });
 export type NormalizedValue = z.infer<typeof NormalizedValueSchema>;
 
+/**
+ * What each of the model's measure types must be multiplied by to reach the unit IDS compares in.
+ *
+ * IDS states every numerical measure in SI — a length is metres, whatever the file was authored in
+ * — so a millimetre model carries `IFCLENGTHMEASURE: 1e-3` here. Keyed by the IFC measure type
+ * because that is what a property slot's `dataType` reports.
+ *
+ * Only measures that actually need scaling are listed, so an absent key means a factor of 1. A
+ * model that declares nothing is therefore indistinguishable from one already authored in SI,
+ * which is also what IFC means by an unstated unit.
+ */
+export const UnitScalesSchema = z.record(z.string(), z.number());
+export type UnitScales = z.infer<typeof UnitScalesSchema>;
+
 export const NormalizedElementSchema = z.object({
   globalId: z.string(),
   ifcType: z.string(),

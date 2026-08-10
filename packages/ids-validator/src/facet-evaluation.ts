@@ -1,5 +1,10 @@
 import { isIntegerAttribute } from "@ifc-qa/shared-types";
-import type { NormalizedElement, NormalizedValue, PropertyValue } from "@ifc-qa/shared-types";
+import type {
+  NormalizedElement,
+  NormalizedValue,
+  PropertyValue,
+  UnitScales,
+} from "@ifc-qa/shared-types";
 import type { ParsedBound, ParsedRequirementFacet, ParsedRestriction } from "./parse-ids.js";
 import { isSubtypeOf } from "./ifc-type-hierarchy.js";
 
@@ -150,6 +155,46 @@ function candidatesOf(slot: NormalizedValue): PropertyValue[] {
 }
 
 /**
+ * The candidates as IDS compares them: in SI, whatever unit the file was authored in.
+ *
+ * IDS states every numerical measure in its nominated standard unit, so a specification asking for
+ * a length of 2 means two metres — and a millimetre model storing 2000 satisfies it while one
+ * storing 2 does not. Comparing the raw numbers gets both of those exactly backwards, and the
+ * suite pins the pair.
+ *
+ * The scale is keyed on the measure type the *model* stored, not the one the specification asked
+ * for, because it is the model's number being converted. Only the number moves: `slot.value` keeps
+ * the authored figure, so the element panel still shows what the file says.
+ */
+function comparableCandidates(slot: NormalizedValue, unitScales: UnitScales): PropertyValue[] {
+  const candidates = candidatesOf(slot);
+  // No stored measure type is no basis for a conversion. A table property reports none, so its
+  // values stay as written rather than being rescaled on the strength of what the rule asked for.
+  if (slot.dataType === undefined) return candidates;
+
+  const scale = unitScales[slot.dataType.toUpperCase()] ?? 1;
+  return candidates.map((held) => {
+    const stored = storedNumber(held);
+    return stored === null ? held : stored * scale;
+  });
+}
+
+/**
+ * A candidate as the number the file stored, or `null` when it is not one.
+ *
+ * The candidates behind a multi-valued property arrive as the literals the file wrote — ifc-lite
+ * hands back `["1000", "5000", "3000"]` for a bounded length — so a measure's values are strings
+ * even though the slot states a measure type. Reading them back as numbers is what lets the same
+ * numeric comparison, tolerance and unit scaling apply to a bounded property as to a single value.
+ */
+function storedNumber(held: PropertyValue): number | null {
+  if (typeof held === "number") return held;
+  if (typeof held !== "string") return null;
+  const trimmed = held.trim();
+  return XSD_NUMBER.test(trimmed) ? Number(trimmed) : null;
+}
+
+/**
  * Whether a held value sits inside the range a restriction states.
  *
  * **Comparison is exact**, and deliberately so: the tolerance rule that governs equality does not
@@ -179,11 +224,12 @@ function restrictionFailure(
   facet: ParsedRequirementFacet,
   restriction: ParsedRestriction,
   slot: NormalizedValue,
-  wholeNumber: boolean
+  wholeNumber: boolean,
+  unitScales: UnitScales
 ): string | null {
   const raw = slot.value;
   const value = String(raw);
-  const candidates = candidatesOf(slot);
+  const candidates = comparableCandidates(slot, unitScales);
   switch (restriction.kind) {
     case "exact":
       return candidates.some((held) => matchesLiteral(held, restriction.value, wholeNumber))
@@ -214,7 +260,9 @@ function restrictionFailure(
 
 export function evaluateRequirement(
   element: NormalizedElement,
-  facet: ParsedRequirementFacet
+  facet: ParsedRequirementFacet,
+  /** Empty for a model already in SI, and for a caller that has no unit information at all. */
+  unitScales: UnitScales = {}
 ): FacetCheckResult {
   const slot = readFacetValue(element, facet);
   const filledIn = isFilledIn(slot);
@@ -262,7 +310,8 @@ export function evaluateRequirement(
       facet,
       facet.restriction,
       value,
-      holdsWholeNumber(element, facet, value)
+      holdsWholeNumber(element, facet, value),
+      unitScales
     );
     if (failure) return { passed: false, message: failure };
   }

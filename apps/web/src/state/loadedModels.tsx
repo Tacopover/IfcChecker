@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import type { EngineId, ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
+import type { EngineId, ModelStructureNode, NormalizedElement, UnitScales } from "@ifc-qa/shared-types";
 
 // The one place a chosen IFC file lives. Both pages read from here: the
 // validate page parses files into it and checks them against a rule set, the
@@ -24,6 +24,11 @@ export interface LoadedModel {
    * builder's explorer rail stay the shorter, human-facing one.
    */
   idsScope: NormalizedElement[];
+  /**
+   * What this file's measures must be multiplied by to reach the SI units IDS compares in — a
+   * millimetre model carries 1e-3 for length. Kept per model because a federated set mixes them.
+   */
+  unitScales: UnitScales;
   modelStructure: ModelStructureNode | null;
 }
 
@@ -34,7 +39,7 @@ export function modelKey(file: File): string {
 
 export type ParseOutcome = Pick<
   LoadedModel,
-  "status" | "engine" | "parseMs" | "errorMessage" | "elements" | "idsScope" | "modelStructure"
+  "status" | "engine" | "parseMs" | "errorMessage" | "elements" | "idsScope" | "unitScales" | "modelStructure"
 >;
 
 interface LoadedModelsValue {
@@ -66,6 +71,7 @@ export function LoadedModelsProvider({ children }: { children: ReactNode }) {
           errorMessage: null,
           elements: [],
           idsScope: [],
+          unitScales: {},
           modelStructure: null,
         }));
       return added.length === 0 ? previous : [...previous, ...added];

@@ -3,6 +3,7 @@ import {
   extractPropertiesOnDemand,
   extractTypePropertiesOnDemand,
   extractAllEntityAttributes,
+  extractProjectUnits,
   type IfcDataStore,
 } from "@ifc-lite/parser";
 import { IfcTypeEnumToString, type SpatialNode } from "@ifc-lite/data";
@@ -17,6 +18,7 @@ import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter
 import { identifyEntity } from "./entity-identity.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
 import { normalizePropertyValue, normalizeValue } from "./normalize-property-value.js";
+import { UnitScaleCollector } from "./unit-scales.js";
 
 function stripEnumDots(value: unknown): string | null {
   const normalized = normalizePropertyValue(value);
@@ -73,6 +75,17 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
   const idsScope: NormalizedElement[] = [];
   const elementTypeByExpressId = new Map<number, string>();
 
+  // ifc-lite already resolves the whole IfcUnitAssignment — SI prefixes, derived, conversion-based
+  // and monetary units — against parity vectors shared with its Rust core, so this reads that
+  // rather than re-deriving it.
+  const projectUnits = extractProjectUnits(
+    raw,
+    store.entityIndex as unknown as Parameters<typeof extractProjectUnits>[1]
+  );
+  const unitScales = new UnitScaleCollector(
+    (unitType) => projectUnits.resolvedForUnitType(unitType)?.siScale
+  );
+
   // store.entityIndex.byType is keyed by the raw type name the file carries, so
   // the model itself decides what is on offer here. Asking for a fixed list of
   // names instead meant every concrete MEP class — IfcValve, IfcAirTerminal,
@@ -125,6 +138,7 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
         for (const pset of psets) {
           const props: Record<string, NormalizedValue> = { ...propertySets[pset.name] };
           for (const prop of pset.properties) {
+            unitScales.observe(prop.dataType);
             props[prop.name] = normalizeValue(prop.value, {
               values: prop.values,
               dataType: prop.dataType,
@@ -186,5 +200,12 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
   // the element list keeps exactly the order it had before the wider scope
   // existed — the two engines have to agree element-for-element.
   const elements = idsScope.filter((entity) => reviewerTypeNames.has(entity.ifcType));
-  return { elements, idsScope, parseMs: performance.now() - start, modelStructure, unrecognizedTypes: unrecognized };
+  return {
+    elements,
+    idsScope,
+    unitScales: unitScales.result(),
+    parseMs: performance.now() - start,
+    modelStructure,
+    unrecognizedTypes: unrecognized,
+  };
 }

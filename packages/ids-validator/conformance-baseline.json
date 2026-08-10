@@ -2,8 +2,8 @@
   "generated": "2026-08-10",
   "totals": {
     "cases": 334,
-    "agreed": 181,
-    "wrong": 20,
+    "agreed": 186,
+    "wrong": 15,
     "refused": 133,
     "errored": 0
   },
@@ -52,8 +52,8 @@
     },
     "property": {
       "total": 82,
-      "agreed": 63,
-      "wrong": 11,
+      "agreed": 68,
+      "wrong": 6,
       "refused": 8,
       "errored": 0
     },
@@ -162,6 +162,7 @@
     "property/fail-reference_properties_are_treated_as_objects_and_not_supported",
     "property/fail-specifying_a_value_fails_against_different_values",
     "property/fail-specifying_a_value_performs_a_case_sensitive_match_2_2",
+    "property/fail-unit_conversions_shall_take_place_to_ids_nominated_standard_units_1_2",
     "property/invalid-booleans_must_be_specified_as_lowercase_strings_3_3",
     "property/invalid-integer_values_are_checked_using_type_casting_4_4",
     "property/invalid-integer_values_cannot_be_stored_with_decimal_2_4",
@@ -176,6 +177,9 @@
     "property/pass-a_zero_duration_will_pass",
     "property/pass-an_optional_facet_always_passes_regardless_of_outcome_1_2",
     "property/pass-an_optional_facet_always_passes_regardless_of_outcome_2_2",
+    "property/pass-any_matching_value_in_a_bounded_property_will_pass_1_4",
+    "property/pass-any_matching_value_in_a_bounded_property_will_pass_2_4",
+    "property/pass-any_matching_value_in_a_bounded_property_will_pass_3_4",
     "property/pass-any_matching_value_in_a_list_property_will_pass_1_3",
     "property/pass-any_matching_value_in_a_list_property_will_pass_2_3",
     "property/pass-any_matching_value_in_a_table_property_will_pass_1_3",
@@ -197,6 +201,7 @@
     "property/pass-real_values_are_checked_using_type_casting_2_3",
     "property/pass-real_values_are_checked_using_type_casting_3_3",
     "property/pass-specifying_a_value_performs_a_case_sensitive_match_1_2",
+    "property/pass-unit_conversions_shall_take_place_to_ids_nominated_standard_units_2_2",
     "restriction/fail-a_bound_can_be_exclusive_1_3",
     "restriction/fail-a_bound_can_be_exclusive_3_3",
     "restriction/fail-a_bound_can_be_inclusive_4_4",
@@ -1055,12 +1060,6 @@
       "detail": "property/name"
     },
     {
-      "case": "property/fail-unit_conversions_shall_take_place_to_ids_nominated_standard_units_1_2",
-      "expected": "fail",
-      "actual": "pass",
-      "detail": "1 applicable, 1 passed, 0 failed"
-    },
-    {
       "case": "property/pass-a_name_check_will_match_any_quantity_with_any_value",
       "expected": "pass",
       "actual": "fail",
@@ -1089,24 +1088,6 @@
       "expected": "pass",
       "actual": "refused",
       "detail": "property/name"
-    },
-    {
-      "case": "property/pass-any_matching_value_in_a_bounded_property_will_pass_1_4",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "property/pass-any_matching_value_in_a_bounded_property_will_pass_2_4",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "property/pass-any_matching_value_in_a_bounded_property_will_pass_3_4",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
       "case": "property/pass-any_matching_value_in_a_table_property_will_pass_2_3",
@@ -1140,12 +1121,6 @@
     },
     {
       "case": "property/pass-properties_can_be_inherited_from_the_type_2_2",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "property/pass-unit_conversions_shall_take_place_to_ids_nominated_standard_units_2_2",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"

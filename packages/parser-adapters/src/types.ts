@@ -1,4 +1,4 @@
-import type { ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
+import type { ModelStructureNode, NormalizedElement, UnitScales } from "@ifc-qa/shared-types";
 
 export interface UnrecognizedEntityType {
   ifcType: string;
@@ -21,6 +21,12 @@ export interface IfcParseResult {
    * whenever a rule's target was not a physical element.
    */
   idsScope: NormalizedElement[];
+  /**
+   * What each measure in this file must be multiplied by to reach the SI unit IDS compares in.
+   * Model-level rather than per-value: the file declares its units once, and a `dataType` on the
+   * slot is enough to find the right one.
+   */
+  unitScales: UnitScales;
   parseMs: number;
   modelStructure: ModelStructureNode | null;
   /**

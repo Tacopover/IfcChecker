@@ -1,4 +1,10 @@
-import type { ElementResult, EngineId, ModelStructureNode, NormalizedElement } from "@ifc-qa/shared-types";
+import type {
+  ElementResult,
+  EngineId,
+  ModelStructureNode,
+  NormalizedElement,
+  UnitScales,
+} from "@ifc-qa/shared-types";
 import { parseIfcLiteBuffer, parseWebIfcBuffer } from "@ifc-qa/parser-adapters/browser";
 import type { UnsupportedConstruct } from "@ifc-qa/ids-validator";
 import { isEvaluable, parseIdsXml, validateBySpecification } from "@ifc-qa/ids-validator";
@@ -31,6 +37,7 @@ const PARSE_BY_ENGINE: Record<
   (buffer: Uint8Array) => Promise<{
     elements: NormalizedElement[];
     idsScope: NormalizedElement[];
+    unitScales: UnitScales;
     parseMs: number;
     modelStructure: ModelStructureNode | null;
   }>
@@ -45,7 +52,8 @@ const PARSE_BY_ENGINE: Record<
 export async function parseFile(file: File, engine: EngineId): Promise<ParseOutcome> {
   try {
     const buffer = new Uint8Array(await file.arrayBuffer());
-    const { elements, idsScope, parseMs, modelStructure } = await PARSE_BY_ENGINE[engine](buffer);
+    const { elements, idsScope, unitScales, parseMs, modelStructure } =
+      await PARSE_BY_ENGINE[engine](buffer);
     return {
       status: "succeeded",
       engine,
@@ -53,6 +61,7 @@ export async function parseFile(file: File, engine: EngineId): Promise<ParseOutc
       errorMessage: null,
       elements,
       idsScope: idsScope ?? elements,
+      unitScales: unitScales ?? {},
       modelStructure: modelStructure ?? null,
     };
   } catch (error) {
@@ -63,6 +72,7 @@ export async function parseFile(file: File, engine: EngineId): Promise<ParseOutc
       errorMessage: error instanceof Error ? error.message : String(error),
       elements: [],
       idsScope: [],
+      unitScales: {},
       modelStructure: null,
     };
   }
@@ -74,6 +84,8 @@ export interface ParsedModel {
   fileName: string;
   /** Checking runs against the wider IDS scope, not the reviewer element list. */
   idsScope: NormalizedElement[];
+  /** This file's own measure scaling — a federated set can mix millimetre and metre models. */
+  unitScales: UnitScales;
 }
 
 export interface CheckRow extends ElementResult {
@@ -134,7 +146,7 @@ export function validateParsedModels(
   }));
 
   for (const model of models) {
-    validateBySpecification(model.idsScope, idsXml).forEach((outcome, index) => {
+    validateBySpecification(model.idsScope, idsXml, model.unitScales).forEach((outcome, index) => {
       const summary = summaries[index];
       summary.applicableCount += outcome.applicableCount;
       summary.passedCount += outcome.passedCount;

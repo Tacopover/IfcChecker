@@ -591,3 +591,84 @@ describe("evaluateRequirement — floating-point equality tolerance", () => {
     expect(evaluateRequirement(element, facet).passed).toBe(false);
   });
 });
+
+describe("evaluateRequirement — unit conversion", () => {
+  const MILLIMETRES = { IFCLENGTHMEASURE: 1e-3 };
+  const storedLength = (value: number | undefined, values?: number[]) =>
+    makeElement({
+      propertySets: {
+        Pset_WallCommon: {
+          Foo: { value: value ?? "1000, 3000", values, dataType: "IFCLENGTHMEASURE" },
+        },
+      },
+    });
+  const wantsMetres = (literal: string) =>
+    propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCLENGTHMEASURE",
+      restriction: { kind: "exact", value: literal },
+    });
+
+  // The pair the suite states: IDS nominates metres, so a millimetre model storing 2000 satisfies
+  // "2" and one storing 2 does not. Comparing the raw numbers gets both exactly backwards, and the
+  // "2 stored, 2 asked" case is a false pass — the direction that matters most.
+  it("passes 2000 mm against a required 2 m", () => {
+    expect(evaluateRequirement(storedLength(2000), wantsMetres("2"), MILLIMETRES).passed).toBe(true);
+  });
+
+  it("fails 2 mm against a required 2 m", () => {
+    expect(evaluateRequirement(storedLength(2), wantsMetres("2"), MILLIMETRES).passed).toBe(false);
+  });
+
+  it("compares raw when the model declares no scaling for that measure", () => {
+    expect(evaluateRequirement(storedLength(2), wantsMetres("2"), {}).passed).toBe(true);
+    expect(evaluateRequirement(storedLength(2000), wantsMetres("2"), {}).passed).toBe(false);
+  });
+
+  it("scales every candidate of a multi-valued property", () => {
+    const element = storedLength(undefined, [1000, 3000, 5000]);
+    expect(evaluateRequirement(element, wantsMetres("3"), MILLIMETRES).passed).toBe(true);
+    expect(evaluateRequirement(element, wantsMetres("2"), MILLIMETRES).passed).toBe(false);
+  });
+
+  it("scales before a bounds comparison too", () => {
+    const between = (min: number, max: number) =>
+      propertyFacet({
+        baseName: "Foo",
+        dataType: "IFCLENGTHMEASURE",
+        restriction: {
+          kind: "bounds",
+          min: { value: min, inclusive: true },
+          max: { value: max, inclusive: true },
+        },
+      });
+    expect(evaluateRequirement(storedLength(3000), between(1, 5), MILLIMETRES).passed).toBe(true);
+    expect(evaluateRequirement(storedLength(3000), between(1000, 5000), MILLIMETRES).passed).toBe(false);
+  });
+
+  // The scale belongs to the measure the model stored, and a slot with no measure type has no
+  // unit to convert from — scaling one anyway would rescale plain reals and counts.
+  it("leaves a value with no stored measure type alone", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: 2000 } } },
+    });
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: null,
+      restriction: { kind: "exact", value: "2000" },
+    });
+    expect(evaluateRequirement(element, facet, MILLIMETRES).passed).toBe(true);
+  });
+
+  it("leaves a non-numeric value alone", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: "REI60", dataType: "IFCLENGTHMEASURE" } } },
+    });
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCLENGTHMEASURE",
+      restriction: { kind: "exact", value: "REI60" },
+    });
+    expect(evaluateRequirement(element, facet, MILLIMETRES).passed).toBe(true);
+  });
+});
