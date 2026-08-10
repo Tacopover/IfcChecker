@@ -31,7 +31,25 @@ export interface ParsedPropertyFacet {
   cardinality: FacetCardinality;
 }
 
-export type ParsedRequirementFacet = ParsedAttributeFacet | ParsedPropertyFacet;
+/**
+ * A classification the element must carry.
+ *
+ * Both parameters are restrictions rather than plain names, because IDS lets an author constrain
+ * either — `system` by a pattern is how the conformance suite writes "any system at all". Both are
+ * nullable: `value` is optional in the schema, and a `<system>` written without a `<simpleValue>`
+ * states no system, which makes the facet a check that the element is classified at all.
+ */
+export interface ParsedClassificationFacet {
+  kind: "classification";
+  system: ParsedRestriction | null;
+  value: ParsedRestriction | null;
+  cardinality: FacetCardinality;
+}
+
+export type ParsedRequirementFacet =
+  | ParsedAttributeFacet
+  | ParsedPropertyFacet
+  | ParsedClassificationFacet;
 
 /** Something the source document asked for that this parser cannot represent. */
 export interface UnsupportedConstruct {
@@ -223,13 +241,19 @@ function readBounds(restrictionChildren: OrderedNode[]): ParsedRestriction | nul
   return min === null && max === null ? null : { kind: "bounds", min, max };
 }
 
+/**
+ * The restriction under one of a facet's parameters, named because a facet may carry several: a
+ * `<classification>` constrains its `<system>` and its `<value>` independently, and each is an
+ * `idsValue` in its own right.
+ */
 function parseRestriction(
   facetChildren: OrderedNode[],
+  parameter: string,
   unsupported: UnsupportedConstruct[]
 ): ParsedRestriction | null {
-  const valueNode = facetChildren.find((candidate) => tagOf(candidate) === "value");
+  const valueNode = facetChildren.find((candidate) => tagOf(candidate) === parameter);
   if (!valueNode) return null;
-  const valueChildren = childrenOf(valueNode, "value");
+  const valueChildren = childrenOf(valueNode, parameter);
 
   const simpleValue = readSimpleValue(valueChildren);
   if (simpleValue !== null) return { kind: "exact", value: simpleValue };
@@ -425,12 +449,17 @@ function readRequirements(
     const tag = tagOf(node);
     if (tag === null || tag === TEXT_KEY) continue;
 
-    if (tag !== "attribute" && tag !== "property") {
+    if (tag !== "attribute" && tag !== "property" && tag !== "classification") {
       unsupported.push({
         section: "requirements",
         construct: tag,
         description: `Requires <${tag}>, which cannot be represented, so it is not checked.`,
       });
+      continue;
+    }
+
+    if (tag === "classification") {
+      requirements.push(parseClassificationFacet(node, unsupported));
       continue;
     }
 
@@ -461,7 +490,25 @@ function parseAttributeFacet(
   return {
     kind: "attribute",
     name,
-    restriction: parseRestriction(children, unsupported),
+    restriction: parseRestriction(children, "value", unsupported),
+    cardinality: readCardinality(node),
+  };
+}
+
+/**
+ * Never `null`: unlike an attribute or a property, a classification facet names nothing that could
+ * be unreadable. Both of its parameters are optional, and a facet stating neither is the schema's
+ * own way of asking "is this element classified at all".
+ */
+function parseClassificationFacet(
+  node: OrderedNode,
+  unsupported: UnsupportedConstruct[]
+): ParsedClassificationFacet {
+  const children = childrenOf(node, "classification");
+  return {
+    kind: "classification",
+    system: parseRestriction(children, "system", unsupported),
+    value: parseRestriction(children, "value", unsupported),
     cardinality: readCardinality(node),
   };
 }
@@ -479,7 +526,7 @@ function parsePropertyFacet(
     propertySet,
     baseName,
     dataType: attributesOf(node)["@_dataType"] ?? null,
-    restriction: parseRestriction(children, unsupported),
+    restriction: parseRestriction(children, "value", unsupported),
     cardinality: readCardinality(node),
   };
 }

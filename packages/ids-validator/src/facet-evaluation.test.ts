@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js";
-import type { ParsedAttributeFacet, ParsedPropertyFacet } from "./parse-ids.js";
+import type {
+  ParsedAttributeFacet,
+  ParsedClassificationFacet,
+  ParsedPropertyFacet,
+} from "./parse-ids.js";
 
 function makeElement(overrides: Partial<NormalizedElement>): NormalizedElement {
   return {
@@ -670,5 +674,70 @@ describe("evaluateRequirement — unit conversion", () => {
       restriction: { kind: "exact", value: "REI60" },
     });
     expect(evaluateRequirement(element, facet, MILLIMETRES).passed).toBe(true);
+  });
+});
+
+describe("evaluateRequirement — classification", () => {
+  function classificationFacet(
+    overrides: Partial<ParsedClassificationFacet> = {}
+  ): ParsedClassificationFacet {
+    return { kind: "classification", system: null, value: null, cardinality: "required", ...overrides };
+  }
+
+  const uniclass = { system: "Uniclass 2015", identifications: ["EF_25_10", "EF_25"] };
+  const nlsfb = { system: "NL/SfB", identifications: ["21"] };
+
+  it("matches a parent code against an element classified under one of its children", () => {
+    const element = makeElement({ classifications: [uniclass] });
+    const facet = classificationFacet({ value: { kind: "exact", value: "EF_25" } });
+    expect(evaluateRequirement(element, facet).passed).toBe(true);
+  });
+
+  it("requires system and value to be satisfied by the same reference", () => {
+    const element = makeElement({ classifications: [uniclass, nlsfb] });
+    // Both strings are present on the element, but never together on one reference.
+    const facet = classificationFacet({
+      system: { kind: "exact", value: "NL/SfB" },
+      value: { kind: "exact", value: "EF_25_10" },
+    });
+    expect(evaluateRequirement(element, facet).passed).toBe(false);
+  });
+
+  it("treats a facet stating neither parameter as a check that the element is classified", () => {
+    const facet = classificationFacet();
+    expect(evaluateRequirement(makeElement({ classifications: [nlsfb] }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ classifications: [] }), facet).passed).toBe(false);
+  });
+
+  it("waives an optional facet only when the element carries no classification at all", () => {
+    const facet = classificationFacet({
+      cardinality: "optional",
+      value: { kind: "exact", value: "EF_25_10" },
+    });
+
+    expect(evaluateRequirement(makeElement({ classifications: [] }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ classifications: [uniclass] }), facet).passed).toBe(true);
+
+    // Classified, but not as the facet asks. The waiver must not extend to it — scoping the
+    // waiver by system instead would approve an element whose only classification names a
+    // system the facet does not accept, which the suite states as a document that must fail.
+    expect(evaluateRequirement(makeElement({ classifications: [nlsfb] }), facet).passed).toBe(false);
+  });
+
+  it("inverts for a prohibited facet", () => {
+    const facet = classificationFacet({
+      cardinality: "prohibited",
+      value: { kind: "exact", value: "EF_25_10" },
+    });
+    expect(evaluateRequirement(makeElement({ classifications: [uniclass] }), facet).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ classifications: [nlsfb] }), facet).passed).toBe(true);
+  });
+
+  it("does not match a classification code against a numeric range", () => {
+    const element = makeElement({ classifications: [nlsfb] });
+    const facet = classificationFacet({
+      value: { kind: "bounds", min: { value: 0, inclusive: true }, max: { value: 99, inclusive: true } },
+    });
+    expect(evaluateRequirement(element, facet).passed).toBe(false);
   });
 });

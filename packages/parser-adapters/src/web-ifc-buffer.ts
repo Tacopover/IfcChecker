@@ -1,6 +1,7 @@
 import * as WebIFC from "web-ifc";
 import {
   simpleAttributeNamesFor,
+  type ClassificationReference,
   type ModelStructureNode,
   type NormalizedElement,
   type NormalizedValue,
@@ -219,6 +220,74 @@ export async function parseWebIfcBuffer(
       }
     }
 
+    // Element expressId -> the classification references associated with it, from every
+    // IFCRELASSOCIATESCLASSIFICATION. ifc-lite resolves this graph itself; web-ifc has no
+    // equivalent, so the chain is walked by hand here — leaving it out would make the engine
+    // picker decide whether a classified model passes.
+    const classificationRefsByElement = new Map<number, number[]>();
+    const classificationRelIds = ifcApi.GetLineIDsWithType(
+      modelID,
+      WebIFC.IFCRELASSOCIATESCLASSIFICATION
+    );
+    for (let i = 0; i < classificationRelIds.size(); i++) {
+      const rel = ifcApi.GetLine(modelID, classificationRelIds.get(i)) as WebIfcLine;
+      const referenceId = rel.RelatingClassification?.value;
+      if (typeof referenceId !== "number") continue;
+      for (const ref of rel.RelatedObjects ?? []) {
+        const elementId = ref?.value;
+        if (typeof elementId !== "number") continue;
+        const bucket = classificationRefsByElement.get(elementId);
+        if (bucket) bucket.push(referenceId);
+        else classificationRefsByElement.set(elementId, [referenceId]);
+      }
+    }
+
+    /**
+     * Resolve one classification reference to the strings IDS compares it by.
+     *
+     * The system is only found by following `ReferencedSource` to the `IfcClassification` at the
+     * top, and each reference passed on the way contributes its own identification — which is what
+     * lets a rule naming a parent code match an element classified under one of its children.
+     * IFC2X3 spells that identification `ItemReference`, so both names are read.
+     *
+     * Cached per reference because one classification reference is typically shared by many
+     * elements, and the walk is otherwise repeated for each of them.
+     */
+    const classificationCache = new Map<number, ClassificationReference>();
+    function readClassificationReference(referenceId: number): ClassificationReference {
+      const cached = classificationCache.get(referenceId);
+      if (cached) return cached;
+
+      const identifications: string[] = [];
+      let system: string | null = null;
+      let currentId: number | undefined = referenceId;
+      // A malformed file can point a ReferencedSource chain back at itself; the seen set makes
+      // that a truncated answer rather than a hung parse.
+      const seen = new Set<number>();
+
+      while (typeof currentId === "number" && !seen.has(currentId)) {
+        seen.add(currentId);
+        const line = ifcApi.GetLine(modelID, currentId) as WebIfcLine | null;
+        if (!line) break;
+
+        if (line.type === WebIFC.IFCCLASSIFICATION) {
+          const name = normalizePropertyValue(line.Name);
+          system = typeof name === "string" && name !== "" ? name : null;
+          break;
+        }
+
+        const identification = normalizePropertyValue(line.Identification ?? line.ItemReference);
+        if (typeof identification === "string" && identification !== "") {
+          identifications.push(identification);
+        }
+        currentId = line.ReferencedSource?.value;
+      }
+
+      const resolved: ClassificationReference = { system, identifications };
+      classificationCache.set(referenceId, resolved);
+      return resolved;
+    }
+
     // One property set is typically shared by many elements, so reading and
     // flattening it once per definition rather than once per element saves the
     // dominant remaining cost.
@@ -361,6 +430,13 @@ export async function parseWebIfcBuffer(
           attributes[attributeName] = normalizeValue(line[attributeName]);
         }
 
+        // Occurrence first, then the type's own — IDS inherits a type's classification down to its
+        // occurrences, the same way a type's property sets reach them.
+        const classifications = [
+          ...(classificationRefsByElement.get(expressID) ?? []),
+          ...(typeId === undefined ? [] : (classificationRefsByElement.get(typeId) ?? [])),
+        ].map(readClassificationReference);
+
         idsScope.push({
           globalId: identifyEntity(typeName, globalId, expressID),
           ifcType: typeName,
@@ -368,6 +444,7 @@ export async function parseWebIfcBuffer(
           name: typeof name === "string" ? name : null,
           attributes,
           propertySets,
+          classifications,
         });
       }
     }

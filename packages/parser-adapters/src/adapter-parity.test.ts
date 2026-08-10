@@ -284,6 +284,43 @@ describe("adapter parity", () => {
     expect(fromIfcLite.children.map((child: { ifcType: string }) => child.ifcType)).toEqual(["IFCSPACE"]);
     expect(fromIfcLite.elementCounts.IFCSPACE).toBeUndefined();
   });
+
+  it("both engines resolve the same classification references, chain and all", async () => {
+    const path = fixturePath("classified-elements.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byType = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope
+          .filter((entity) => ["IFCWALL", "IFCSLAB", "IFCBEAM"].includes(entity.ifcType))
+          .map((entity) => [entity.ifcType, entity.classifications ?? []])
+      );
+    const bySystem = (references: { system: string | null }[]) =>
+      [...references].sort((a, b) => (a.system ?? "").localeCompare(b.system ?? ""));
+
+    const fromWebIfc = byType(webIfcResult);
+    const fromIfcLite = byType(ifcLiteResult);
+
+    // The wall's reference is nested one deep, so its system is only reachable by walking
+    // ReferencedSource — and the parent code has to survive alongside the leaf, which is what
+    // lets a rule naming EF_25 match an element classified EF_25_10.
+    expect(fromIfcLite.IFCWALL).toEqual([
+      { system: "Uniclass 2015", identifications: ["EF_25_10", "EF_25"] },
+    ]);
+    expect(fromWebIfc.IFCWALL).toEqual(fromIfcLite.IFCWALL);
+
+    // Classified through its IfcSlabType, plus a second system of its own: an adapter reading
+    // occurrence associations alone would report only one of the two.
+    expect(bySystem(fromIfcLite.IFCSLAB).map((reference) => reference.system)).toEqual([
+      "NL/SfB",
+      "Uniclass 2015",
+    ]);
+    expect(bySystem(fromWebIfc.IFCSLAB)).toEqual(bySystem(fromIfcLite.IFCSLAB));
+
+    expect(fromIfcLite.IFCBEAM).toEqual([]);
+    expect(fromWebIfc.IFCBEAM).toEqual([]);
+  });
 });
 
 // Unit conversion is the one place a parser disagreement becomes a *false pass*: IDS states a
@@ -291,6 +328,7 @@ describe("adapter parity", () => {
 // compared 1000x wrong and in the approving direction. Both engines must agree, and both fixtures
 // below declare .MILLI. .METRE. like every real Dutch model does.
 describe("adapter parity — unit scales", () => {
+
   it("both engines resolve the same SI scale for a millimetre model", async () => {
     for (const fixture of ["minimal-wall.ifc", "multi-valued-properties.ifc"]) {
       const path = fixturePath(fixture);

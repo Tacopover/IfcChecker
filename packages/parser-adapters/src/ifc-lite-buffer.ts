@@ -3,6 +3,7 @@ import {
   extractPropertiesOnDemand,
   extractTypePropertiesOnDemand,
   extractAllEntityAttributes,
+  extractClassificationsOnDemand,
   extractProjectUnits,
   type IfcDataStore,
 } from "@ifc-lite/parser";
@@ -13,6 +14,7 @@ import {
   type NormalizedElement,
   type NormalizedValue,
 } from "@ifc-qa/shared-types";
+import type { ClassificationReference } from "@ifc-qa/shared-types";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { identifyEntity } from "./entity-identity.js";
@@ -56,6 +58,23 @@ function buildIfcLiteModelStructure(
 ): ModelStructureNode | null {
   const project = store.spatialHierarchy?.project;
   return project ? toModelStructureNode(project, elementTypeByExpressId) : null;
+}
+
+/**
+ * The element's classification references, as the strings IDS compares them by.
+ *
+ * ifc-lite resolves the `ReferencedSource` chain itself: `system` is already the root
+ * `IfcClassification`'s name even for a reference nested two deep, and `path` carries the
+ * ancestors' identifications. Concatenating the leaf with its path is what makes a rule asking for
+ * a parent code match an element classified under one of its children.
+ */
+function readClassifications(store: IfcDataStore, expressId: number): ClassificationReference[] {
+  return extractClassificationsOnDemand(store, expressId).map((reference) => ({
+    system: reference.system ?? null,
+    identifications: [reference.identification, ...(reference.path ?? [])].filter(
+      (identification): identification is string => typeof identification === "string" && identification !== ""
+    ),
+  }));
 }
 
 // Buffer-based entry point shared by the Node adapter (ifc-lite-adapter.ts,
@@ -190,6 +209,7 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
         name: typeof name === "string" ? name : null,
         attributes,
         propertySets,
+        classifications: readClassifications(store, expressId),
       });
     }
   }

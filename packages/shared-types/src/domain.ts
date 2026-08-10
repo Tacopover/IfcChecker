@@ -42,6 +42,24 @@ export type NormalizedValue = z.infer<typeof NormalizedValueSchema>;
 export const UnitScalesSchema = z.record(z.string(), z.number());
 export type UnitScales = z.infer<typeof UnitScalesSchema>;
 
+/**
+ * One classification reference an element carries, resolved to the strings IDS compares.
+ *
+ * `system` is the name of the `IfcClassification` at the root of the reference chain, not of the
+ * reference itself — a nested `IfcClassificationReference` names its parent through
+ * `ReferencedSource`, and the system is only found by walking to the top.
+ *
+ * `identifications` is the leaf's own `Identification` followed by each ancestor's, root-ward.
+ * IDS matches a classification value against *any* of them, which is what "a full classification
+ * matches its subreferences" means: a rule asking for `EF_25_10` is satisfied by an element
+ * classified `EF_25_10_25`, because the shorter code is the longer one's parent in the file.
+ */
+export const ClassificationReferenceSchema = z.object({
+  system: z.string().nullable(),
+  identifications: z.array(z.string()),
+});
+export type ClassificationReference = z.infer<typeof ClassificationReferenceSchema>;
+
 export const NormalizedElementSchema = z.object({
   globalId: z.string(),
   ifcType: z.string(),
@@ -49,6 +67,14 @@ export const NormalizedElementSchema = z.object({
   name: z.string().nullable(),
   attributes: z.record(z.string(), NormalizedValueSchema),
   propertySets: z.record(z.string(), z.record(z.string(), NormalizedValueSchema)),
+  /**
+   * Every classification reference on the element, occurrence and type alike.
+   *
+   * Optional because an element carrying none and a caller that never collected any are the same
+   * thing to every reader — a required classification facet fails either way. Both adapters always
+   * state it, so the engines stay comparable.
+   */
+  classifications: z.array(ClassificationReferenceSchema).optional(),
 });
 export type NormalizedElement = z.infer<typeof NormalizedElementSchema>;
 
