@@ -13,6 +13,7 @@ import { assertWellFormedStepFile } from "./step-well-formed.js";
 import { normalizePropertyValue, normalizeValue } from "./normalize-property-value.js";
 import { UnitScaleCollector, siUnitScale } from "./unit-scales.js";
 import { resolvePartOf } from "./part-of.js";
+import { effectivePredefinedType } from "./predefined-type.js";
 
 type WebIfcLine = Record<string, any>;
 
@@ -592,7 +593,11 @@ export async function parseWebIfcBuffer(
         idsScope.push({
           globalId: identifyEntity(typeName, globalId, expressID),
           ifcType: typeName,
-          predefinedType: stripEnumDots(line.PredefinedType),
+          predefinedType: effectivePredefinedType(
+            stripEnumDots(line.PredefinedType),
+            line.ObjectType,
+            line.ElementType
+          ),
           name: typeof name === "string" ? name : null,
           attributes,
           propertySets,

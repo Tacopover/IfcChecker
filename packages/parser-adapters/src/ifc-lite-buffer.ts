@@ -17,6 +17,7 @@ import {
 } from "@ifc-qa/shared-types";
 import type { ClassificationReference } from "@ifc-qa/shared-types";
 import { resolvePartOf } from "./part-of.js";
+import { effectivePredefinedType } from "./predefined-type.js";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { identifyEntity } from "./entity-identity.js";
@@ -248,7 +249,11 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
       idsScope.push({
         globalId: identifyEntity(typeName, store.entities.getGlobalId(expressId), expressId),
         ifcType: typeName,
-        predefinedType: stripEnumDots(findAttr("PredefinedType")),
+        predefinedType: effectivePredefinedType(
+          stripEnumDots(findAttr("PredefinedType")),
+          findAttr("ObjectType"),
+          findAttr("ElementType")
+        ),
         name: typeof name === "string" ? name : null,
         attributes,
         propertySets,
