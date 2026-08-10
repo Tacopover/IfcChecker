@@ -109,6 +109,17 @@ function holdsWholeNumber(
     : isIntegerAttribute(element.ifcType, facet.name);
 }
 
+/**
+ * What the facet is allowed to match against.
+ *
+ * A bounded, list, table or enumerated property holds several values, and IDS passes the facet
+ * when *any* of them matches. Without this the facet saw only the parser's rendering of the whole
+ * set — "3000 [1000 – 5000]", "EXISTING, DEMOLISH" — which matches nothing an author would write.
+ */
+function candidatesOf(slot: NormalizedValue): PropertyValue[] {
+  return slot.values !== undefined && slot.values.length > 0 ? slot.values : [slot.value];
+}
+
 function restrictionFailure(
   facet: ParsedRequirementFacet,
   restriction: ParsedRestriction,
@@ -117,13 +128,16 @@ function restrictionFailure(
 ): string | null {
   const raw = slot.value;
   const value = String(raw);
+  const candidates = candidatesOf(slot);
   switch (restriction.kind) {
     case "exact":
-      return matchesLiteral(raw, restriction.value, wholeNumber)
+      return candidates.some((held) => matchesLiteral(held, restriction.value, wholeNumber))
         ? null
         : `${facetLabel(facet)} value "${value}" must be "${restriction.value}"`;
     case "enum":
-      return restriction.values.some((candidate) => matchesLiteral(raw, candidate, wholeNumber))
+      return candidates.some((held) =>
+        restriction.values.some((allowed) => matchesLiteral(held, allowed, wholeNumber))
+      )
         ? null
         : `${facetLabel(facet)} value "${value}" is not one of: ${restriction.values.join(", ")}`;
     case "pattern":

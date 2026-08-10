@@ -252,6 +252,55 @@ describe("evaluateRequirement — dataType", () => {
   });
 });
 
+describe("evaluateRequirement — a multi-valued property matches on any of its values", () => {
+  // What ifc-lite hands over for IFCPROPERTYENUMERATEDVALUE((IFCLABEL('EXISTING'),IFCLABEL('DEMOLISH'))):
+  // a display rendering of the set, plus the candidates behind it.
+  const enumerated = makeElement({
+    propertySets: {
+      Pset_WallCommon: {
+        Status: { value: "EXISTING, DEMOLISH", values: ["EXISTING", "DEMOLISH"] },
+      },
+    },
+  });
+  const statusIs = (value: string) =>
+    propertyFacet({ baseName: "Status", dataType: null, restriction: { kind: "exact", value } });
+
+  it("passes on the first candidate", () => {
+    expect(evaluateRequirement(enumerated, statusIs("EXISTING")).passed).toBe(true);
+  });
+
+  it("passes on a later candidate", () => {
+    expect(evaluateRequirement(enumerated, statusIs("DEMOLISH")).passed).toBe(true);
+  });
+
+  it("fails when no candidate matches", () => {
+    expect(evaluateRequirement(enumerated, statusIs("NEW")).passed).toBe(false);
+  });
+
+  // The rendering is the one thing that must NOT match: no author writes it, and matching it would
+  // let a set pass a check aimed at a single value.
+  it("does not match the parser's rendering of the whole set", () => {
+    expect(evaluateRequirement(enumerated, statusIs("EXISTING, DEMOLISH")).passed).toBe(false);
+  });
+
+  it("matches a candidate inside an enum restriction", () => {
+    const facet = propertyFacet({
+      baseName: "Status",
+      dataType: null,
+      restriction: { kind: "enum", values: ["NEW", "DEMOLISH"] },
+    });
+    expect(evaluateRequirement(enumerated, facet).passed).toBe(true);
+  });
+
+  it("still reads the single value when there are no candidates", () => {
+    const single = makeElement({
+      propertySets: { Pset_WallCommon: { Status: { value: "EXISTING" } } },
+    });
+    expect(evaluateRequirement(single, statusIs("EXISTING")).passed).toBe(true);
+    expect(evaluateRequirement(single, statusIs("DEMOLISH")).passed).toBe(false);
+  });
+});
+
 describe("evaluateRequirement — comparing a number as a number", () => {
   const exact = (value: string) => ({ kind: "exact", value }) as const;
   const realFacet = (value: string) =>
