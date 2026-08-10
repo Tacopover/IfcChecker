@@ -32,6 +32,19 @@ function restrictionXml(restriction: ParsedRestriction | null): string {
   if (restriction.kind === "exact") {
     return `\n        <value><simpleValue>${escapeXml(restriction.value)}</simpleValue></value>`;
   }
+  // A range is the one restriction whose base is not a string, so it carries its own.
+  if (restriction.kind === "bounds") {
+    const edges = [
+      restriction.min && `min${restriction.min.inclusive ? "Inclusive" : "Exclusive"}`,
+      restriction.max && `max${restriction.max.inclusive ? "Inclusive" : "Exclusive"}`,
+    ];
+    const values = [restriction.min?.value, restriction.max?.value];
+    const body = edges
+      .map((facet, index) => (facet ? `\n            <xs:${facet} value="${values[index]}" />` : ""))
+      .join("");
+    return `\n        <value>\n          <xs:restriction base="xs:double">${body}\n          </xs:restriction>\n        </value>`;
+  }
+
   const body =
     restriction.kind === "enum"
       ? restriction.values

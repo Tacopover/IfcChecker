@@ -437,6 +437,9 @@ function readOperator(
   if (!restriction) return { operator: "exists", values: [], text: "" };
   if (restriction.kind === "exact") return { operator: "equals", values: [], text: restriction.value };
   if (restriction.kind === "enum") return { operator: "oneOf", values: restriction.values, text: "" };
+  // No draft operator states a numeric range, so a rule carrying one is passed through verbatim.
+  // `readRestriction` refuses bounds before they reach here; this keeps that true if it stops.
+  if (restriction.kind === "bounds") return null;
 
   const affix = readAffixPattern(restriction.source);
   return affix ?? { operator: "matches", values: [], text: restriction.source };

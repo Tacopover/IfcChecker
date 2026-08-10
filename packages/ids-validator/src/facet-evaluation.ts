@@ -1,6 +1,6 @@
 import { isIntegerAttribute } from "@ifc-qa/shared-types";
 import type { NormalizedElement, NormalizedValue, PropertyValue } from "@ifc-qa/shared-types";
-import type { ParsedRequirementFacet, ParsedRestriction } from "./parse-ids.js";
+import type { ParsedBound, ParsedRequirementFacet, ParsedRestriction } from "./parse-ids.js";
 import { isSubtypeOf } from "./ifc-type-hierarchy.js";
 
 export interface FacetCheckResult {
@@ -120,6 +120,32 @@ function candidatesOf(slot: NormalizedValue): PropertyValue[] {
   return slot.values !== undefined && slot.values.length > 0 ? slot.values : [slot.value];
 }
 
+/**
+ * Whether a held value sits inside the range a restriction states.
+ *
+ * **Comparison is exact**, and deliberately so: the tolerance rule that governs equality does not
+ * apply to ranges (`Documentation/ImplementersDocumentation/tolerance.md`). That is what lets an
+ * author write `v <= x <= v` to mean "exactly v, no tolerance at all", and the suite states a
+ * `minInclusive` of 0 against a stored -1e-7 as a document that must fail — which any tolerance
+ * here would approve.
+ *
+ * A range says nothing about a string or a boolean, so a non-numeric value is outside every range
+ * rather than stringified into one.
+ */
+function withinBounds(held: PropertyValue, min: ParsedBound | null, max: ParsedBound | null): boolean {
+  if (typeof held !== "number") return false;
+  if (min && (min.inclusive ? held < min.value : held <= min.value)) return false;
+  if (max && (max.inclusive ? held > max.value : held >= max.value)) return false;
+  return true;
+}
+
+function boundsLabel(min: ParsedBound | null, max: ParsedBound | null): string {
+  const parts: string[] = [];
+  if (min) parts.push(`${min.inclusive ? ">=" : ">"} ${min.value}`);
+  if (max) parts.push(`${max.inclusive ? "<=" : "<"} ${max.value}`);
+  return parts.join(" and ");
+}
+
 function restrictionFailure(
   facet: ParsedRequirementFacet,
   restriction: ParsedRestriction,
@@ -150,6 +176,10 @@ function restrictionFailure(
       return restriction.regex.test(value)
         ? null
         : `${facetLabel(facet)} value "${value}" does not match required pattern "${restriction.source}"`;
+    case "bounds":
+      return candidates.some((held) => withinBounds(held, restriction.min, restriction.max))
+        ? null
+        : `${facetLabel(facet)} value "${value}" is not ${boundsLabel(restriction.min, restriction.max)}`;
   }
 }
 

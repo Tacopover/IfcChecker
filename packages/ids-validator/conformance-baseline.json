@@ -2,16 +2,16 @@
   "generated": "2026-08-10",
   "totals": {
     "cases": 334,
-    "agreed": 158,
-    "wrong": 43,
+    "agreed": 167,
+    "wrong": 34,
     "refused": 133,
     "errored": 0
   },
   "groups": {
     "attribute": {
       "total": 56,
-      "agreed": 46,
-      "wrong": 4,
+      "agreed": 47,
+      "wrong": 3,
       "refused": 6,
       "errored": 0
     },
@@ -59,15 +59,15 @@
     },
     "restriction": {
       "total": 25,
-      "agreed": 17,
-      "wrong": 8,
+      "agreed": 21,
+      "wrong": 4,
       "refused": 0,
       "errored": 0
     },
     "tolerance": {
       "total": 36,
-      "agreed": 18,
-      "wrong": 18,
+      "agreed": 22,
+      "wrong": 14,
       "refused": 0,
       "errored": 0
     }
@@ -116,6 +116,7 @@
     "attribute/pass-numeric_values_are_checked_using_type_casting_3_4",
     "attribute/pass-only_specifically_formatted_numbers_are_allowed_3_4",
     "attribute/pass-only_specifically_formatted_numbers_are_allowed_4_4",
+    "attribute/pass-strict_numeric_checking_may_be_done_with_a_bounds_restriction",
     "attribute/pass-typecast_checking_may_also_occur_within_enumeration_restrictions",
     "attribute/pass-value_restrictions_may_be_used_1_3",
     "attribute/pass-value_restrictions_may_be_used_2_3",
@@ -208,6 +209,10 @@
     "restriction/fail-regex_patterns_work_in_OR_3_3",
     "restriction/invalid-patterns_always_fail_on_any_number",
     "restriction/invalid-patterns_only_work_on_strings_and_nothing_else",
+    "restriction/pass-a_bound_can_be_exclusive_2_3",
+    "restriction/pass-a_bound_can_be_inclusive_1_4",
+    "restriction/pass-a_bound_can_be_inclusive_2_4",
+    "restriction/pass-a_bound_can_be_inclusive_3_4",
     "restriction/pass-an_enumeration_matches_case_sensitively_1_3",
     "restriction/pass-an_enumeration_matches_case_sensitively_2_3",
     "restriction/pass-regex_patterns_can_be_used_1_3",
@@ -230,7 +235,11 @@
     "tolerance/fail-comparison_tolerance_for_floating_point_range_lower_than_zero_exclusive",
     "tolerance/fail-comparison_tolerance_for_floating_point_range_lower_than_zero_inclusive",
     "tolerance/fail-comparison_tolerance_for_floating_point_zero_lower_bound",
-    "tolerance/fail-comparison_tolerance_for_floating_point_zero_upper_bound"
+    "tolerance/fail-comparison_tolerance_for_floating_point_zero_upper_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_range_greater_than_zero_exclusive",
+    "tolerance/pass-comparison_tolerance_for_floating_point_range_greater_than_zero_inclusive",
+    "tolerance/pass-comparison_tolerance_for_floating_point_range_lower_than_zero_exclusive",
+    "tolerance/pass-comparison_tolerance_for_floating_point_range_lower_than_zero_inclusive"
   ],
   "disagreeing": [
     {
@@ -286,12 +295,6 @@
       "expected": "pass",
       "actual": "refused",
       "detail": "attribute/name"
-    },
-    {
-      "case": "attribute/pass-strict_numeric_checking_may_be_done_with_a_bounds_restriction",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
       "case": "classification/fail-a_classification_facet_with_no_data_matches_any_classification_1_2",
@@ -1134,30 +1137,6 @@
       "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
-      "case": "restriction/pass-a_bound_can_be_exclusive_2_3",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "restriction/pass-a_bound_can_be_inclusive_1_4",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "restriction/pass-a_bound_can_be_inclusive_2_4",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "restriction/pass-a_bound_can_be_inclusive_3_4",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
       "case": "restriction/pass-length_checks_can_be_used_2_2",
       "expected": "pass",
       "actual": "fail",
@@ -1249,30 +1228,6 @@
     },
     {
       "case": "tolerance/pass-comparison_tolerance_for_floating_point_positive_low_number_upper_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_range_greater_than_zero_exclusive",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_range_greater_than_zero_inclusive",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_range_lower_than_zero_exclusive",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_range_lower_than_zero_inclusive",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"

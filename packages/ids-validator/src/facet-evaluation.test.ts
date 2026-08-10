@@ -445,3 +445,84 @@ describe("evaluateRequirement — prohibited cardinality", () => {
     expect(evaluateRequirement(makeElement({ attributes: { Tag: { value: "W-1" } } }), facet).passed).toBe(false);
   });
 });
+
+describe("evaluateRequirement — numeric bounds", () => {
+  const stored = (value: number) =>
+    makeElement({ propertySets: { Pset_WallCommon: { Foo: { value, dataType: "IFCREAL" } } } });
+  const between = (min: number, max: number, inclusive: boolean) =>
+    propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCREAL",
+      restriction: {
+        kind: "bounds",
+        min: { value: min, inclusive },
+        max: { value: max, inclusive },
+      },
+    });
+
+  it.each([0, 5, 10])("accepts %s inside an inclusive 0..10", (value) => {
+    expect(evaluateRequirement(stored(value), between(0, 10, true)).passed).toBe(true);
+  });
+
+  it.each([-0.1, 100])("rejects %s outside an inclusive 0..10", (value) => {
+    expect(evaluateRequirement(stored(value), between(0, 10, false)).passed).toBe(false);
+  });
+
+  it("excludes both edges when the bounds are exclusive", () => {
+    expect(evaluateRequirement(stored(5), between(0, 10, false)).passed).toBe(true);
+    expect(evaluateRequirement(stored(0), between(0, 10, false)).passed).toBe(false);
+    expect(evaluateRequirement(stored(10), between(0, 10, false)).passed).toBe(false);
+  });
+
+  it("checks only the edge that is stated", () => {
+    const atLeast = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCREAL",
+      restriction: { kind: "bounds", min: { value: 0, inclusive: true }, max: null },
+    });
+    expect(evaluateRequirement(stored(1e9), atLeast).passed).toBe(true);
+    expect(evaluateRequirement(stored(-1), atLeast).passed).toBe(false);
+  });
+
+  // The tolerance rule that governs equality explicitly does not reach ranges, which is what lets
+  // an author write a range to mean "exactly this, no tolerance". A tolerant bound would approve
+  // both of these, and the suite states both as documents that must fail.
+  it("compares exactly, with none of the equality tolerance", () => {
+    const atLeastZero = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCREAL",
+      restriction: { kind: "bounds", min: { value: 0, inclusive: true }, max: null },
+    });
+    expect(evaluateRequirement(stored(-1e-7), atLeastZero).passed).toBe(false);
+
+    const exactly42 = between(42, 42, true);
+    expect(evaluateRequirement(stored(42), exactly42).passed).toBe(true);
+    expect(evaluateRequirement(stored(42.0000001), exactly42).passed).toBe(false);
+  });
+
+  it("fails a value that is not a number rather than stringifying it into the range", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: "5" } } },
+    });
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: null,
+      restriction: {
+        kind: "bounds",
+        min: { value: 0, inclusive: true },
+        max: { value: 10, inclusive: true },
+      },
+    });
+    const result = evaluateRequirement(element, facet);
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain(">= 0");
+  });
+
+  it("passes when any candidate of a multi-valued property is in range", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: "1000, 3000", values: [1000, 3000] } } },
+    });
+    expect(evaluateRequirement(element, between(2000, 4000, true)).passed).toBe(true);
+    expect(evaluateRequirement(element, between(4000, 5000, true)).passed).toBe(false);
+  });
+});
