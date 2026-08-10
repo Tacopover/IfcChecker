@@ -779,3 +779,112 @@ The unit graph is a handful of entities and the collector memoizes per measure t
 - **90 of the 133 refusals** are the missing facets — classification, material, partOf,
   requirement-side entity. Still the largest number on the board, and now the only item that needs
   new data out of the parser.
+
+## The missing facets — landed and measured 2026-08-10
+
+Three facets and one general rule, landed separately so the scoreboard could attribute each.
+**186 → 212 → 241 → 272 → 275 agreed of 334**, nothing lost at any step, and **false passes stayed
+at 0 throughout**. Refusals 133 → 43.
+
+| | agreed | wrong | refused | false passes |
+| --- | --- | --- | --- | --- |
+| before | 186 | 15 | 133 | 0 |
+| + classification | 212 | 16 | 106 | 0 |
+| + material | 241 | 16 | 77 | 0 |
+| + partOf | 272 | 19 | 43 | 0 |
+| + USERDEFINED | **275** | **16** | **43** | **0** |
+
+`classification` 26/27, `material` 29/29, `partof` 34/34.
+
+### ifc-lite was ahead on two of the three, and behind on the one that mattered most
+
+The standing note says to assume ifc-lite is ahead, verify, then design. It held for classification
+and material, and **failed for partOf** — in the direction that produces a false pass.
+
+- **Classification.** `extractClassificationsOnDemand` already walks `ReferencedSource` to the root
+  `IfcClassification` and hands back `system` plus a `path` of ancestor identifications. The leaf
+  concatenated with its path is exactly what "a full classification matches its subreferences"
+  needs. Type-level associations are already merged in.
+- **Material.** `MaterialInfo` already carries names *and* categories at every level — set, layer,
+  profile, constituent, list member — and its own doc comments cite IDS as the reason. Occurrence
+  overrides type already. The adapter only flattens it.
+- **partOf.** `REL_TYPE_MAP` maps **`IFCRELNESTS` onto the same `Aggregates` edge** as
+  `IFCRELAGGREGATES`, with a comment saying this lets partOf checks "traverse the same graph".
+  Right for a viewer, wrong for IDS, which asks about one or the other — a nested element would
+  have satisfied an aggregate rule. The edge carries the relationship entity's express id, so the
+  real type is recoverable without patching the library. **This is the counter-example to the
+  ifc-lite-is-ahead rule: the library is ahead on data and can still be lossy on a distinction only
+  this consumer cares about.**
+
+### Two semantics that measurement decided, not reading
+
+- **`optional` classification waives only on total absence.** Scoping the waiver to "classified in
+  the system asked about" is the natural reading and it buys a false pass: the suite pairs an
+  optional facet with a wall associated to an `IfcClassification` whose name is empty, which
+  matches no `\w+` system, and requires it to **fail**. Caught by measurement before it landed —
+  the only false pass introduced at any point in this stage.
+- **A partOf chain may not change relation halfway.** A beam contained in a space that is
+  aggregated into a building is not part of that building by aggregation. Ancestors are followed
+  only through chains of a single relation.
+
+Also: a partOf entity name is matched **exactly**, not by subtype — the opposite of an
+applicability entity name, and what the suite means by "must match exactly".
+
+### `null` vs `[]` on materials is load-bearing
+
+An element with no material association fails an empty `<material>` facet; one whose association
+names nothing passes it, while failing any value check. Both had to be representable, so
+`materials` is `string[] | null` rather than a plain list.
+
+A suspicion recorded as wrong: ifc-lite looked like it was substituting `"Unnamed"` for a missing
+material name. It is not — that is literally what those conformance files write.
+
+### USERDEFINED, landed on its own
+
+A whole whose `PredefinedType` is `USERDEFINED` carries its real name in `ObjectType` (or
+`ElementType` on a type object). Worth exactly the 3 partOf cases predicted when partOf landed, and
+nothing else moved — which is the point of landing it separately, since it also changes what an
+attribute check on `PredefinedType` sees.
+
+### Both engines, and what parity caught
+
+web-ifc has no classification resolver, no material resolver and no relationship graph, so all
+three were written by hand there. `adapter-parity` gained three fixtures and caught **a real
+divergence**: the engines listed an opening's wholes in different orders, ifc-lite walking one CSR
+edge list and web-ifc the six relationship types in turn. The order carries no meaning, so
+`resolvePartOf` sorts. The walking rule itself lives in one shared module for both engines.
+
+### Costs on the 37 MB model
+
+Parse **2,391–2,658 ms → 2,703–2,788 ms**, about +5%, all of it partOf's transitive walk over
+28,645 scoped entities. Classification and material cost nothing measurable.
+
+What the real model actually contains is the more useful number: **756 of 757 reviewer elements are
+classified** (859 references), 953 scoped entities carry a material, and 1,917 have a partOf whole
+(2,488 entries, at most 3 deep). Classification in particular is not a corpus curiosity here — the
+model is NL/SfB-classified throughout, which is what the untracked `3.6_contain_NlSfb.ids` checks.
+
+**Unverified:** the 1.6 GB federated case. The partOf walk tracks non-geometry entity count rather
+than file size, but it has not been measured there.
+
+### What is left
+
+**43 refusals, 16 wrong, 0 errored, 0 false passes.**
+
+- **requirement-side `entity`, 29 refusals** — the fourth of the four missing facets and now much
+  the largest item on the board. `predefinedType` is already on the element and now resolves
+  USERDEFINED, so the data it needs exists; this is validator work only.
+- **a property or attribute *name* given as a pattern, 14 refusals** — pure validator work, no new
+  parser data.
+- **classification, 1 wrong** — an `IfcMaterial` classified through `IfcExternalReferenceRelationship`,
+  an edge neither engine reads. An honest false fail.
+- **the cheap comparison leftovers, 15** — unchanged: `length`/`minLength`/`maxLength` 3, regex OR 1,
+  `entity` IFC2X3 type mapping 2, quantities/material/predefined property sets 4, attribute
+  references and selects 3, the `IfcPropertyTableValue` case 1.
+
+Applicability-side facets remain deliberately unimplemented (stage 5): a `<classification>`,
+`<material>` or `<partOf>` in an applicability is still refused, which keeps `isEvaluable` honest.
+
+**The authoring UI has not been touched**, per the Decisions-Log entry of 2026-08-10 — engine
+first, interface after. These three facets are the ones that will not fit the current condition
+row, so the three-level design is now the blocking question for stage 4.
