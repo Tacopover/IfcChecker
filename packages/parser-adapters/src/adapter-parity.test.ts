@@ -285,6 +285,41 @@ describe("adapter parity", () => {
     expect(fromIfcLite.elementCounts.IFCSPACE).toBeUndefined();
   });
 
+  it("both engines flatten every material shape to the same matchable strings", async () => {
+    const path = fixturePath("material-shapes.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byType = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope.map((entity) => [
+          entity.ifcType,
+          entity.materials ? [...entity.materials].sort() : entity.materials,
+        ])
+      );
+
+    const fromWebIfc = byType(webIfcResult);
+    const fromIfcLite = byType(ifcLiteResult);
+
+    // A layer set contributes its own LayerSetName, each layer's name and category, and the
+    // name and category of the IfcMaterial behind each layer. IDS matches any of them.
+    expect(fromIfcLite.IFCWALL).toEqual(
+      ["CavityWall", "CoreLayer", "LoadBearing", "Concrete", "Structural", "InsulationLayer", "Thermal", "Insulation"].sort()
+    );
+    expect(fromIfcLite.IFCBEAM).toEqual(["BeamProfiles", "IPE300Profile", "Rolled", "Steel", "Structural"].sort());
+    expect(fromIfcLite.IFCSLAB).toEqual(["SlabMix", "Reinforcement", "Rebar", "Steel", "Structural"].sort());
+    expect(fromIfcLite.IFCCOLUMN).toEqual(["Concrete", "Structural", "Steel"].sort());
+    // Inherited from its IfcMemberType, which holds the only association.
+    expect(fromIfcLite.IFCMEMBER).toEqual(["Steel", "Structural"].sort());
+    // No association at all — distinct from one that names nothing, and the difference decides
+    // whether an empty material facet passes.
+    expect(fromIfcLite.IFCPLATE).toBeNull();
+
+    for (const ifcType of ["IFCWALL", "IFCBEAM", "IFCSLAB", "IFCCOLUMN", "IFCMEMBER", "IFCPLATE"]) {
+      expect([ifcType, fromWebIfc[ifcType]]).toEqual([ifcType, fromIfcLite[ifcType]]);
+    }
+  });
+
   it("both engines resolve the same classification references, chain and all", async () => {
     const path = fixturePath("classified-elements.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);

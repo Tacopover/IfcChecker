@@ -9,7 +9,9 @@ import type { ParsedRequirementFacet, ParsedRestriction } from "./parse-ids.js";
  * one — every case here parses an attribute or a property, so narrowing loudly beats casting.
  */
 function slotRestriction(facet: ParsedRequirementFacet): ParsedRestriction | null {
-  if (facet.kind === "classification") throw new Error(`expected a slot facet, got ${facet.kind}`);
+  if (facet.kind !== "attribute" && facet.kind !== "property") {
+    throw new Error(`expected a slot facet, got ${facet.kind}`);
+  }
   return facet.restriction;
 }
 

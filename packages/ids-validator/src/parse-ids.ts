@@ -46,10 +46,23 @@ export interface ParsedClassificationFacet {
   cardinality: FacetCardinality;
 }
 
+/**
+ * A material the element must be made of.
+ *
+ * One parameter, and it is optional: a `<material>` stating no value asks only whether the element
+ * has a material at all.
+ */
+export interface ParsedMaterialFacet {
+  kind: "material";
+  value: ParsedRestriction | null;
+  cardinality: FacetCardinality;
+}
+
 export type ParsedRequirementFacet =
   | ParsedAttributeFacet
   | ParsedPropertyFacet
-  | ParsedClassificationFacet;
+  | ParsedClassificationFacet
+  | ParsedMaterialFacet;
 
 /** Something the source document asked for that this parser cannot represent. */
 export interface UnsupportedConstruct {
@@ -449,7 +462,12 @@ function readRequirements(
     const tag = tagOf(node);
     if (tag === null || tag === TEXT_KEY) continue;
 
-    if (tag !== "attribute" && tag !== "property" && tag !== "classification") {
+    if (
+      tag !== "attribute" &&
+      tag !== "property" &&
+      tag !== "classification" &&
+      tag !== "material"
+    ) {
       unsupported.push({
         section: "requirements",
         construct: tag,
@@ -460,6 +478,15 @@ function readRequirements(
 
     if (tag === "classification") {
       requirements.push(parseClassificationFacet(node, unsupported));
+      continue;
+    }
+
+    if (tag === "material") {
+      requirements.push({
+        kind: "material",
+        value: parseRestriction(childrenOf(node, "material"), "value", unsupported),
+        cardinality: readCardinality(node),
+      });
       continue;
     }
 

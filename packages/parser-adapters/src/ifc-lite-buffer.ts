@@ -3,6 +3,7 @@ import {
   extractPropertiesOnDemand,
   extractTypePropertiesOnDemand,
   extractAllEntityAttributes,
+  extractAllMaterialsOnDemand,
   extractClassificationsOnDemand,
   extractProjectUnits,
   type IfcDataStore,
@@ -75,6 +76,44 @@ function readClassifications(store: IfcDataStore, expressId: number): Classifica
       (identification): identification is string => typeof identification === "string" && identification !== ""
     ),
   }));
+}
+
+/**
+ * Every string an IDS material facet may match, or `null` when the element has no material at all.
+ *
+ * A material reaches an element as a plain `IfcMaterial` or through a layer, profile, constituent
+ * or list set, and IDS matches the name *or* the category at every level of that structure — the
+ * set's own name included, which is why `MaterialInfo.name` is read alongside its members'.
+ * ifc-lite resolves the whole shape, occurrence overriding type, so this only flattens it.
+ */
+function readMaterials(store: IfcDataStore, expressId: number): string[] | null {
+  const associations = extractAllMaterialsOnDemand(store, expressId);
+  if (associations.length === 0) return null;
+
+  const names = new Set<string>();
+  const add = (...candidates: Array<string | undefined>) => {
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate !== "") names.add(candidate);
+    }
+  };
+
+  for (const association of associations) {
+    add(association.name, association.category);
+    for (const layer of association.layers ?? []) {
+      add(layer.name, layer.category, layer.materialName, layer.materialCategory);
+    }
+    for (const profile of association.profiles ?? []) {
+      add(profile.name, profile.category, profile.materialName, profile.materialCategory);
+    }
+    for (const constituent of association.constituents ?? []) {
+      add(constituent.name, constituent.category, constituent.materialName, constituent.materialCategory);
+    }
+    for (const material of association.materials ?? []) {
+      add(material.name, material.category);
+    }
+  }
+
+  return [...names];
 }
 
 // Buffer-based entry point shared by the Node adapter (ifc-lite-adapter.ts,
@@ -210,6 +249,7 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
         attributes,
         propertySets,
         classifications: readClassifications(store, expressId),
+        materials: readMaterials(store, expressId),
       });
     }
   }

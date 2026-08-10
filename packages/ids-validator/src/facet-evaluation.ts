@@ -9,6 +9,7 @@ import type {
   ParsedAttributeFacet,
   ParsedBound,
   ParsedClassificationFacet,
+  ParsedMaterialFacet,
   ParsedPropertyFacet,
   ParsedRequirementFacet,
   ParsedRestriction,
@@ -363,6 +364,45 @@ function evaluateClassification(
       };
 }
 
+/**
+ * Whether the element is made of a material the facet accepts.
+ *
+ * The distinction that carries the weight is between an element with *no* material association
+ * and one whose association names nothing. A facet stating no value asks only whether a material
+ * is present, so the first fails it and the second passes — and a value check fails both, because
+ * there is nothing to match either way.
+ *
+ * `optional` waives the facet on the same footing as a classification: only when the element has
+ * no material at all.
+ */
+function evaluateMaterial(
+  element: NormalizedElement,
+  facet: ParsedMaterialFacet
+): FacetCheckResult {
+  const materials = element.materials ?? null;
+  const wanted = facet.value === null ? "a material" : `a material ${restrictionLabel(facet.value)}`;
+  const matches = materials !== null && admitsAny(facet.value, materials);
+
+  if (facet.cardinality === "prohibited") {
+    return matches
+      ? { passed: false, message: `Element must not have ${wanted}` }
+      : { passed: true, message: "" };
+  }
+
+  if (facet.cardinality === "optional" && materials === null) {
+    return { passed: true, message: "" };
+  }
+
+  if (matches) return { passed: true, message: "" };
+  return {
+    passed: false,
+    message:
+      materials === null
+        ? `Element has no material, but ${wanted} is required`
+        : `Element is made of ${materials.length > 0 ? materials.join(", ") : "an unnamed material"}, which is not ${wanted}`,
+  };
+}
+
 export function evaluateRequirement(
   element: NormalizedElement,
   facet: ParsedRequirementFacet,
@@ -370,6 +410,7 @@ export function evaluateRequirement(
   unitScales: UnitScales = {}
 ): FacetCheckResult {
   if (facet.kind === "classification") return evaluateClassification(element, facet);
+  if (facet.kind === "material") return evaluateMaterial(element, facet);
 
   const slot = readFacetValue(element, facet);
   const filledIn = isFilledIn(slot);

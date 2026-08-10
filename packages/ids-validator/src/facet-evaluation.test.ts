@@ -4,6 +4,7 @@ import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js
 import type {
   ParsedAttributeFacet,
   ParsedClassificationFacet,
+  ParsedMaterialFacet,
   ParsedPropertyFacet,
 } from "./parse-ids.js";
 
@@ -739,5 +740,46 @@ describe("evaluateRequirement — classification", () => {
       value: { kind: "bounds", min: { value: 0, inclusive: true }, max: { value: 99, inclusive: true } },
     });
     expect(evaluateRequirement(element, facet).passed).toBe(false);
+  });
+});
+
+describe("evaluateRequirement — material", () => {
+  function materialFacet(overrides: Partial<ParsedMaterialFacet> = {}): ParsedMaterialFacet {
+    return { kind: "material", value: null, cardinality: "required", ...overrides };
+  }
+
+  it("matches any of the names and categories behind the element's material", () => {
+    const element = makeElement({ materials: ["CavityWall", "CoreLayer", "Concrete", "Structural"] });
+    for (const wanted of ["CavityWall", "CoreLayer", "Concrete", "Structural"]) {
+      expect(evaluateRequirement(element, materialFacet({ value: { kind: "exact", value: wanted } })).passed).toBe(true);
+    }
+    expect(evaluateRequirement(element, materialFacet({ value: { kind: "exact", value: "Timber" } })).passed).toBe(false);
+  });
+
+  // The distinction the whole `null` vs `[]` shape exists for: an element with no material
+  // association fails an empty facet, one whose association names nothing passes it — and a
+  // value check fails both, because neither has anything to match.
+  it("separates having no material from having a material that names nothing", () => {
+    const empty = materialFacet();
+    expect(evaluateRequirement(makeElement({ materials: null }), empty).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ materials: [] }), empty).passed).toBe(true);
+
+    const named = materialFacet({ value: { kind: "exact", value: "Concrete" } });
+    expect(evaluateRequirement(makeElement({ materials: null }), named).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ materials: [] }), named).passed).toBe(false);
+  });
+
+  it("waives an optional facet only when the element has no material at all", () => {
+    const facet = materialFacet({ cardinality: "optional", value: { kind: "exact", value: "Concrete" } });
+    expect(evaluateRequirement(makeElement({ materials: null }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ materials: ["Concrete"] }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ materials: ["Steel"] }), facet).passed).toBe(false);
+  });
+
+  it("inverts for a prohibited facet", () => {
+    const facet = materialFacet({ cardinality: "prohibited", value: { kind: "exact", value: "Steel" } });
+    expect(evaluateRequirement(makeElement({ materials: ["Steel"] }), facet).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ materials: ["Concrete"] }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ materials: null }), facet).passed).toBe(true);
   });
 });

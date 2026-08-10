@@ -75,6 +75,17 @@ export const NormalizedElementSchema = z.object({
    * state it, so the engines stay comparable.
    */
   classifications: z.array(ClassificationReferenceSchema).optional(),
+  /**
+   * Every string a material facet may match: the names and categories of the element's materials,
+   * of the layer/profile/constituent sets holding them, and of each member within those sets. IDS
+   * gives a material facet one parameter, so which of them a match came from never matters — a
+   * flat list says exactly what can be checked and nothing more.
+   *
+   * `null` when the element has no material association at all, which is a different thing from
+   * an association naming nothing: an empty material facet asks only whether the element *has* a
+   * material, so `null` fails it and `[]` passes it while still failing any value check.
+   */
+  materials: z.array(z.string()).nullable().optional(),
 });
 export type NormalizedElement = z.infer<typeof NormalizedElementSchema>;
 
