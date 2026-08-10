@@ -1,3 +1,4 @@
+import { isIntegerAttribute } from "@ifc-qa/shared-types";
 import type { NormalizedElement, NormalizedValue, PropertyValue } from "@ifc-qa/shared-types";
 import type { ParsedRequirementFacet, ParsedRestriction } from "./parse-ids.js";
 import { isSubtypeOf } from "./ifc-type-hierarchy.js";
@@ -64,20 +65,65 @@ function missingMessage(facet: ParsedRequirementFacet): string {
     : `Property "${facet.baseName}" is missing in property set "${facet.propertySet}"`;
 }
 
+/**
+ * XML Schema's lexical space for a number, which is what an IDS `<simpleValue>` is written in.
+ *
+ * Deliberately stricter than `parseFloat`, which reads "42,3" as 42 and would then match a stored
+ * 42. The suite states that exact document as one that must fail, so the check has to reject the
+ * literal outright rather than salvage a prefix of it.
+ */
+const XSD_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+/** `xs:integer`'s lexical space, which admits no point and no exponent. */
+const XSD_INTEGER = /^[+-]?\d+$/;
+
+/**
+ * Compares a stored value against a literal the specification wrote, as the type the model stored
+ * rather than as text. A property IFC holds as the real 42 is written "42.0", "42." or "1.2345e3"
+ * by different authors, and none of those is equal to "42" as a string.
+ *
+ * `wholeNumber` narrows the accepted lexical space: a value the schema types as an integer is not
+ * matched by "42.0", even though the two are the same JS number and the same quantity.
+ */
+function matchesLiteral(raw: PropertyValue, literal: string, wholeNumber: boolean): boolean {
+  if (typeof raw === "number") {
+    const trimmed = literal.trim();
+    const lexical = wholeNumber ? XSD_INTEGER : XSD_NUMBER;
+    return lexical.test(trimmed) && Number(trimmed) === raw;
+  }
+  return String(raw) === literal;
+}
+
+/**
+ * Whether the value behind this facet is a whole number by the schema's account rather than by
+ * how it happens to have been written. `dataType` answers for a property; for an attribute only
+ * the entity table can, since both an integer and a real arrive as a bare JS number.
+ */
+function holdsWholeNumber(
+  element: NormalizedElement,
+  facet: ParsedRequirementFacet,
+  slot: NormalizedValue
+): boolean {
+  return facet.kind === "property"
+    ? slot.dataType?.toUpperCase() === "IFCINTEGER"
+    : isIntegerAttribute(element.ifcType, facet.name);
+}
+
 function restrictionFailure(
   facet: ParsedRequirementFacet,
   restriction: ParsedRestriction,
-  slot: NormalizedValue
+  slot: NormalizedValue,
+  wholeNumber: boolean
 ): string | null {
   const raw = slot.value;
   const value = String(raw);
   switch (restriction.kind) {
     case "exact":
-      return value === restriction.value
+      return matchesLiteral(raw, restriction.value, wholeNumber)
         ? null
         : `${facetLabel(facet)} value "${value}" must be "${restriction.value}"`;
     case "enum":
-      return restriction.values.includes(value)
+      return restriction.values.some((candidate) => matchesLiteral(raw, candidate, wholeNumber))
         ? null
         : `${facetLabel(facet)} value "${value}" is not one of: ${restriction.values.join(", ")}`;
     case "pattern":
@@ -130,7 +176,13 @@ export function evaluateRequirement(
   }
 
   if (facet.restriction) {
-    const failure = restrictionFailure(facet, facet.restriction, slot as NormalizedValue);
+    const value = slot as NormalizedValue;
+    const failure = restrictionFailure(
+      facet,
+      facet.restriction,
+      value,
+      holdsWholeNumber(element, facet, value)
+    );
     if (failure) return { passed: false, message: failure };
   }
 

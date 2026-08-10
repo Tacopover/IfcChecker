@@ -252,6 +252,86 @@ describe("evaluateRequirement — dataType", () => {
   });
 });
 
+describe("evaluateRequirement — comparing a number as a number", () => {
+  const exact = (value: string) => ({ kind: "exact", value }) as const;
+  const realFacet = (value: string) =>
+    propertyFacet({ baseName: "Foo", dataType: "IFCREAL", restriction: exact(value) });
+  const storedReal = makeElement({
+    propertySets: { Pset_WallCommon: { Foo: { value: 42, dataType: "IFCREAL" } } },
+  });
+
+  // " 42 " included on purpose: XSD's numeric types collapse whitespace before validating, so a
+  // padded literal is a valid way to write the number and not a mismatch.
+  it.each(["42", "42.", "42.0", "+42", "4.2e1", "4.2E1", " 42 "])(
+    "matches a stored 42 written as %s",
+    (literal) => {
+      expect(evaluateRequirement(storedReal, realFacet(literal)).passed).toBe(true);
+    }
+  );
+
+  it.each(["43", "42.5", "4.2e2"])("does not match a stored 42 written as %s", (literal) => {
+    expect(evaluateRequirement(storedReal, realFacet(literal)).passed).toBe(false);
+  });
+
+  // parseFloat reads "42,3" as 42 and would match. The suite states that document as one that
+  // must fail, so the literal has to be rejected outright rather than salvaged.
+  it.each(["42,3", "forty-two", "0x2A", ""])(
+    "refuses %s, which is not a number in any XSD type",
+    (literal) => {
+      expect(evaluateRequirement(storedReal, realFacet(literal)).passed).toBe(false);
+    }
+  );
+
+  it("applies the same casting inside an enum restriction", () => {
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCREAL",
+      restriction: { kind: "enum", values: ["1.0", "42.0"] },
+    });
+    expect(evaluateRequirement(storedReal, facet).passed).toBe(true);
+  });
+
+  it("leaves a string value compared as a string", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { FireRating: { value: "REI60" } } },
+    });
+    const facet = propertyFacet({ dataType: null, restriction: exact("REI60") });
+    expect(evaluateRequirement(element, facet).passed).toBe(true);
+  });
+
+  describe("a whole number rejects a literal written with a decimal", () => {
+    it("for a property the file typed as IFCINTEGER", () => {
+      const element = makeElement({
+        propertySets: { Pset_WallCommon: { Foo: { value: 42, dataType: "IFCINTEGER" } } },
+      });
+      const facet = (value: string) =>
+        propertyFacet({ baseName: "Foo", dataType: "IFCINTEGER", restriction: exact(value) });
+
+      expect(evaluateRequirement(element, facet("42")).passed).toBe(true);
+      expect(evaluateRequirement(element, facet("42.")).passed).toBe(false);
+      expect(evaluateRequirement(element, facet("42.0")).passed).toBe(false);
+    });
+
+    // Both arrive as the JS number 42; only the entity table separates them.
+    it("for an attribute the schema types as an integer, but not for one it types as a real", () => {
+      const stair = makeElement({
+        ifcType: "IFCSTAIRFLIGHT",
+        attributes: { NumberOfRisers: { value: 42 } },
+      });
+      const style = makeElement({
+        ifcType: "IFCSURFACESTYLEREFRACTION",
+        attributes: { RefractionIndex: { value: 42 } },
+      });
+
+      const risers = attributeFacet({ name: "NumberOfRisers", restriction: exact("42.0") });
+      const index = attributeFacet({ name: "RefractionIndex", restriction: exact("42.0") });
+
+      expect(evaluateRequirement(stair, risers).passed).toBe(false);
+      expect(evaluateRequirement(style, index).passed).toBe(true);
+    });
+  });
+});
+
 describe("evaluateRequirement — prohibited cardinality", () => {
   it("passes an attribute facet when the value is absent and fails when it is filled in", () => {
     const facet = attributeFacet({ name: "Tag", cardinality: "prohibited" });

@@ -1,4 +1,7 @@
-import { IFC_SIMPLE_ATTRIBUTE_NAMES } from "./ifc-entity-table.generated.js";
+import {
+  IFC_INTEGER_ATTRIBUTE_NAMES,
+  IFC_SIMPLE_ATTRIBUTE_NAMES,
+} from "./ifc-entity-table.generated.js";
 
 const NONE: readonly string[] = [];
 
@@ -19,4 +22,21 @@ const NONE: readonly string[] = [];
  */
 export function simpleAttributeNamesFor(typeName: string): readonly string[] {
   return IFC_SIMPLE_ATTRIBUTE_NAMES[typeName.trim().toUpperCase()] ?? NONE;
+}
+
+/**
+ * Whether the schema types this attribute as a whole number.
+ *
+ * Both parsers hand back `NumberOfRisers` and `RefractionIndex` as the JS number 42, and IDS says
+ * a specification writing "42.0" matches the second but not the first — an integer written with a
+ * decimal is not an integer. Nothing but the schema separates them.
+ *
+ * Matched case-insensitively on the attribute name, the same leniency
+ * `readAttributeValue` applies, because hand-written IDS files are inconsistent about casing.
+ */
+export function isIntegerAttribute(typeName: string, attributeName: string): boolean {
+  const names = IFC_INTEGER_ATTRIBUTE_NAMES[typeName.trim().toUpperCase()];
+  if (names === undefined) return false;
+  const wanted = attributeName.trim().toUpperCase();
+  return names.some((name) => name.toUpperCase() === wanted);
 }
