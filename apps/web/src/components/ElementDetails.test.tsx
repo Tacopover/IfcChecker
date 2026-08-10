@@ -10,10 +10,14 @@ function makeElement(overrides: Partial<NormalizedElement> = {}): NormalizedElem
     ifcType: "IFCWALL",
     predefinedType: "STANDARD",
     name: "West Wall",
-    attributes: { Tag: "W-001", Description: "External wall north" },
+    attributes: { Tag: { value: "W-001" }, Description: { value: "External wall north" } },
     propertySets: {
-      Pset_WallCommon: { FireRating: null, IsExternal: true, LoadBearing: false },
-      MEP_Data: { SystemAbbreviation: "SA" },
+      Pset_WallCommon: {
+        FireRating: { value: null },
+        IsExternal: { value: true },
+        LoadBearing: { value: false },
+      },
+      MEP_Data: { SystemAbbreviation: { value: "SA" } },
     },
     ...overrides,
   };

@@ -87,7 +87,7 @@ describe("validateElements", () => {
     const element = makeElement({
       globalId: "wall-1",
       name: "W-007",
-      propertySets: { Pset_WallCommon: { FireRating: "REI90" } },
+      propertySets: { Pset_WallCommon: { FireRating: { value: "REI90" } } },
     });
 
     expect(validateElements([element], IDS_XML)).toEqual([]);
@@ -139,7 +139,7 @@ describe("validateBySpecification", () => {
   const compliantWall = makeElement({
     globalId: "wall-1",
     name: "W-007",
-    propertySets: { Pset_WallCommon: { FireRating: "REI90" } },
+    propertySets: { Pset_WallCommon: { FireRating: { value: "REI90" } } },
   });
   const failingWall = makeElement({
     globalId: "wall-2",

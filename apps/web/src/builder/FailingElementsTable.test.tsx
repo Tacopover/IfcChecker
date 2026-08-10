@@ -10,8 +10,8 @@ function element(overrides: Partial<NormalizedElement> = {}): NormalizedElement 
     ifcType: "IFCWALL",
     predefinedType: null,
     name: "Basic Wall",
-    attributes: { Tag: "W-1" },
-    propertySets: { Pset_WallCommon: { FireRating: "60" } },
+    attributes: { Tag: { value: "W-1" } },
+    propertySets: { Pset_WallCommon: { FireRating: { value: "60" } } },
     ...overrides,
   };
 }

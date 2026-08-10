@@ -13,10 +13,47 @@ describe("NormalizedElementSchema", () => {
       ifcType: "IFCWALL",
       predefinedType: "STANDARD",
       name: "Wall-01",
-      attributes: { Tag: "W-001" },
-      propertySets: { Pset_WallCommon: { IsExternal: true, FireRating: "REI60" } },
+      attributes: { Tag: { value: "W-001" } },
+      propertySets: {
+        Pset_WallCommon: {
+          IsExternal: { value: true, dataType: "IFCBOOLEAN" },
+          FireRating: { value: "REI60", dataType: "IFCLABEL" },
+        },
+      },
     });
     expect(parsed.ifcType).toBe("IFCWALL");
+  });
+
+  it("rejects a bare scalar where a value slot belongs", () => {
+    const result = NormalizedElementSchema.safeParse({
+      globalId: "1abc2defGHI3jkl4mno5pq",
+      ifcType: "IFCWALL",
+      predefinedType: null,
+      name: null,
+      attributes: { Tag: "W-001" },
+      propertySets: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts the candidates of a multi-valued property", () => {
+    const parsed = NormalizedElementSchema.parse({
+      globalId: "1abc2defGHI3jkl4mno5pq",
+      ifcType: "IFCWALL",
+      predefinedType: null,
+      name: null,
+      attributes: {},
+      propertySets: {
+        Pset_Mixed: {
+          DesignHeight: {
+            value: "3000 [1000 – 5000]",
+            values: ["1000", "5000", "3000"],
+            dataType: "IFCLENGTHMEASURE",
+          },
+        },
+      },
+    });
+    expect(parsed.propertySets.Pset_Mixed.DesignHeight.values).toHaveLength(3);
   });
 
   it("rejects a missing globalId", () => {

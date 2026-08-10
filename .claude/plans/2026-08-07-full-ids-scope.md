@@ -540,3 +540,85 @@ tables are noise in it.
 **Unverified:** the 1.6 GB federated case. +63% of normalization on a ~120 s parse scales naively to
 ~+75 s, probably pessimistic because the extra work tracks non-geometry entity count rather than
 file size — but it has not been measured, and the standing note says to ask rather than extrapolate.
+
+## Value typing — landed and measured 2026-08-10
+
+Five changes, landed and measured separately so the scoreboard could attribute each one.
+
+**The suite grew to 334 cases** at `buildingSMART/IDS@dba4549e`, not 326 — 8 new `entity` cases,
+of which 2 we agree with and 2 we get wrong. Every number below is against 334.
+
+| | agreed | false passes | false fails | refused |
+| --- | --- | --- | --- | --- |
+| before | 142 | 2 | 57 | 133 |
+| carrier | 142 | 2 | 57 | 133 |
+| + dataType | 143 | **1** | 57 | 133 |
+| + numeric casting | 150 | 1 | 50 | 133 |
+| + multi-value candidates | 155 | 1 | 45 | 133 |
+| + optional cardinality | **158** | **1** | 42 | 133 |
+
+**Nothing was lost at any step**, and no step added a false pass that survived it. `ids` is now
+12/12; `attribute` 46/56; `property` 63/82.
+
+### The data model
+
+`PropertyValue` stays the scalar union. Each attribute and property slot is now a
+`NormalizedValue`: `value` as before, plus `values` (the candidates behind a multi-valued
+property), `dataType` and `unit`. Chosen over a parallel side channel because both false passes
+turn on the `dataType` of an *ordinary single value* — there was no "only exotic values get boxed"
+escape. ~15 call sites, and no serialization boundary: nothing postMessages or persists a
+`NormalizedElement`.
+
+**ifc-lite was never lossy — we were.** Its `Property` already carried `values`, `dataType` and
+`unit`; `ifc-lite-buffer.ts` took `prop.value` and dropped the rest, which is why a bounded
+property reached the validator as the string `"3000 [1000 – 5000]"`.
+
+**The carrier moved 0 cases**, which is what proves it decides nothing on its own.
+
+### Costs and engine parity
+
+Parse on the 37 MB model: **2,619 ms → 2,540 ms** (noise; nothing added). 17,237 of 17,797
+property slots carry a `dataType`, 560 carry `values`.
+
+`dataType` **disagrees on 0 of 17,797 slots** between the engines, because web-ifc's `{name, value}`
+wrapper carries the same measure type ifc-lite reports. Deliberately *not* carried on attributes:
+IDS declares `dataType` on `<property>` only, and reading web-ifc's wrapper name there diverged from
+ifc-lite on every attribute in the model to say something nothing consults.
+
+Two real divergences the parity test now pins, on a new `multi-valued-properties.ifc` fixture:
+
+- **web-ifc fills no `values`.** It reads only `IfcPropertySingleValue`, so the other four subtypes
+  arrive absent. Stated as a test rather than left to be rediscovered when the port lands.
+- **An empty `Name` was folded into `null` by ifc-lite and kept by web-ifc.** Found by the optional
+  cardinality work, which needs the difference. The real model has 3 such entities.
+
+### What each behaviour change cost
+
+- **`dataType` enforcement (+1, and the false pass it removes).** Enforced only where the parser
+  reports the stored type — failing on "we do not know" would reject the list and enumerated
+  properties the suite requires to pass.
+- **Numeric casting (+7).** Cast against XML Schema's lexical space, not `parseFloat`, which reads
+  `"42,3"` as 42 — the suite states that document as one that must fail. **On its own it added 3
+  false passes**: `"42.0"` is not an integer. `dataType` answers that for a property, but
+  `NumberOfRisers` and `RefractionIndex` are both the JS number 42, so
+  `generate-ifc-entity-table.mjs` now emits the attributes typed exactly `xs:integer` (88 entities)
+  from the `xsdTypesByEntity` it already fetched.
+- **Multi-value candidates (+5).** The parser's rendering of the set stays in `value` and is
+  deliberately *not* matchable. Bounded and `table 2_3` state metres against a millimetre model, so
+  they wait on units.
+- **Optional cardinality (+3, not the 1 predicted).** The same mechanism covers an optional
+  attribute, an optional property and the combined `ids` case.
+
+### What is left, and what it is worth
+
+42 false fails and 1 false pass. **Bounds is now the single biggest mechanism at 23** — 18
+`tolerance`, 4 `restriction`, 1 `attribute` — ahead of anything else on the board. Then:
+
+- **units, 5** — the last false pass, `unit_conversions…2_2`, the 3 bounded and `table 2_3`. Needs
+  the project's `IfcUnitAssignment`; the fixtures declare millimetres and IDS nominates metres.
+- **`length`/`minLength`/`maxLength`, 3** — still compile to an empty enum that fails loudly.
+- **a regex OR, 1**; **`entity` IFC2X3 type mapping, 2**; **quantities, material and predefined
+  property sets, 4** — `IfcElementQuantity` is read by neither engine.
+- **attribute references and selects, 3** — a name-only check on a reference-valued attribute must
+  *pass*, while a value check against one must *fail*. Needs a slot that means "present, not
+  comparable", which is the next thing `NormalizedValue` would grow.

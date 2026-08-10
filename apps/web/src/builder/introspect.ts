@@ -59,8 +59,8 @@ function* attributeEntries(element: NormalizedElement): Generator<[string, Prope
     const value = read(element);
     if (isFilled(value)) yield [name, value];
   }
-  for (const [name, value] of Object.entries(element.attributes)) {
-    if (isFilled(value)) yield [name, value];
+  for (const [name, slot] of Object.entries(element.attributes)) {
+    if (isFilled(slot.value)) yield [name, slot.value];
   }
 }
 
@@ -203,8 +203,8 @@ export function introspectModel(elements: NormalizedElement[]): ModelIntrospecti
           bag = new Map();
           propertySets.set(setName, bag);
         }
-        for (const [name, value] of Object.entries(fields)) {
-          if (isFilled(value)) accumulate(bag, name, setName, value);
+        for (const [name, slot] of Object.entries(fields)) {
+          if (isFilled(slot.value)) accumulate(bag, name, setName, slot.value);
         }
       }
     }

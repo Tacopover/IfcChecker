@@ -121,6 +121,27 @@ async function simpleAttributesByEntity(version) {
   return byEntity;
 }
 
+// Which of those attributes the schema types as a whole number. IDS compares by casting the
+// literal a specification wrote to the type the model holds, and "42.0" is a valid double but not
+// a valid integer — so an integer attribute must reject it. Both are the JS number 42 by the time
+// either parser is done, so only the schema can tell NumberOfRisers from RefractionIndex.
+//
+// Exactly `xs:integer` and nothing else: `getAttributes` reports a list because a SELECT may admit
+// several types, and an attribute that could also be a double or a dateTime does accept "42.0".
+async function integerAttributesByEntity(version) {
+  const byEntity = new Map();
+  for (const attribute of await getAttributes(version)) {
+    if (PROMOTED_TO_FIELDS.has(attribute.name)) continue;
+    for (const [entity, xsdTypes] of Object.entries(attribute.xsdTypesByEntity ?? {})) {
+      if (xsdTypes.length !== 1 || xsdTypes[0] !== "xs:integer") continue;
+      const bucket = byEntity.get(entity);
+      if (bucket) bucket.add(attribute.name);
+      else byEntity.set(entity, new Set([attribute.name]));
+    }
+  }
+  return byEntity;
+}
+
 const baseAttributes = await simpleAttributesByEntity(BASE_VERSION);
 const legacyAttributes = await simpleAttributesByEntity(LEGACY_VERSION);
 // IFC4 wins where the two disagree, matching how the parent map is merged.
@@ -129,6 +150,16 @@ for (const [entity, names] of legacyAttributes) {
   if (!simpleAttributes.has(entity)) simpleAttributes.set(entity, names);
 }
 const simpleAttributeEntries = [...simpleAttributes]
+  .map(([entity, names]) => [entity, [...names].sort()])
+  .sort(([left], [right]) => left.localeCompare(right));
+
+const baseIntegers = await integerAttributesByEntity(BASE_VERSION);
+const legacyIntegers = await integerAttributesByEntity(LEGACY_VERSION);
+const integerAttributes = new Map(baseIntegers);
+for (const [entity, names] of legacyIntegers) {
+  if (!integerAttributes.has(entity)) integerAttributes.set(entity, names);
+}
+const integerAttributeEntries = [...integerAttributes]
   .map(([entity, names]) => [entity, [...names].sort()])
   .sort(([left], [right]) => left.localeCompare(right));
 
@@ -187,6 +218,24 @@ ${simpleAttributeEntries
   .map(([entity, names]) => `  ${JSON.stringify(entity)}: [${names.map((n) => JSON.stringify(n)).join(", ")}],`)
   .join("\n")}
 };
+
+/**
+ * Of those, the ones the schema types as exactly \`xs:integer\`.
+ *
+ * IDS compares by casting the literal a specification wrote to the type the model holds, and
+ * "42.0" is a valid double but not a valid integer. Both arrive as the JS number 42, so only the
+ * schema separates \`NumberOfRisers\` — which must reject "42.0" — from \`RefractionIndex\`, which
+ * must accept it. Attributes admitting several types are left out: one that may also be a double
+ * does accept "42.0".
+ *
+ * No table for the other XSD types: string, boolean, date and duration place no constraint on the
+ * literal that comparing them as text does not already place.
+ */
+export const IFC_INTEGER_ATTRIBUTE_NAMES: Readonly<Record<string, readonly string[]>> = {
+${integerAttributeEntries
+  .map(([entity, names]) => `  ${JSON.stringify(entity)}: [${names.map((n) => JSON.stringify(n)).join(", ")}],`)
+  .join("\n")}
+};
 `;
 
 const previous = (() => {
@@ -210,6 +259,7 @@ writeFileSync(OUTPUT, body);
 console.log(
   `wrote ${OUTPUT}\n  ${parents.size} entity types across both schemas` +
     `\n  ${simpleAttributeEntries.length} entities with simple-valued attributes` +
+    `\n  ${integerAttributeEntries.length} entities with integer-typed attributes` +
     `\n  ${legacyOnly.length} ${LEGACY_VERSION}-only: ${legacyOnly.join(", ")}` +
     `\n  ${recognised.length} recognised entity names`
 );

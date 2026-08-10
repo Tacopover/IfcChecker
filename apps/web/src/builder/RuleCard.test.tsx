@@ -13,9 +13,12 @@ function wall(index: number, fireRating: string | null): NormalizedElement {
     ifcType: "IFCWALL",
     predefinedType: null,
     name: `Wall ${index}`,
-    attributes: { Tag: `W-${index}` },
+    attributes: { Tag: { value: `W-${index}` } },
     propertySets: {
-      Pset_WallCommon: fireRating === null ? { Status: "New" } : { Status: "New", FireRating: fireRating },
+      Pset_WallCommon:
+        fireRating === null
+          ? { Status: { value: "New" } }
+          : { Status: { value: "New" }, FireRating: { value: fireRating } },
     },
   };
 }
@@ -27,7 +30,7 @@ function door(index: number): NormalizedElement {
     predefinedType: null,
     name: `Door ${index}`,
     attributes: {},
-    propertySets: { Pset_DoorCommon: { FireRating: "30" } },
+    propertySets: { Pset_DoorCommon: { FireRating: { value: "30" } } },
   };
 }
 

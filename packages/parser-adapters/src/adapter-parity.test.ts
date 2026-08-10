@@ -119,8 +119,73 @@ describe("adapter parity", () => {
     // Elevation is a number and CompositionType an enum; neither survived the
     // old Tag/Description/ObjectType bag.
     expect(ifcLiteResult.idsScope.length).toBeGreaterThan(0);
-    expect(storeyOf(ifcLiteResult)).toMatchObject({ Elevation: 0, CompositionType: "ELEMENT" });
+    expect(storeyOf(ifcLiteResult)).toMatchObject({
+      Elevation: { value: 0 },
+      CompositionType: { value: "ELEMENT" },
+    });
     expect(storeyOf(ifcLiteResult)).toEqual(storeyOf(webIfcResult));
+  });
+
+  // Both engines report the measure type the file stored, so `dataType` — the only thing that can
+  // say whether a value is the type a specification asked for — is engine-independent.
+  it("both engines report the same stored measure type for a single value", async () => {
+    const path = fixturePath("multi-valued-properties.ifc");
+    const wallOf = (result: { idsScope: Array<{ ifcType: string; propertySets: Record<string, Record<string, unknown>> }> }) =>
+      result.idsScope.find((entity) => entity.ifcType === "IFCWALL")!.propertySets.Pset_Mixed;
+
+    const fromWebIfc = wallOf(await new WebIfcAdapter().parse(path));
+    const fromIfcLite = wallOf(await new IfcLiteAdapter().parse(path));
+
+    expect(fromIfcLite.Thickness).toEqual({ value: 200, dataType: "IFCLENGTHMEASURE" });
+    expect(fromWebIfc.Thickness).toEqual(fromIfcLite.Thickness);
+  });
+
+  // The known, deliberate gap (see bug-web-ifc-property-subtypes): web-ifc reads only
+  // IfcPropertySingleValue, so the other four subtypes arrive absent on that engine while ifc-lite
+  // carries the candidates behind them. Stated here so it fails loudly when the port lands, rather
+  // than being rediscovered from a conformance score that moves on one engine only.
+  it("only ifc-lite carries the candidates of a multi-valued property", async () => {
+    const path = fixturePath("multi-valued-properties.ifc");
+    const wallOf = (result: { idsScope: Array<{ ifcType: string; propertySets: Record<string, Record<string, { value: unknown; values?: unknown[] }>> }> }) =>
+      result.idsScope.find((entity) => entity.ifcType === "IFCWALL")!.propertySets.Pset_Mixed;
+
+    const fromWebIfc = wallOf(await new WebIfcAdapter().parse(path));
+    const fromIfcLite = wallOf(await new IfcLiteAdapter().parse(path));
+
+    // Candidates arrive as the literals the file wrote, not as parsed numbers — ifc-lite types
+    // them `string[]`. Carried through verbatim: the value a specification states is a literal
+    // too, so casting is the comparison's job and doing it here would guess at a type twice.
+    expect(fromIfcLite.DesignHeight.values).toEqual(["1000", "5000", "3000"]);
+    expect(fromIfcLite.Finishes.values).toEqual(["Painted", "Plastered"]);
+    expect(fromIfcLite.Status.values).toEqual(["EXISTING", "DEMOLISH"]);
+    expect(fromIfcLite.LoadCurve.values).toEqual(["Span", "1000"]);
+
+    for (const name of ["DesignHeight", "Finishes", "Status", "LoadCurve"]) {
+      expect(fromWebIfc[name]).toEqual({ value: null });
+    }
+  });
+
+  // IDS separates a Name the model does not state from one it states as empty: the first
+  // satisfies an optional requirement and the second fails it. ifc-lite folded both into null
+  // while web-ifc kept them apart, and no fixture had an empty name to catch it.
+  it("both engines keep an empty name distinct from an absent one", async () => {
+    const path = fixturePath("multi-valued-properties.ifc");
+    const namesOf = (result: { idsScope: Array<{ globalId: string; name: string | null }> }) =>
+      Object.fromEntries(result.idsScope.map((entity) => [entity.globalId, entity.name]));
+
+    const fromWebIfc = namesOf(await new WebIfcAdapter().parse(path));
+    const fromIfcLite = namesOf(await new IfcLiteAdapter().parse(path));
+
+    expect(fromIfcLite["7dV2S4BK15Pc0wRQxBkYZ0"]).toBe("W-MV");
+    expect(fromIfcLite["8eW3T5CL26Qd1xSRyClZa1"]).toBe("");
+    expect(fromIfcLite["9fX4U6DM37Re2ySSzDma22"]).toBeNull();
+    for (const globalId of [
+      "7dV2S4BK15Pc0wRQxBkYZ0",
+      "8eW3T5CL26Qd1xSRyClZa1",
+      "9fX4U6DM37Re2ySSzDma22",
+    ]) {
+      expect(fromWebIfc[globalId]).toBe(fromIfcLite[globalId]);
+    }
   });
 
   // Both parsers hand a reference back as a bare number, so carrying one would

@@ -7,8 +7,8 @@
     "attributes": {},
     "propertySets": {
       "Pset_WallCommon": {
-        "FireRating": "REI60",
-        "IsExternal": true
+        "FireRating": { "value": "REI60" },
+        "IsExternal": { "value": true }
       }
     }
   }

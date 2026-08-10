@@ -14,14 +14,14 @@ export function readConditionValue(
 ): PropertyValue | null {
   if (condition.kind === "property") {
     const set = element.propertySets[condition.propertySet ?? ""];
-    return set?.[condition.name] ?? null;
+    return set?.[condition.name]?.value ?? null;
   }
   const topLevel = TOP_LEVEL_READERS[condition.name.toUpperCase()];
   if (topLevel) return topLevel(element);
   const key = Object.keys(element.attributes).find(
     (candidate) => candidate.toUpperCase() === condition.name.toUpperCase()
   );
-  return key === undefined ? null : element.attributes[key];
+  return key === undefined ? null : element.attributes[key].value;
 }
 
 export interface FailingElementsTableProps {
