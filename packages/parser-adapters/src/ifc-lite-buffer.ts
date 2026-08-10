@@ -159,13 +159,21 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
       // for relationships or property sets, so an IfcPropertySet arrived
       // nameless while web-ifc read its name. extractAllEntityAttributes covers
       // any entity because it re-derives from the source buffer.
-      const name = normalizePropertyValue(store.entities.getName(expressId) || findAttr("Name"));
+      //
+      // An empty Name is kept as "" rather than folded into null: IDS separates an attribute the
+      // model does not state from one it states as empty — the first satisfies an optional
+      // requirement and the second fails it. web-ifc already kept that difference, so this engine
+      // was the one out of step.
+      const storedName = store.entities.getName(expressId);
+      const name = normalizePropertyValue(
+        typeof storedName === "string" && storedName !== "" ? storedName : findAttr("Name")
+      );
 
       idsScope.push({
         globalId: identifyEntity(typeName, store.entities.getGlobalId(expressId), expressId),
         ifcType: typeName,
         predefinedType: stripEnumDots(findAttr("PredefinedType")),
-        name: typeof name === "string" && name !== "" ? name : null,
+        name: typeof name === "string" ? name : null,
         attributes,
         propertySets,
       });

@@ -165,6 +165,29 @@ describe("adapter parity", () => {
     }
   });
 
+  // IDS separates a Name the model does not state from one it states as empty: the first
+  // satisfies an optional requirement and the second fails it. ifc-lite folded both into null
+  // while web-ifc kept them apart, and no fixture had an empty name to catch it.
+  it("both engines keep an empty name distinct from an absent one", async () => {
+    const path = fixturePath("multi-valued-properties.ifc");
+    const namesOf = (result: { idsScope: Array<{ globalId: string; name: string | null }> }) =>
+      Object.fromEntries(result.idsScope.map((entity) => [entity.globalId, entity.name]));
+
+    const fromWebIfc = namesOf(await new WebIfcAdapter().parse(path));
+    const fromIfcLite = namesOf(await new IfcLiteAdapter().parse(path));
+
+    expect(fromIfcLite["7dV2S4BK15Pc0wRQxBkYZ0"]).toBe("W-MV");
+    expect(fromIfcLite["8eW3T5CL26Qd1xSRyClZa1"]).toBe("");
+    expect(fromIfcLite["9fX4U6DM37Re2ySSzDma22"]).toBeNull();
+    for (const globalId of [
+      "7dV2S4BK15Pc0wRQxBkYZ0",
+      "8eW3T5CL26Qd1xSRyClZa1",
+      "9fX4U6DM37Re2ySSzDma22",
+    ]) {
+      expect(fromWebIfc[globalId]).toBe(fromIfcLite[globalId]);
+    }
+  });
+
   // Both parsers hand a reference back as a bare number, so carrying one would
   // let a rule compare against an express id and quietly pass.
   it("neither engine carries a reference-valued attribute", async () => {

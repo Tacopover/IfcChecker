@@ -169,6 +169,14 @@ export function evaluateRequirement(
       : { passed: true, message: "" };
   }
 
+  // An optional requirement is checked only where the model states the value at all. The line is
+  // between absent and empty, not between absent and satisfactory: the suite pairs a wall whose
+  // Name is `$` (passes) with one whose Name is `''` (fails) against the same optional facet. An
+  // empty string is a value the author wrote, so it is judged.
+  if (facet.cardinality === "optional" && (slot === null || slot.value === null)) {
+    return { passed: true, message: "" };
+  }
+
   if (!filledIn) {
     return { passed: false, message: missingMessage(facet) };
   }

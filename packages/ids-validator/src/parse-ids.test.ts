@@ -229,17 +229,15 @@ describe("parseIdsXml", () => {
     expect(isEvaluable(spec)).toBe(true);
   });
 
-  it("reports an optional requirement it will check as required", () => {
+  it("reads an optional requirement as optional rather than downgrading it", () => {
     const [spec] = parseIdsXml(
       specificationXml(`<attribute cardinality="optional">
         <name><simpleValue>Description</simpleValue></name>
       </attribute>`)
     );
 
-    expect(spec.requirements[0].cardinality).toBe("required");
-    expect(spec.unsupported).toContainEqual(
-      expect.objectContaining({ section: "requirements", construct: "cardinality=optional" })
-    );
+    expect(spec.requirements[0].cardinality).toBe("optional");
+    expect(spec.unsupported).toEqual([]);
   });
 
   it("reports a specification with no applicability at all as unevaluable", () => {

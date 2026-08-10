@@ -252,6 +252,36 @@ describe("evaluateRequirement — dataType", () => {
   });
 });
 
+describe("evaluateRequirement — optional cardinality", () => {
+  const facet = attributeFacet({ name: "Name", restriction: { kind: "exact", value: "Foobar" } });
+  const optional = attributeFacet({ ...facet, cardinality: "optional" });
+
+  it("passes when the model does not state the value", () => {
+    expect(evaluateRequirement(makeElement({ name: null }), optional).passed).toBe(true);
+  });
+
+  // The line is absent-versus-empty, not absent-versus-satisfactory. An empty string is a value
+  // the author wrote, so it is judged -- and both parsers now keep it distinct from null.
+  it("fails when the model states the value as empty", () => {
+    expect(evaluateRequirement(makeElement({ name: "" }), optional).passed).toBe(false);
+  });
+
+  it("still checks a value that is stated", () => {
+    expect(evaluateRequirement(makeElement({ name: "Foobar" }), optional).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ name: "Other" }), optional).passed).toBe(false);
+  });
+
+  it("leaves a required facet failing on an absent value", () => {
+    expect(evaluateRequirement(makeElement({ name: null }), facet).passed).toBe(false);
+  });
+
+  it("passes an optional property facet whose property set is missing entirely", () => {
+    const element = makeElement({ propertySets: {} });
+    const propertyOptional = propertyFacet({ cardinality: "optional" });
+    expect(evaluateRequirement(element, propertyOptional).passed).toBe(true);
+  });
+});
+
 describe("evaluateRequirement — a multi-valued property matches on any of its values", () => {
   // What ifc-lite hands over for IFCPROPERTYENUMERATEDVALUE((IFCLABEL('EXISTING'),IFCLABEL('DEMOLISH'))):
   // a display rendering of the set, plus the candidates behind it.

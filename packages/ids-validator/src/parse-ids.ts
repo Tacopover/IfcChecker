@@ -6,7 +6,7 @@ export type ParsedRestriction =
   | { kind: "enum"; values: string[] }
   | { kind: "pattern"; source: string; regex: RegExp };
 
-export type FacetCardinality = "required" | "prohibited";
+export type FacetCardinality = "required" | "optional" | "prohibited";
 
 export interface ParsedAttributeFacet {
   kind: "attribute";
@@ -166,22 +166,10 @@ function readSimpleValue(nodes: OrderedNode[]): string | null {
   return node ? textOf(childrenOf(node, "simpleValue")) : null;
 }
 
-function readCardinality(
-  node: OrderedNode,
-  tag: string,
-  unsupported: UnsupportedConstruct[]
-): FacetCardinality {
+function readCardinality(node: OrderedNode): FacetCardinality {
   const cardinality = attributesOf(node)["@_cardinality"];
   if (cardinality === "prohibited") return "prohibited";
-  // Reading optional as required is the safe direction — it over-reports rather than under-reports —
-  // but it produces failures the source would have allowed, so the user has to be told.
-  if (cardinality === "optional") {
-    unsupported.push({
-      section: "requirements",
-      construct: "cardinality=optional",
-      description: `<${tag}> is optional, but is checked as required — expect failures the original would have allowed.`,
-    });
-  }
+  if (cardinality === "optional") return "optional";
   return "required";
 }
 
@@ -413,7 +401,7 @@ function parseAttributeFacet(
     kind: "attribute",
     name,
     restriction: parseRestriction(children, unsupported),
-    cardinality: readCardinality(node, "attribute", unsupported),
+    cardinality: readCardinality(node),
   };
 }
 
@@ -431,6 +419,6 @@ function parsePropertyFacet(
     baseName,
     dataType: attributesOf(node)["@_dataType"] ?? null,
     restriction: parseRestriction(children, unsupported),
-    cardinality: readCardinality(node, "property", unsupported),
+    cardinality: readCardinality(node),
   };
 }
