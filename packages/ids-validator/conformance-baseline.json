@@ -2,8 +2,8 @@
   "generated": "2026-08-10",
   "totals": {
     "cases": 334,
-    "agreed": 167,
-    "wrong": 34,
+    "agreed": 181,
+    "wrong": 20,
     "refused": 133,
     "errored": 0
   },
@@ -66,8 +66,8 @@
     },
     "tolerance": {
       "total": 36,
-      "agreed": 22,
-      "wrong": 14,
+      "agreed": 36,
+      "wrong": 0,
       "refused": 0,
       "errored": 0
     }
@@ -236,10 +236,24 @@
     "tolerance/fail-comparison_tolerance_for_floating_point_range_lower_than_zero_inclusive",
     "tolerance/fail-comparison_tolerance_for_floating_point_zero_lower_bound",
     "tolerance/fail-comparison_tolerance_for_floating_point_zero_upper_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_negative_high_number_lower_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_negative_high_number_upper_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_negative_low_number_lower_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_negative_low_number_upper_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_negative_one_lower_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_negative_one_upper_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_one_lower_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_one_upper_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_positive_high_number_lower_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_positive_high_number_upper_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_positive_low_number_lower_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_positive_low_number_upper_bound",
     "tolerance/pass-comparison_tolerance_for_floating_point_range_greater_than_zero_exclusive",
     "tolerance/pass-comparison_tolerance_for_floating_point_range_greater_than_zero_inclusive",
     "tolerance/pass-comparison_tolerance_for_floating_point_range_lower_than_zero_exclusive",
-    "tolerance/pass-comparison_tolerance_for_floating_point_range_lower_than_zero_inclusive"
+    "tolerance/pass-comparison_tolerance_for_floating_point_range_lower_than_zero_inclusive",
+    "tolerance/pass-comparison_tolerance_for_floating_point_zero_lower_bound",
+    "tolerance/pass-comparison_tolerance_for_floating_point_zero_upper_bound"
   ],
   "disagreeing": [
     {
@@ -1156,90 +1170,6 @@
     },
     {
       "case": "restriction/pass-regex_patterns_work_in_OR_2_3",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_negative_high_number_lower_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_negative_high_number_upper_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_negative_low_number_lower_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_negative_low_number_upper_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_negative_one_lower_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_negative_one_upper_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_one_lower_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_one_upper_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_positive_high_number_lower_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_positive_high_number_upper_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_positive_low_number_lower_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_positive_low_number_upper_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_zero_lower_bound",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "tolerance/pass-comparison_tolerance_for_floating_point_zero_upper_bound",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"

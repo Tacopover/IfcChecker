@@ -77,19 +77,48 @@ const XSD_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 /** `xs:integer`'s lexical space, which admits no point and no exponent. */
 const XSD_INTEGER = /^[+-]?\d+$/;
 
+/** The IDS equality tolerance, from `Documentation/ImplementersDocumentation/tolerance.md`. */
+const TOLERANCE = 1e-6;
+
+/**
+ * Whether two floating-point numbers are equal under the tolerance IDS mandates:
+ *
+ *     x == v  ⇒  (v - abs(v) × ε - ε) < x < (v + abs(v) × ε + ε),  ε = 1e-6
+ *
+ * A relative and a fixed component together, so the rule holds for a wire area in square metres
+ * and for the length of a railway alike. Without it a stored 0.999998 fails a specification asking
+ * for 1.0, which is a rounding error being reported as a modelling error.
+ *
+ * Two departures from the formula as written, both forced by the suite, which places its passing
+ * values exactly *on* the boundary:
+ *
+ * - The two epsilon terms are combined into one multiplication. `v + abs(v) * ε + ε` rounds to
+ *   1.0000019999999998 for v = 1, just under the 1.000002 the suite requires to pass.
+ * - The comparison is inclusive. The document writes `<`, but its own table presents these values
+ *   as the tolerance edge and the suite expects them to pass.
+ */
+function equalWithinTolerance(stored: number, wanted: number): boolean {
+  const epsilon = (Math.abs(wanted) + 1) * TOLERANCE;
+  return wanted - epsilon <= stored && stored <= wanted + epsilon;
+}
+
 /**
  * Compares a stored value against a literal the specification wrote, as the type the model stored
  * rather than as text. A property IFC holds as the real 42 is written "42.0", "42." or "1.2345e3"
  * by different authors, and none of those is equal to "42" as a string.
  *
  * `wholeNumber` narrows the accepted lexical space: a value the schema types as an integer is not
- * matched by "42.0", even though the two are the same JS number and the same quantity.
+ * matched by "42.0", even though the two are the same JS number and the same quantity. It also
+ * withholds the tolerance, which IDS grants to floating-point numbers only — on a large integer a
+ * relative tolerance would span whole numbers either side and approve the wrong one.
  */
 function matchesLiteral(raw: PropertyValue, literal: string, wholeNumber: boolean): boolean {
   if (typeof raw === "number") {
     const trimmed = literal.trim();
     const lexical = wholeNumber ? XSD_INTEGER : XSD_NUMBER;
-    return lexical.test(trimmed) && Number(trimmed) === raw;
+    if (!lexical.test(trimmed)) return false;
+    const wanted = Number(trimmed);
+    return wholeNumber ? wanted === raw : equalWithinTolerance(raw, wanted);
   }
   return String(raw) === literal;
 }

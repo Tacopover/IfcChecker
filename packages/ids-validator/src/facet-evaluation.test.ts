@@ -526,3 +526,68 @@ describe("evaluateRequirement — numeric bounds", () => {
     expect(evaluateRequirement(element, between(4000, 5000, true)).passed).toBe(false);
   });
 });
+
+describe("evaluateRequirement — floating-point equality tolerance", () => {
+  const storedReal = (value: number) =>
+    makeElement({ propertySets: { Pset_WallCommon: { Foo: { value, dataType: "IFCREAL" } } } });
+  const wants = (literal: string) =>
+    propertyFacet({ baseName: "Foo", dataType: "IFCREAL", restriction: { kind: "exact", value: literal } });
+
+  // The boundary values from the implementers' document's own table, which is also where the
+  // conformance suite draws its pass/fail pairs from. Each pass sits exactly ON the edge, so
+  // these pin the arithmetic and not merely the idea of a tolerance.
+  const edges: [string, number, number][] = [
+    // literal, on the edge (passes), just past it (fails)
+    ["1.", 0.999998, 0.9999979],
+    ["1.", 1.000002, 1.0000021],
+    ["0.", 0.000001, 0.0000011],
+    ["0.", -0.000001, -0.0000011],
+    ["100000.", 99999.899999, 99999.8999989],
+    ["100000.", 100000.100001, 100000.1000011],
+    ["-1000000.", -1000001.000001, -1000001.0000011],
+    ["-1000000.", -999998.999999, -999998.9999989],
+    ["0.0000001", 0.0000011000001, 0.00000110000011],
+    ["-0.0000001", -0.0000011000001, -0.00000110000011],
+  ];
+
+  it.each(edges)("accepts %s at the tolerance edge (%s)", (literal, onEdge) => {
+    expect(evaluateRequirement(storedReal(onEdge), wants(literal)).passed).toBe(true);
+  });
+
+  it.each(edges)("rejects %s just beyond the tolerance edge (%s -> %s)", (literal, _onEdge, beyond) => {
+    expect(evaluateRequirement(storedReal(beyond), wants(literal)).passed).toBe(false);
+  });
+
+  it("applies the tolerance inside an enum restriction too", () => {
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCREAL",
+      restriction: { kind: "enum", values: ["7.5", "1.0"] },
+    });
+    expect(evaluateRequirement(storedReal(0.999998), facet).passed).toBe(true);
+    expect(evaluateRequirement(storedReal(0.9999979), facet).passed).toBe(false);
+  });
+
+  // A relative tolerance on a large integer would span the whole numbers either side of it and
+  // approve one of them. IDS grants the tolerance to floating-point numbers only.
+  it("withholds the tolerance from a value the schema types as an integer", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: 100000000, dataType: "IFCINTEGER" } } },
+    });
+    const facet = (value: string) =>
+      propertyFacet({ baseName: "Foo", dataType: "IFCINTEGER", restriction: { kind: "exact", value } });
+
+    expect(evaluateRequirement(element, facet("100000000")).passed).toBe(true);
+    expect(evaluateRequirement(element, facet("100000001")).passed).toBe(false);
+  });
+
+  it("leaves a string comparison exact", () => {
+    const element = makeElement({ propertySets: { Pset_WallCommon: { Foo: { value: "1.0" } } } });
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: null,
+      restriction: { kind: "exact", value: "1.000000" },
+    });
+    expect(evaluateRequirement(element, facet).passed).toBe(false);
+  });
+});
