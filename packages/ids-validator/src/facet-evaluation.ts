@@ -113,6 +113,22 @@ export function evaluateRequirement(
     return { passed: false, message: missingMessage(facet) };
   }
 
+  // `dataType` was carried through import and export and then ignored, so a specification asking
+  // for an IFCTIMEMEASURE was satisfied by a stored IFCMASSMEASURE of the same number.
+  //
+  // Only enforced where the parser reports the stored type. A multi-valued property carries its
+  // candidates instead of a measure type, and a value with no measure semantics carries none
+  // either — failing on "we do not know" would reject the list and enumerated properties the suite
+  // requires to pass, which trades one wrong answer for several.
+  if (facet.kind === "property" && facet.dataType !== null && slot?.dataType !== undefined) {
+    if (slot.dataType.toUpperCase() !== facet.dataType.toUpperCase()) {
+      return {
+        passed: false,
+        message: `${facetLabel(facet)} is stored as ${slot.dataType}, but the specification requires ${facet.dataType}`,
+      };
+    }
+  }
+
   if (facet.restriction) {
     const failure = restrictionFailure(facet, facet.restriction, slot as NormalizedValue);
     if (failure) return { passed: false, message: failure };

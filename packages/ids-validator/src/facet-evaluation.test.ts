@@ -220,6 +220,38 @@ describe("evaluateRequirement — property facet", () => {
   });
 });
 
+describe("evaluateRequirement — dataType", () => {
+  const facet = propertyFacet({ baseName: "Duration", dataType: "IFCTIMEMEASURE" });
+  const elementWith = (dataType?: string) =>
+    makeElement({ propertySets: { Pset_WallCommon: { Duration: { value: 2, dataType } } } });
+
+  it("fails a value stored as a different measure, however equal the number looks", () => {
+    const result = evaluateRequirement(elementWith("IFCMASSMEASURE"), facet);
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain("IFCMASSMEASURE");
+    expect(result.message).toContain("IFCTIMEMEASURE");
+  });
+
+  it("passes a value stored as the measure the specification names", () => {
+    expect(evaluateRequirement(elementWith("IFCTIMEMEASURE"), facet).passed).toBe(true);
+  });
+
+  it("ignores case, which hand-written IDS files are inconsistent about", () => {
+    expect(evaluateRequirement(elementWith("IfcTimeMeasure"), facet).passed).toBe(true);
+  });
+
+  // A multi-valued property carries candidates instead of a measure type. Failing on an unknown
+  // type would reject every list and enumerated property a specification names by data type.
+  it("does not enforce a type the parser did not report", () => {
+    expect(evaluateRequirement(elementWith(undefined), facet).passed).toBe(true);
+  });
+
+  it("does not apply to an attribute facet, which IDS gives no dataType", () => {
+    const element = makeElement({ attributes: { Tag: { value: "W-001" } } });
+    expect(evaluateRequirement(element, attributeFacet({ name: "Tag" })).passed).toBe(true);
+  });
+});
+
 describe("evaluateRequirement — prohibited cardinality", () => {
   it("passes an attribute facet when the value is absent and fails when it is filled in", () => {
     const facet = attributeFacet({ name: "Tag", cardinality: "prohibited" });
