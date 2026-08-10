@@ -445,3 +445,230 @@ describe("evaluateRequirement — prohibited cardinality", () => {
     expect(evaluateRequirement(makeElement({ attributes: { Tag: { value: "W-1" } } }), facet).passed).toBe(false);
   });
 });
+
+describe("evaluateRequirement — numeric bounds", () => {
+  const stored = (value: number) =>
+    makeElement({ propertySets: { Pset_WallCommon: { Foo: { value, dataType: "IFCREAL" } } } });
+  const between = (min: number, max: number, inclusive: boolean) =>
+    propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCREAL",
+      restriction: {
+        kind: "bounds",
+        min: { value: min, inclusive },
+        max: { value: max, inclusive },
+      },
+    });
+
+  it.each([0, 5, 10])("accepts %s inside an inclusive 0..10", (value) => {
+    expect(evaluateRequirement(stored(value), between(0, 10, true)).passed).toBe(true);
+  });
+
+  it.each([-0.1, 100])("rejects %s outside an inclusive 0..10", (value) => {
+    expect(evaluateRequirement(stored(value), between(0, 10, false)).passed).toBe(false);
+  });
+
+  it("excludes both edges when the bounds are exclusive", () => {
+    expect(evaluateRequirement(stored(5), between(0, 10, false)).passed).toBe(true);
+    expect(evaluateRequirement(stored(0), between(0, 10, false)).passed).toBe(false);
+    expect(evaluateRequirement(stored(10), between(0, 10, false)).passed).toBe(false);
+  });
+
+  it("checks only the edge that is stated", () => {
+    const atLeast = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCREAL",
+      restriction: { kind: "bounds", min: { value: 0, inclusive: true }, max: null },
+    });
+    expect(evaluateRequirement(stored(1e9), atLeast).passed).toBe(true);
+    expect(evaluateRequirement(stored(-1), atLeast).passed).toBe(false);
+  });
+
+  // The tolerance rule that governs equality explicitly does not reach ranges, which is what lets
+  // an author write a range to mean "exactly this, no tolerance". A tolerant bound would approve
+  // both of these, and the suite states both as documents that must fail.
+  it("compares exactly, with none of the equality tolerance", () => {
+    const atLeastZero = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCREAL",
+      restriction: { kind: "bounds", min: { value: 0, inclusive: true }, max: null },
+    });
+    expect(evaluateRequirement(stored(-1e-7), atLeastZero).passed).toBe(false);
+
+    const exactly42 = between(42, 42, true);
+    expect(evaluateRequirement(stored(42), exactly42).passed).toBe(true);
+    expect(evaluateRequirement(stored(42.0000001), exactly42).passed).toBe(false);
+  });
+
+  it("fails a value that is not a number rather than stringifying it into the range", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: "5" } } },
+    });
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: null,
+      restriction: {
+        kind: "bounds",
+        min: { value: 0, inclusive: true },
+        max: { value: 10, inclusive: true },
+      },
+    });
+    const result = evaluateRequirement(element, facet);
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain(">= 0");
+  });
+
+  it("passes when any candidate of a multi-valued property is in range", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: "1000, 3000", values: [1000, 3000] } } },
+    });
+    expect(evaluateRequirement(element, between(2000, 4000, true)).passed).toBe(true);
+    expect(evaluateRequirement(element, between(4000, 5000, true)).passed).toBe(false);
+  });
+});
+
+describe("evaluateRequirement — floating-point equality tolerance", () => {
+  const storedReal = (value: number) =>
+    makeElement({ propertySets: { Pset_WallCommon: { Foo: { value, dataType: "IFCREAL" } } } });
+  const wants = (literal: string) =>
+    propertyFacet({ baseName: "Foo", dataType: "IFCREAL", restriction: { kind: "exact", value: literal } });
+
+  // The boundary values from the implementers' document's own table, which is also where the
+  // conformance suite draws its pass/fail pairs from. Each pass sits exactly ON the edge, so
+  // these pin the arithmetic and not merely the idea of a tolerance.
+  const edges: [string, number, number][] = [
+    // literal, on the edge (passes), just past it (fails)
+    ["1.", 0.999998, 0.9999979],
+    ["1.", 1.000002, 1.0000021],
+    ["0.", 0.000001, 0.0000011],
+    ["0.", -0.000001, -0.0000011],
+    ["100000.", 99999.899999, 99999.8999989],
+    ["100000.", 100000.100001, 100000.1000011],
+    ["-1000000.", -1000001.000001, -1000001.0000011],
+    ["-1000000.", -999998.999999, -999998.9999989],
+    ["0.0000001", 0.0000011000001, 0.00000110000011],
+    ["-0.0000001", -0.0000011000001, -0.00000110000011],
+  ];
+
+  it.each(edges)("accepts %s at the tolerance edge (%s)", (literal, onEdge) => {
+    expect(evaluateRequirement(storedReal(onEdge), wants(literal)).passed).toBe(true);
+  });
+
+  it.each(edges)("rejects %s just beyond the tolerance edge (%s -> %s)", (literal, _onEdge, beyond) => {
+    expect(evaluateRequirement(storedReal(beyond), wants(literal)).passed).toBe(false);
+  });
+
+  it("applies the tolerance inside an enum restriction too", () => {
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCREAL",
+      restriction: { kind: "enum", values: ["7.5", "1.0"] },
+    });
+    expect(evaluateRequirement(storedReal(0.999998), facet).passed).toBe(true);
+    expect(evaluateRequirement(storedReal(0.9999979), facet).passed).toBe(false);
+  });
+
+  // A relative tolerance on a large integer would span the whole numbers either side of it and
+  // approve one of them. IDS grants the tolerance to floating-point numbers only.
+  it("withholds the tolerance from a value the schema types as an integer", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: 100000000, dataType: "IFCINTEGER" } } },
+    });
+    const facet = (value: string) =>
+      propertyFacet({ baseName: "Foo", dataType: "IFCINTEGER", restriction: { kind: "exact", value } });
+
+    expect(evaluateRequirement(element, facet("100000000")).passed).toBe(true);
+    expect(evaluateRequirement(element, facet("100000001")).passed).toBe(false);
+  });
+
+  it("leaves a string comparison exact", () => {
+    const element = makeElement({ propertySets: { Pset_WallCommon: { Foo: { value: "1.0" } } } });
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: null,
+      restriction: { kind: "exact", value: "1.000000" },
+    });
+    expect(evaluateRequirement(element, facet).passed).toBe(false);
+  });
+});
+
+describe("evaluateRequirement — unit conversion", () => {
+  const MILLIMETRES = { IFCLENGTHMEASURE: 1e-3 };
+  const storedLength = (value: number | undefined, values?: number[]) =>
+    makeElement({
+      propertySets: {
+        Pset_WallCommon: {
+          Foo: { value: value ?? "1000, 3000", values, dataType: "IFCLENGTHMEASURE" },
+        },
+      },
+    });
+  const wantsMetres = (literal: string) =>
+    propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCLENGTHMEASURE",
+      restriction: { kind: "exact", value: literal },
+    });
+
+  // The pair the suite states: IDS nominates metres, so a millimetre model storing 2000 satisfies
+  // "2" and one storing 2 does not. Comparing the raw numbers gets both exactly backwards, and the
+  // "2 stored, 2 asked" case is a false pass — the direction that matters most.
+  it("passes 2000 mm against a required 2 m", () => {
+    expect(evaluateRequirement(storedLength(2000), wantsMetres("2"), MILLIMETRES).passed).toBe(true);
+  });
+
+  it("fails 2 mm against a required 2 m", () => {
+    expect(evaluateRequirement(storedLength(2), wantsMetres("2"), MILLIMETRES).passed).toBe(false);
+  });
+
+  it("compares raw when the model declares no scaling for that measure", () => {
+    expect(evaluateRequirement(storedLength(2), wantsMetres("2"), {}).passed).toBe(true);
+    expect(evaluateRequirement(storedLength(2000), wantsMetres("2"), {}).passed).toBe(false);
+  });
+
+  it("scales every candidate of a multi-valued property", () => {
+    const element = storedLength(undefined, [1000, 3000, 5000]);
+    expect(evaluateRequirement(element, wantsMetres("3"), MILLIMETRES).passed).toBe(true);
+    expect(evaluateRequirement(element, wantsMetres("2"), MILLIMETRES).passed).toBe(false);
+  });
+
+  it("scales before a bounds comparison too", () => {
+    const between = (min: number, max: number) =>
+      propertyFacet({
+        baseName: "Foo",
+        dataType: "IFCLENGTHMEASURE",
+        restriction: {
+          kind: "bounds",
+          min: { value: min, inclusive: true },
+          max: { value: max, inclusive: true },
+        },
+      });
+    expect(evaluateRequirement(storedLength(3000), between(1, 5), MILLIMETRES).passed).toBe(true);
+    expect(evaluateRequirement(storedLength(3000), between(1000, 5000), MILLIMETRES).passed).toBe(false);
+  });
+
+  // The scale belongs to the measure the model stored, and a slot with no measure type has no
+  // unit to convert from — scaling one anyway would rescale plain reals and counts.
+  it("leaves a value with no stored measure type alone", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: 2000 } } },
+    });
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: null,
+      restriction: { kind: "exact", value: "2000" },
+    });
+    expect(evaluateRequirement(element, facet, MILLIMETRES).passed).toBe(true);
+  });
+
+  it("leaves a non-numeric value alone", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: "REI60", dataType: "IFCLENGTHMEASURE" } } },
+    });
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCLENGTHMEASURE",
+      restriction: { kind: "exact", value: "REI60" },
+    });
+    expect(evaluateRequirement(element, facet, MILLIMETRES).passed).toBe(true);
+  });
+});

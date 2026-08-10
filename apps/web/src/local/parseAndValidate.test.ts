@@ -65,6 +65,9 @@ describe("parseFile", () => {
       errorMessage: null,
       elements,
       idsScope: elements,
+      // An engine that reports no scaling leaves the model comparable as authored, which is what
+      // an all-SI file means — not "units were never looked at".
+      unitScales: {},
       modelStructure,
     });
     expect(validateBySpecification).not.toHaveBeenCalled();
@@ -119,11 +122,11 @@ describe("validateParsedModels", () => {
       { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
     ];
     const summaries = validateParsedModels(
-      [{ key: "model-a.ifc:12:99", fileName: "model-a.ifc", idsScope: elements }],
+      [{ key: "model-a.ifc:12:99", fileName: "model-a.ifc", idsScope: elements, unitScales: {} }],
       "<ids/>"
     );
 
-    expect(validateBySpecification).toHaveBeenCalledWith(elements, "<ids/>");
+    expect(validateBySpecification).toHaveBeenCalledWith(elements, "<ids/>", {});
     expect(summaries[0].violations).toEqual([
       expect.objectContaining({
         fileName: "model-a.ifc",
@@ -154,8 +157,8 @@ describe("validateParsedModels", () => {
 
     const [summary] = validateParsedModels(
       [
-        { key: "model.ifc:10:1", fileName: "model.ifc", idsScope: [] },
-        { key: "model.ifc:20:2", fileName: "model.ifc", idsScope: [] },
+        { key: "model.ifc:10:1", fileName: "model.ifc", idsScope: [], unitScales: {} },
+        { key: "model.ifc:20:2", fileName: "model.ifc", idsScope: [], unitScales: {} },
       ],
       "<ids/>"
     );
@@ -171,8 +174,8 @@ describe("validateParsedModels", () => {
 
     const [summary] = validateParsedModels(
       [
-        { key: "a", fileName: "a.ifc", idsScope: [] },
-        { key: "b", fileName: "b.ifc", idsScope: [] },
+        { key: "a", fileName: "a.ifc", idsScope: [], unitScales: {} },
+        { key: "b", fileName: "b.ifc", idsScope: [], unitScales: {} },
       ],
       "<ids/>"
     );
@@ -188,7 +191,7 @@ describe("validateParsedModels", () => {
     ]);
     validateBySpecification.mockReturnValueOnce([outcome({ name: "Walls are fire rated" })]);
 
-    const summaries = validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [] }], "<ids/>");
+    const summaries = validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [], unitScales: {} }], "<ids/>");
 
     expect(summaries).toHaveLength(1);
     expect(summaries[0]).toMatchObject({
@@ -211,7 +214,7 @@ describe("validateParsedModels", () => {
       outcome({ name: "Load-bearing walls", checked: false, unsupported }),
     ]);
 
-    const [summary] = validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [] }], "<ids/>");
+    const [summary] = validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [], unitScales: {} }], "<ids/>");
 
     // Whether a rule can run is decided by the rule set, not by any one model, so it survives
     // the merge across files rather than being recomputed per outcome.
@@ -223,7 +226,7 @@ describe("validateParsedModels", () => {
     parseIdsXml.mockReturnValue([]);
 
     expect(() =>
-      validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [] }], "<not-really-ids/>")
+      validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [], unitScales: {} }], "<not-really-ids/>")
     ).toThrow(InvalidIdsRuleSetError);
     expect(validateBySpecification).not.toHaveBeenCalled();
   });

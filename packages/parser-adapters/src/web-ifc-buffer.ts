@@ -10,8 +10,55 @@ import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter
 import { identifyEntity } from "./entity-identity.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
 import { normalizePropertyValue, normalizeValue } from "./normalize-property-value.js";
+import { UnitScaleCollector, siUnitScale } from "./unit-scales.js";
 
 type WebIfcLine = Record<string, any>;
+
+/**
+ * The SI factor for one entry of an `IfcUnitAssignment`, or `null` when this engine cannot say.
+ *
+ * ifc-lite hands its whole unit graph over already resolved; web-ifc hands back lines, so the two
+ * kinds that carry a scale are read here. An `IfcDerivedUnit` is composed of several units with
+ * exponents and is deliberately not resolved — returning `null` leaves the measure unscaled, which
+ * matches what the engine can honestly claim to know.
+ */
+function unitEntryScale(ifcApi: WebIFC.IfcAPI, modelID: number, unit: WebIfcLine): [string, number] | null {
+  const unitType = stripEnumDots(unit.UnitType);
+  if (unitType === null) return null;
+
+  if (unit.type === WebIFC.IFCSIUNIT) {
+    const name = stripEnumDots(unit.Name);
+    if (name === null) return null;
+    const scale = siUnitScale(stripEnumDots(unit.Prefix), name);
+    return scale === undefined ? null : [unitType, scale];
+  }
+
+  if (unit.type === WebIFC.IFCCONVERSIONBASEDUNIT) {
+    // The factor is an IfcMeasureWithUnit: a number, and the unit that number is itself in.
+    const factor = ifcApi.GetLine(modelID, unit.ConversionFactor?.value, true) as WebIfcLine | null;
+    const component = normalizePropertyValue(factor?.ValueComponent);
+    if (typeof component !== "number" || !factor?.UnitComponent) return null;
+    const base = unitEntryScale(ifcApi, modelID, factor.UnitComponent as WebIfcLine);
+    return base === null ? null : [unitType, component * base[1]];
+  }
+
+  return null;
+}
+
+function webIfcUnitScales(ifcApi: WebIFC.IfcAPI, modelID: number): (unitType: string) => number | undefined {
+  const byUnitType = new Map<string, number>();
+  const assignmentIds = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCUNITASSIGNMENT);
+
+  for (let i = 0; i < assignmentIds.size(); i++) {
+    const assignment = ifcApi.GetLine(modelID, assignmentIds.get(i), true) as WebIfcLine;
+    for (const unit of assignment.Units ?? []) {
+      const resolved = unitEntryScale(ifcApi, modelID, unit as WebIfcLine);
+      if (resolved) byUnitType.set(resolved[0], resolved[1]);
+    }
+  }
+
+  return (unitType) => byUnitType.get(unitType);
+}
 
 function stripEnumDots(value: unknown): string | null {
   const normalized = normalizePropertyValue(value);
@@ -135,6 +182,7 @@ export async function parseWebIfcBuffer(
   try {
     const idsScope: NormalizedElement[] = [];
     const elementTypeByExpressId = new Map<number, string>();
+    const unitScales = new UnitScaleCollector(webIfcUnitScales(ifcApi, modelID));
 
     // Element expressId -> the property-definition lines that describe it.
     // Built once by walking the relationships; the previous shape re-scanned
@@ -195,9 +243,9 @@ export async function parseWebIfcBuffer(
           // Only NominalValue, so only IfcPropertySingleValue: the other five subtypes still read
           // as absent here where ifc-lite reads them. `values` is therefore never populated on this
           // engine, and adapter-parity.test.ts states that gap rather than leaving it to be found.
-          props[propName] = normalizeValue(prop.NominalValue, {
-            dataType: measureTypeOf(prop.NominalValue),
-          });
+          const dataType = measureTypeOf(prop.NominalValue);
+          unitScales.observe(dataType);
+          props[propName] = normalizeValue(prop.NominalValue, { dataType });
         }
         entry = [psetName, props];
       }
@@ -330,7 +378,14 @@ export async function parseWebIfcBuffer(
     // the element list keeps exactly the order it had before the wider scope
     // existed — the two engines have to agree element-for-element.
     const elements = idsScope.filter((entity) => reviewerTypeNames.has(entity.ifcType));
-    return { elements, idsScope, parseMs: performance.now() - start, modelStructure, unrecognizedTypes: unrecognized };
+    return {
+      elements,
+      idsScope,
+      unitScales: unitScales.result(),
+      parseMs: performance.now() - start,
+      modelStructure,
+      unrecognizedTypes: unrecognized,
+    };
   } finally {
     ifcApi.CloseModel(modelID);
   }

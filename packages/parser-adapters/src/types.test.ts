@@ -14,6 +14,7 @@ class FakeAdapter implements IfcParserAdapter {
     return {
       elements: [wall],
       idsScope: [wall],
+      unitScales: {},
       parseMs: 1,
       modelStructure: null,
       unrecognizedTypes: [],

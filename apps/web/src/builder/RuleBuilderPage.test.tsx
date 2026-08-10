@@ -73,6 +73,7 @@ function Seed({ models, files }: { models: SeedModel[]; files: File[] }) {
         elements: failed ? [] : (model.elements ?? ELEMENTS),
         idsScope: failed ? [] : (model.elements ?? ELEMENTS),
         modelStructure: null,
+        unitScales: {},
       });
     }
     // Seeding once, on mount: re-running would re-add files the test then works against.

@@ -1,4 +1,4 @@
-import type { NormalizedElement, Severity } from "@ifc-qa/shared-types";
+import type { NormalizedElement, Severity, UnitScales } from "@ifc-qa/shared-types";
 import type { UnsupportedConstruct } from "./parse-ids.js";
 import { isEvaluable, parseIdsXml } from "./parse-ids.js";
 import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js";
@@ -49,7 +49,13 @@ export interface SpecificationOutcome {
  */
 export function validateBySpecification(
   elements: NormalizedElement[],
-  idsXml: string
+  idsXml: string,
+  /**
+   * What the model's measures must be multiplied by to reach the SI units IDS compares in.
+   * Empty means "already SI", which is both the correct reading of a file that declares no unit
+   * and the honest answer from a caller that has no unit information.
+   */
+  unitScales: UnitScales = {}
 ): SpecificationOutcome[] {
   return parseIdsXml(idsXml).map((specification) => {
     // Refused rather than run: evaluating a half-understood applicability silently checks the
@@ -84,7 +90,7 @@ export function validateBySpecification(
 
       const before = violations.length;
       for (const facet of specification.requirements) {
-        const result = evaluateRequirement(element, facet);
+        const result = evaluateRequirement(element, facet, unitScales);
         if (result.passed) continue;
         violations.push({
           elementGlobalId: element.globalId,
@@ -131,6 +137,10 @@ function cardinalityFailure(
   return null;
 }
 
-export function validateElements(elements: NormalizedElement[], idsXml: string): IdsViolation[] {
-  return validateBySpecification(elements, idsXml).flatMap((outcome) => outcome.violations);
+export function validateElements(
+  elements: NormalizedElement[],
+  idsXml: string,
+  unitScales: UnitScales = {}
+): IdsViolation[] {
+  return validateBySpecification(elements, idsXml, unitScales).flatMap((outcome) => outcome.violations);
 }

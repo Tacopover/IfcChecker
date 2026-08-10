@@ -285,3 +285,37 @@ describe("adapter parity", () => {
     expect(fromIfcLite.elementCounts.IFCSPACE).toBeUndefined();
   });
 });
+
+// Unit conversion is the one place a parser disagreement becomes a *false pass*: IDS states a
+// length in metres, so a millimetre model that reports no scaling has every numeric property check
+// compared 1000x wrong and in the approving direction. Both engines must agree, and both fixtures
+// below declare .MILLI. .METRE. like every real Dutch model does.
+describe("adapter parity — unit scales", () => {
+  it("both engines resolve the same SI scale for a millimetre model", async () => {
+    for (const fixture of ["minimal-wall.ifc", "multi-valued-properties.ifc"]) {
+      const path = fixturePath(fixture);
+      const fromWebIfc = (await new WebIfcAdapter().parse(path)).unitScales;
+      const fromIfcLite = (await new IfcLiteAdapter().parse(path)).unitScales;
+
+      expect(fromIfcLite).toEqual(fromWebIfc);
+    }
+  });
+
+  it("a length measure in a millimetre model scales by 1e-3", async () => {
+    const path = fixturePath("multi-valued-properties.ifc");
+    const fromIfcLite = (await new IfcLiteAdapter().parse(path)).unitScales;
+    const fromWebIfc = (await new WebIfcAdapter().parse(path)).unitScales;
+
+    expect(fromIfcLite.IFCLENGTHMEASURE).toBeCloseTo(1e-3, 12);
+    expect(fromWebIfc.IFCLENGTHMEASURE).toBeCloseTo(1e-3, 12);
+  });
+
+  // Only measures that actually rescale are listed, so a map with no entry for a measure means
+  // "already SI" rather than "not looked at" — the two must not be confused at the read site.
+  it("records nothing for a measure the file states in SI", async () => {
+    const path = fixturePath("multi-valued-properties.ifc");
+    const { unitScales } = await new IfcLiteAdapter().parse(path);
+
+    expect(Object.values(unitScales).every((scale) => scale !== 1)).toBe(true);
+  });
+});

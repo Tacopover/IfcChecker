@@ -622,3 +622,160 @@ Two real divergences the parity test now pins, on a new `multi-valued-properties
 - **attribute references and selects, 3** — a name-only check on a reference-valued attribute must
   *pass*, while a value check against one must *fail*. Needs a slot that means "present, not
   comparable", which is the next thing `NormalizedValue` would grow.
+
+## Bounds and tolerance — landed and measured 2026-08-10
+
+Two landings, separately measured. **158 → 167 → 181 agreed of 334.** All 23 cases moved
+false fail → agreed; **the false pass stayed at 1 throughout**, and no case was lost at either step.
+`tolerance` is now 36/36, `restriction` 21/25, `attribute` 47/56.
+
+| | agreed | false passes | false fails | refused |
+| --- | --- | --- | --- | --- |
+| before | 158 | 1 | 42 | 133 |
+| + bounds | 167 | 1 | 33 | 133 |
+| + tolerance | **181** | **1** | 19 | 133 |
+
+Neither needed anything new from the parser: `NormalizedValue` already carried the values both
+mechanisms compare. **No adapter change, and no `adapter-parity` change** — the divergence pins from
+the value-typing stage stand untouched.
+
+### They are two rules, and the second does not apply to the first
+
+The single most important thing this stage turned up, and it is stated outright in
+`Documentation/ImplementersDocumentation/tolerance.md`: **tolerance does not apply to ranges.**
+Equality gets a tolerance; `minInclusive` and friends are compared exactly.
+
+That is not an oversight in the specification — it is what lets an author write `v <= x <= v` to
+mean "exactly v, no tolerance at all", or a range of ±1e-10 to state a tolerance of their own. The
+suite pins it from the other side: a `minInclusive` of 0 against a stored -1e-7 must **fail**, and
+any tolerance on the bound would approve it. Conflating the two would have bought a false pass in
+exchange for the false fails being fixed.
+
+### The formula has to be transcribed carefully
+
+    x == v  ⇒  (v - abs(v) × ε - ε) < x < (v + abs(v) × ε + ε),   ε = 1e-6
+
+Written verbatim in doubles, this gets **12 of the 28 equality cases wrong**, because the suite
+places its passing values exactly *on* the boundary and the expression does not round to them:
+`v + abs(v) * ε + ε` is 1.0000019999999998 for v = 1, just under the 1.000002 that must pass.
+
+Two departures, both forced by measurement rather than chosen:
+
+- **Combine the epsilon terms into one multiplication** — `(abs(v) + 1) * ε`. Mathematically
+  identical, and it lands on the double the literal parses to.
+- **Compare inclusively.** The document writes `<`, but its own table presents those values as the
+  tolerance edge and the suite expects them to pass.
+
+With both, all 28 equality cases agree. Four variants were measured before settling: the verbatim
+form (12 wrong), the delta form `abs(x-v) <= abs(v)*ε + ε` (8 wrong), the same strict (10 wrong),
+and Python's `math.isclose` max-form (12 wrong). The test pins the boundary pairs from the
+document's own table, in both directions, so a future refactor cannot quietly re-round it.
+
+**Integers are excluded.** IDS grants the tolerance to floating-point numbers, and on a large
+integer a relative tolerance spans the whole numbers either side — 1e-6 of 100,000,000 is 100.
+`holdsWholeNumber` already answered this question for the lexical space, so it answers it here too.
+
+### Bounds
+
+`ParsedRestriction` gains `{ kind: "bounds"; min; max }`, each edge carrying `inclusive`. A bound
+whose value is not a number leaves the edge unset rather than becoming `NaN`, which would answer
+`false` to every comparison and reject silently. A non-numeric *value* is outside every range rather
+than being stringified into one.
+
+`import-ids` is unchanged and still passes bounds through verbatim: no `ConditionDraft` operator
+states a range, and its own reader refuses a non-string `base` before bounds reach it. `build-ids`
+learned to emit them (base `xs:double`) so the union stays total.
+
+**Not swept in, deliberately:** the 3 `length`/`minLength`/`maxLength` cases and the 1 regex-OR case
+sit in the same `restriction` group and are separate mechanisms. They still compile to the empty
+enumeration that fails loudly.
+
+### What is left, and what it is worth
+
+19 false fails and 1 false pass, against 133 refusals.
+
+- **units, 6** — including **the last false pass** (`unit_conversions…1_2`). Needs the project's
+  `IfcUnitAssignment`; the fixtures declare millimetres and IDS nominates metres. `NormalizedValue`
+  carries a `unit` field that nothing reads yet. This is the next thing by the false-passes-first
+  rule, and the first of the remaining items that needs **new data out of the parser** — so both
+  adapters and `adapter-parity` are in scope for it, unlike this stage.
+- **`length`/`minLength`/`maxLength`, 3**; **a regex OR, 1**.
+- **`entity` IFC2X3 type mapping, 2**; **quantities, material and predefined property sets, 4** —
+  `IfcElementQuantity` is read by neither engine.
+- **attribute references and selects, 3** — a name-only check on a reference-valued attribute must
+  *pass*, a value check against one must *fail*.
+
+## Units — landed and measured 2026-08-10
+
+**181 → 186 agreed of 334, and false passes 1 → 0.** The board no longer has a single case where
+we approve what must fail. 15 false fails and 133 refusals remain.
+
+| | agreed | false passes | false fails |
+| --- | --- | --- | --- |
+| before | 181 | 1 | 19 |
+| + unit conversion | 183 | **0** | 18 |
+| + numeric candidates | **186** | 0 | 15 |
+
+### The real prize is not the 5 cases
+
+The 37 MB model is authored in millimetres, and resolves `IFCLENGTHMEASURE` and
+`IFCPOSITIVELENGTHMEASURE` at 1e-3. **Every length property check ever run against it was compared
+1000× wrong** — and wrong in the approving direction whenever the raw figure happened to match the
+literal. The conformance suite scores this as 5 cases; on a real Dutch model it is most numeric
+property checks there are.
+
+### Model-level, not per-value
+
+A file declares its units once, so `UnitScales` is a `Record<measureType, factor>` on the parse
+result rather than a field on all 17,797 property slots. `validateBySpecification` takes it as a
+third argument, defaulting to `{}`.
+
+Only measures that actually rescale are listed, so **absent means "already SI"** — which is also
+what IFC means by an unstated unit, and what an engine with no unit information honestly reports.
+One rule, one read site.
+
+`NormalizedValue.unit` was **never populated** — the plan's note that it "carries a `unit` field
+nothing reads yet" was half right. `ifc-lite-buffer.ts` passes `prop.unit`, but
+`extractPropertiesOnDemand` returns no such field, so it was always `undefined`. Left alone rather
+than removed; it is the right place for a per-property `Unit` override if one is ever needed.
+
+### Both engines, because the engine picker must not decide the verdict
+
+- **ifc-lite** already resolves the whole `IfcUnitAssignment` — SI prefixes, `IfcDerivedUnit`,
+  `IfcConversionBasedUnit`, `IfcMonetaryUnit` — pinned against parity vectors shared with its Rust
+  core. `extractProjectUnits` is read rather than re-derived.
+- **web-ifc** has no equivalent, so `web-ifc-buffer.ts` reads `IfcSIUnit` (prefix × name, squared
+  for an area and cubed for a volume, with `GRAM` carrying the 1e-3 that makes SI's base the
+  kilogram) and `IfcConversionBasedUnit` (a factor and the unit that factor is in) itself.
+  `IfcDerivedUnit` is not resolved and leaves the measure unscaled.
+- Both share `measureUnit` for measure → unit type, so the ~90-row IFC measure table is stated in
+  neither. `UnitScaleCollector` builds the map from the `dataType`s the adapter actually sees.
+
+`adapter-parity.test.ts` now asserts the two agree on every fixture's scales. This was not optional:
+both engines are user-selectable on the Validate page, so leaving web-ifc out would have made the
+engine picker decide whether a millimetre model passes — a false pass reachable from the UI.
+
+### Numeric candidates
+
+The three bounded-property cases did not move on unit conversion alone. ifc-lite hands back the
+candidates as the literals the file wrote — `["1000", "5000", "3000"]` — so a bounded length was a
+*string*, and nothing scaled it. Read back as numbers wherever the slot states a measure type,
+which also brings bounded values under the same lexical casting and tolerance as a single value.
++3, no false pass added.
+
+### Costs
+
+Parse on the 37 MB model: **2,540 ms → 2,391–2,658 ms across three runs.** Noise; nothing added.
+The unit graph is a handful of entities and the collector memoizes per measure type.
+
+### What is left
+
+- **the table case, 1.** `IfcPropertyTableValue` arrives with **no `dataType`**, so there is
+  nothing to key a conversion on. Converting on the strength of what the *rule* asked for rather
+  than what the model stored is exactly the guess this codebase refuses elsewhere, so it stays an
+  honest false fail. Blocked on ifc-lite reporting a measure type for table properties.
+- **`length`/`minLength`/`maxLength`, 3**; **a regex OR, 1**; **`entity` IFC2X3 type mapping, 2**;
+  **quantities, material and predefined property sets, 4**; **attribute references and selects, 3**.
+- **90 of the 133 refusals** are the missing facets — classification, material, partOf,
+  requirement-side entity. Still the largest number on the board, and now the only item that needs
+  new data out of the parser.

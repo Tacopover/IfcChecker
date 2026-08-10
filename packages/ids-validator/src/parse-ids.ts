@@ -1,10 +1,17 @@
 import { XMLParser } from "fast-xml-parser";
 import { isNormalizableEntityType } from "@ifc-qa/shared-types";
 
+/** One edge of a numeric range. `inclusive` separates `minInclusive` from `minExclusive`. */
+export interface ParsedBound {
+  value: number;
+  inclusive: boolean;
+}
+
 export type ParsedRestriction =
   | { kind: "exact"; value: string }
   | { kind: "enum"; values: string[] }
-  | { kind: "pattern"; source: string; regex: RegExp };
+  | { kind: "pattern"; source: string; regex: RegExp }
+  | { kind: "bounds"; min: ParsedBound | null; max: ParsedBound | null };
 
 export type FacetCardinality = "required" | "optional" | "prohibited";
 
@@ -174,7 +181,47 @@ function readCardinality(node: OrderedNode): FacetCardinality {
 }
 
 /** The XSD facets a `ParsedRestriction` can carry; `annotation` is prose we can lose safely. */
-const RESTRICTION_FACETS_READ = ["pattern", "enumeration", "annotation"];
+const RESTRICTION_FACETS_READ = [
+  "pattern",
+  "enumeration",
+  "annotation",
+  "minInclusive",
+  "maxInclusive",
+  "minExclusive",
+  "maxExclusive",
+];
+
+/** The four bound facets, paired with the edge each one sets. */
+const BOUND_FACETS = [
+  { tag: "minInclusive", edge: "min", inclusive: true },
+  { tag: "minExclusive", edge: "min", inclusive: false },
+  { tag: "maxInclusive", edge: "max", inclusive: true },
+  { tag: "maxExclusive", edge: "max", inclusive: false },
+] as const;
+
+/**
+ * The numeric range a restriction states, or `null` when it states none.
+ *
+ * A bound whose `value` is not a number leaves the edge unset rather than becoming `NaN`, which
+ * every comparison would answer `false` to — a malformed bound would then reject silently instead
+ * of being reported as the unreadable facet it is.
+ */
+function readBounds(restrictionChildren: OrderedNode[]): ParsedRestriction | null {
+  let min: ParsedBound | null = null;
+  let max: ParsedBound | null = null;
+
+  for (const { tag, edge, inclusive } of BOUND_FACETS) {
+    const node = nodesNamed(restrictionChildren, tag)[0];
+    if (!node) continue;
+    const raw = String(attributesOf(node)["@_value"] ?? "").trim();
+    if (raw === "" || !Number.isFinite(Number(raw))) continue;
+    const bound: ParsedBound = { value: Number(raw), inclusive };
+    if (edge === "min") min = bound;
+    else max = bound;
+  }
+
+  return min === null && max === null ? null : { kind: "bounds", min, max };
+}
 
 function parseRestriction(
   facetChildren: OrderedNode[],
@@ -203,7 +250,21 @@ function parseRestriction(
   const patternNode = nodesNamed(restrictionChildren, "pattern")[0];
   if (patternNode) return patternRestriction(String(attributesOf(patternNode)["@_value"] ?? ""));
 
-  // A restriction built only from bounds we cannot read leaves no permitted values, so every
+  const bounds = readBounds(restrictionChildren);
+  if (bounds) {
+    // XSD would intersect the two, and a dropped enumeration is a constraint we stop enforcing.
+    // No file in the conformance suite writes both, so this is reported rather than implemented.
+    if (nodesNamed(restrictionChildren, "enumeration").length > 0) {
+      unsupported.push({
+        section: "requirements",
+        construct: "xs:enumeration",
+        description: "Combines an enumeration with a numeric range; only the range is checked.",
+      });
+    }
+    return bounds;
+  }
+
+  // A restriction built only from facets we cannot read leaves no permitted values, so every
   // element fails it loudly. That is the right direction to be wrong in, and it is reported above.
   return {
     kind: "enum",

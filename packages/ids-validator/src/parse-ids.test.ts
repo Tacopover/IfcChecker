@@ -213,7 +213,7 @@ describe("parseIdsXml", () => {
     expect(isEvaluable(spec)).toBe(false);
   });
 
-  it("reports numeric bounds it cannot represent", () => {
+  it("reads a numeric bound on a property rather than reporting it unsupported", () => {
     const [spec] = parseIdsXml(
       specificationXml(`<property dataType="IFCREAL">
         <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
@@ -222,10 +222,12 @@ describe("parseIdsXml", () => {
       </property>`)
     );
 
-    expect(spec.unsupported).toContainEqual(
-      expect.objectContaining({ section: "requirements", construct: "xs:maxInclusive" })
-    );
-    // Still evaluable — the bound is lost loudly (nothing satisfies it), not silently.
+    expect(spec.requirements[0].restriction).toEqual({
+      kind: "bounds",
+      min: null,
+      max: { value: 0.24, inclusive: true },
+    });
+    expect(spec.unsupported).toEqual([]);
     expect(isEvaluable(spec)).toBe(true);
   });
 
@@ -256,5 +258,64 @@ describe("parseIdsXml", () => {
 
   it("returns an empty list for a document with no specifications", () => {
     expect(parseIdsXml("<ids><specifications></specifications></ids>")).toEqual([]);
+  });
+});
+
+describe("parseIdsXml — numeric bounds", () => {
+  const boundsAttribute = (facets: string) =>
+    parseIdsXml(
+      specificationXml(
+        `<attribute><name><simpleValue>RefractionIndex</simpleValue></name>
+           <value><xs:restriction base="xs:double">${facets}</xs:restriction></value>
+         </attribute>`
+      )
+    )[0];
+
+  it("reads the four bound facets, keeping inclusive apart from exclusive", () => {
+    const spec = boundsAttribute(
+      `<xs:minInclusive value="0" /><xs:maxExclusive value="10.5" />`
+    );
+
+    expect(spec.requirements[0].restriction).toEqual({
+      kind: "bounds",
+      min: { value: 0, inclusive: true },
+      max: { value: 10.5, inclusive: false },
+    });
+  });
+
+  it("reads a one-sided range", () => {
+    expect(boundsAttribute(`<xs:minExclusive value="-3" />`).requirements[0].restriction).toEqual({
+      kind: "bounds",
+      min: { value: -3, inclusive: false },
+      max: null,
+    });
+  });
+
+  // Bounds used to land in RESTRICTION_FACETS_READ's blind spot, and the empty enumeration left
+  // behind failed every element. That was deliberate, but it is a wrong answer either way.
+  it("no longer reports a bound as an unsupported construct", () => {
+    const spec = boundsAttribute(`<xs:minInclusive value="0" /><xs:maxInclusive value="10" />`);
+    expect(spec.unsupported).toEqual([]);
+  });
+
+  // NaN would answer false to every comparison, so the edge is dropped and the facet reported
+  // rather than silently rejecting everything.
+  it("leaves an edge unset when its value is not a number", () => {
+    const spec = boundsAttribute(`<xs:minInclusive value="abc" /><xs:maxInclusive value="10" />`);
+    expect(spec.requirements[0].restriction).toEqual({
+      kind: "bounds",
+      min: null,
+      max: { value: 10, inclusive: true },
+    });
+  });
+
+  it("reports an enumeration it cannot intersect with the range", () => {
+    const spec = boundsAttribute(
+      `<xs:minInclusive value="0" /><xs:enumeration value="5" />`
+    );
+    expect(spec.requirements[0].restriction).toMatchObject({ kind: "bounds" });
+    expect(spec.unsupported).toEqual([
+      expect.objectContaining({ construct: "xs:enumeration", section: "requirements" }),
+    ]);
   });
 });
