@@ -199,14 +199,17 @@ function readSpecification(
   const passThrough: PassThrough[] = [];
 
   for (const facetNode of elementsOf(requirementsNode ? childrenOf(requirementsNode) : [])) {
-    const condition = readFacet(facetNode);
-    if (condition) conditions.push(condition);
-    else
+    const read = readFacet(facetNode);
+    if ("refused" in read) {
       passThrough.push({
         afterIndex: conditions.length,
         construct: tagOf(facetNode) ?? "requirement",
+        reason: read.refused,
         xml: serialize(facetNode),
       });
+    } else {
+      conditions.push(read);
+    }
   }
 
   const imported: ImportedRuleSource = {
@@ -318,37 +321,62 @@ const FACET_CHILDREN: Record<string, string[]> = {
  * A condition the builder can display, or `null` when any part of the facet is outside its model —
  * in which case the caller keeps the whole facet verbatim rather than importing a weakened copy.
  */
-function readFacet(node: OrderedNode): ConditionDraft | null {
-  const tag = tagOf(node);
-  if (tag !== "attribute" && tag !== "property") return null;
+/**
+ * A facet the builder cannot show, and why — in the source document's own vocabulary.
+ *
+ * The reason is the whole point. "classification" on its own tells the user a facet was kept; it
+ * does not tell them the rule they are looking at checks less than it appears to. Each refusal
+ * below names the one thing that stopped it, so the message is specific rather than generic.
+ */
+type FacetRefusal = { refused: string };
 
-  if (Object.keys(attributesOf(node)).some((key) => !FACET_ATTRIBUTES[tag].includes(key))) {
-    return null;
+function refused(reason: string): FacetRefusal {
+  return { refused: reason };
+}
+
+function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
+  const tag = tagOf(node);
+  if (tag !== "attribute" && tag !== "property") {
+    return refused(`The builder can show an attribute or a property; <${tag ?? "this facet"}> is neither.`);
+  }
+
+  const unknownAttribute = Object.keys(attributesOf(node)).find(
+    (key) => !FACET_ATTRIBUTES[tag].includes(key)
+  );
+  if (unknownAttribute !== undefined) {
+    return refused(`Carries ${unknownAttribute.replace(/^@_/, "")}, which the builder cannot show.`);
   }
 
   const children = childrenOf(node);
-  if (elementsOf(children).some((child) => !FACET_CHILDREN[tag].includes(tagOf(child) ?? ""))) {
-    return null;
+  const unknownChild = elementsOf(children).find(
+    (child) => !FACET_CHILDREN[tag].includes(tagOf(child) ?? "")
+  );
+  if (unknownChild !== undefined) {
+    return refused(`Carries <${tagOf(unknownChild)}>, which the builder cannot show.`);
   }
 
   const cardinality = attributeOrNull(node, "cardinality");
   // "optional" has no builder equivalent, and importing it as required would export a stricter
   // file than the one that came in.
   if (cardinality !== null && cardinality !== "required" && cardinality !== "prohibited") {
-    return null;
+    return refused(`Is cardinality="${cardinality}", which the builder has no equivalent for.`);
   }
 
   const restriction = readRestriction(children);
-  if (restriction === UNREADABLE) return null;
+  if (restriction === UNREADABLE) {
+    return refused("Restricts its value in a way the builder cannot show, such as a range or a length.");
+  }
 
   const operator = readOperator(restriction, cardinality === "prohibited");
-  if (!operator) return null;
+  if (!operator) {
+    return refused("States a prohibited value, which the builder can only express as \u201cmust not be filled in\u201d.");
+  }
 
   const explicitCardinality = cardinality !== null;
 
   if (tag === "attribute") {
     const name = readSimpleValue(descend(children, "name"));
-    if (name === null) return null;
+    if (name === null) return refused("Gives its attribute name as a pattern rather than a plain name.");
     return {
       id: draftId("c"),
       kind: "attribute",
@@ -361,7 +389,9 @@ function readFacet(node: OrderedNode): ConditionDraft | null {
 
   const propertySet = readSimpleValue(descend(children, "propertySet"));
   const name = readSimpleValue(descend(children, "baseName"));
-  if (propertySet === null || name === null) return null;
+  if (propertySet === null || name === null) {
+    return refused("Gives its property set or property name as a pattern rather than a plain name.");
+  }
 
   return {
     id: draftId("c"),

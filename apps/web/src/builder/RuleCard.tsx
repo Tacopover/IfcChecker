@@ -257,6 +257,7 @@ export function RuleCard({
                   {preserved.map((entry) => (
                     <li key={`${entry.construct}-${entry.afterIndex}-${entry.xml}`}>
                       <code>{entry.construct}</code>
+                      {entry.reason ? ` — ${entry.reason}` : null}
                     </li>
                   ))}
                 </ul>

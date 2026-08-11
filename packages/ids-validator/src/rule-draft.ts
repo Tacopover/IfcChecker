@@ -45,6 +45,14 @@ export interface PassThrough {
   afterIndex: number;
   /** The construct in the source document's own vocabulary, e.g. `classification`. */
   construct: string;
+  /**
+   * Why the builder could not show it, one specific sentence. Absent on a whole specification
+   * kept verbatim, where the reasons are carried per construct on `RefusedSpecification`.
+   *
+   * The tag name alone tells the user a facet was kept; it does not tell them the rule in front of
+   * them checks less than it looks like it does.
+   */
+  reason?: string;
   xml: string;
 }
 

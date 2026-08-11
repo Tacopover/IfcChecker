@@ -204,6 +204,39 @@ describe("idsXmlToDrafts pass-through", () => {
     expect(rule.imported?.passThrough[0].construct).toBe(construct);
   });
 
+  // The tag name alone tells the user a facet was kept; it does not tell them the rule in front of
+  // them checks less than it looks like it does. Each refusal names the one thing that stopped it.
+  it.each([
+    [
+      `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
+      /attribute or a property; <classification> is neither/,
+    ],
+    [
+      `<property dataType="IFCREAL"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName><value><xs:restriction base="xs:double"><xs:maxInclusive value="0.24" /></xs:restriction></value></property>`,
+      /a range or a length/,
+    ],
+    [
+      `<property cardinality="optional"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
+      /cardinality="optional"/,
+    ],
+    [
+      `<attribute cardinality="prohibited"><name><simpleValue>Tag</simpleValue></name><value><simpleValue>TODO</simpleValue></value></attribute>`,
+      /prohibited value/,
+    ],
+    [
+      `<attribute instructions="Ask the architect."><name><simpleValue>Name</simpleValue></name></attribute>`,
+      /Carries instructions/,
+    ],
+    [
+      `<attribute><name><xs:restriction base="xs:string"><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`,
+      /attribute name as a pattern/,
+    ],
+  ])("says why it kept a facet rather than only which one", (facet, expected) => {
+    const rule = onlyRule(idsXmlToDrafts(withRequirements(facet)));
+
+    expect(rule.imported?.passThrough[0].reason).toMatch(expected);
+  });
+
   it("records how many conditions preceded each passed-through facet", () => {
     const [rule] = idsXmlToDrafts(MIXED).rules;
 
