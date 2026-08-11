@@ -1,6 +1,7 @@
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
 import type { UnsupportedConstruct } from "./parse-ids.js";
 import type {
+  BoundDraft,
   ConditionDraft,
   ConditionalCardinality,
   ImportedRuleSource,
@@ -404,14 +405,25 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
   };
 }
 
+/** The four bound facets, paired with the edge each one sets. */
+const BOUND_FACETS = [
+  { tag: "minInclusive", edge: "min", inclusive: true },
+  { tag: "minExclusive", edge: "min", inclusive: false },
+  { tag: "maxInclusive", edge: "max", inclusive: true },
+  { tag: "maxExclusive", edge: "max", inclusive: false },
+] as const;
+
 /**
  * The XSD facets a `ValueDraft` can carry. Unlike the validator, this list excludes `annotation`:
  * the validator can ignore prose, but an import that dropped an author's documentation and handed
  * the file back without it would be destroying their work.
  */
-const RESTRICTION_FACETS_READ = ["pattern", "enumeration"];
+const RESTRICTION_FACETS_READ = [
+  "pattern",
+  "enumeration",
+  ...BOUND_FACETS.map((facet) => facet.tag),
+];
 
-const BOUND_FACETS = ["minInclusive", "maxInclusive", "minExclusive", "maxExclusive"];
 const LENGTH_FACETS = ["length", "minLength", "maxLength"];
 
 /**
@@ -421,13 +433,13 @@ const LENGTH_FACETS = ["length", "minLength", "maxLength"];
  * that was wrong about 8 of the facets it refused: two carry an `xs:annotation`, one an
  * `xs:double` base, and the rest two `xs:pattern` children. Each of those is a different piece of
  * work, and the message is what tells the user which one their file is waiting on.
+ *
+ * The range half of that sentence is gone — ranges are read now. A length is still refused, because
+ * `ParsedRestriction` has no length variant to compile one into.
  */
 function refuseRestrictionFacet(tag: string): FacetRefusal {
   if (tag === "annotation") {
     return refused("Documents its value with an <xs:annotation>, which the builder cannot show.");
-  }
-  if (BOUND_FACETS.includes(tag)) {
-    return refused("Restricts its value to a numeric range, which the builder cannot show.");
   }
   if (LENGTH_FACETS.includes(tag)) {
     return refused("Restricts the length of its value, which the builder cannot show.");
@@ -461,26 +473,67 @@ function readValueDraft(
   const outside = children.find((child) => !RESTRICTION_FACETS_READ.includes(tagOf(child) ?? ""));
   if (outside) return refuseRestrictionFacet(tagOf(outside) ?? "");
 
+  const base = attributeOrNull(only, "base");
+  const patterns = children.filter((child) => tagOf(child) === "pattern");
+  const enumerations = children.filter((child) => tagOf(child) === "enumeration");
+  const bounds = children.filter((child) =>
+    BOUND_FACETS.some((facet) => facet.tag === tagOf(child))
+  );
+
+  // XSD would intersect two families, and a `ValueDraft` states one thing. Dropping either half
+  // would export a rule that checks less than the file asks for.
+  const families = [patterns.length, enumerations.length, bounds.length].filter(
+    (count) => count > 0
+  );
+  if (families.length !== 1 || patterns.length > 1) {
+    return refused("Combines several restrictions on one value, which the builder cannot show.");
+  }
+
+  // A range keeps whatever base the author wrote, right down to a capitalised `xs:Decimal`.
+  if (bounds.length > 0) return readBoundsDraft(base ?? "xs:double", bounds);
+
   // A pattern and an enumeration are string constructs, so anything left here is based on a type
   // we would retype on the way back out.
-  const base = attributeOrNull(only, "base");
   if (base !== null && base.slice(base.indexOf(":") + 1) !== "string") {
     return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
   }
 
-  const patterns = children.filter((child) => tagOf(child) === "pattern");
-  const enumerations = children.filter((child) => tagOf(child) === "enumeration");
-
-  if (patterns.length === 1 && enumerations.length === 0) {
+  if (patterns.length === 1) {
     return { value: patternValueDraft(attributeOrNull(patterns[0], "value") ?? "") };
   }
-  if (enumerations.length > 0 && patterns.length === 0) {
-    return {
-      value: {
-        kind: "enum",
-        values: enumerations.map((child) => attributeOrNull(child, "value") ?? ""),
-      },
+  return {
+    value: {
+      kind: "enum",
+      values: enumerations.map((child) => attributeOrNull(child, "value") ?? ""),
+    },
+  };
+}
+
+/**
+ * The numeric range a restriction states, with each edge's literal kept as written.
+ *
+ * Two children setting the same edge — `minInclusive` beside `minExclusive`, or the same tag twice
+ * — refuse rather than resolve. A `ValueDraft` holds one bound per edge, so keeping the first would
+ * export the file with the other constraint quietly removed.
+ */
+function readBoundsDraft(
+  base: string,
+  boundNodes: OrderedNode[]
+): { value: ValueDraft } | FacetRefusal {
+  const edges: { min: BoundDraft | null; max: BoundDraft | null } = { min: null, max: null };
+
+  for (const node of boundNodes) {
+    const facet = BOUND_FACETS.find((candidate) => candidate.tag === tagOf(node));
+    if (!facet) continue;
+    if (edges[facet.edge] !== null) {
+      const edge = facet.edge === "min" ? "lower" : "upper";
+      return refused(`States its ${edge} bound twice, so the builder cannot show it as one range.`);
+    }
+    edges[facet.edge] = {
+      value: attributeOrNull(node, "value") ?? "",
+      inclusive: facet.inclusive,
     };
   }
-  return refused("Combines several restrictions on one value, which the builder cannot show.");
+
+  return { value: { kind: "bounds", base, ...edges } };
 }

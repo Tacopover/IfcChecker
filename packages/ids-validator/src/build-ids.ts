@@ -73,7 +73,7 @@ function valueXml(value: ValueDraft | null): string {
       const body = edges
         .map((edge) => (edge ? `\n            <xs:${edge[0]} value="${escapeXml(edge[1].value)}" />` : ""))
         .join("");
-      return restrictionBodyXml("xs:double", body);
+      return restrictionBodyXml(escapeXml(value.base), body);
     }
   }
 }

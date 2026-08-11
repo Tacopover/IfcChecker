@@ -202,6 +202,30 @@ describe("idsXmlToDrafts values", () => {
     });
   });
 
+  it("reads a numeric range, keeping each edge as the author wrote it", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:double"><xs:minInclusive value="0" /><xs:maxExclusive value="1.50" /></xs:restriction></value>`
+      ).value
+    ).toEqual({
+      kind: "bounds",
+      base: "xs:double",
+      // "1.50" rather than 1.5: the draft holds the literal, so the export is the file that came in.
+      min: { value: "0", inclusive: true },
+      max: { value: "1.50", inclusive: false },
+    });
+  });
+
+  // 63 ranges in the corpus are xs:double, 4 xs:integer, and 6 use a capitalised spelling no XSD
+  // type has. Assuming one would hand 8 authors back a file they did not write.
+  it("carries whatever base the range was written with", () => {
+    const value = attributeValue(
+      `<value><xs:restriction base="xs:Decimal"><xs:minInclusive value="1" /></xs:restriction></value>`
+    ).value;
+
+    expect(value).toMatchObject({ kind: "bounds", base: "xs:Decimal" });
+  });
+
   it("carries the property data type, and its absence, rather than assuming a default", () => {
     const typed = onlyCondition(
       withRequirements(
@@ -227,9 +251,9 @@ describe("idsXmlToDrafts pass-through", () => {
       "classification",
     ],
     [
-      "a bound the builder cannot read",
-      `<property dataType="IFCREAL"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName><value><xs:restriction base="xs:double"><xs:maxInclusive value="0.24" /></xs:restriction></value></property>`,
-      "property",
+      "a length, which no parsed restriction can hold",
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="3" /></xs:restriction></value></attribute>`,
+      "attribute",
     ],
     [
       "a cardinality ids.xsd does not allow, rather than picking one of the three",
@@ -261,10 +285,6 @@ describe("idsXmlToDrafts pass-through", () => {
       `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
       /attribute or a property; <classification> is neither/,
     ],
-    [
-      `<property dataType="IFCREAL"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName><value><xs:restriction base="xs:double"><xs:maxInclusive value="0.24" /></xs:restriction></value></property>`,
-      /numeric range/,
-    ],
     // One sentence used to cover all of these. Over the corpus it was wrong about 8 of the facets
     // it refused, and the message is what tells the user which piece of work their file waits on.
     [
@@ -282,6 +302,17 @@ describe("idsXmlToDrafts pass-through", () => {
     [
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="[a-z]{2}" /><xs:pattern value="[A-Z]{2}" /></xs:restriction></value></attribute>`,
       /Combines several restrictions/,
+    ],
+    // XSD intersects a range with an enumeration; a ValueDraft states one of the two, so importing
+    // it would export a rule that checks less than the file asks for.
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minInclusive value="0" /><xs:enumeration value="1" /></xs:restriction></value></attribute>`,
+      /Combines several restrictions/,
+    ],
+    // One bound per edge is all a draft holds, so keeping the first would drop the other silently.
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minInclusive value="0" /><xs:minExclusive value="1" /></xs:restriction></value></attribute>`,
+      /lower bound twice/,
     ],
     [
       `<property cardinality="mandatory"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
@@ -308,13 +339,13 @@ describe("idsXmlToDrafts pass-through", () => {
       "Name",
       "Reference",
       "Status",
+      "ThermalTransmittance",
       "AcousticRating",
       "Description",
     ]);
     expect(rule.imported?.passThrough.map((entry) => [entry.construct, entry.afterIndex])).toEqual([
       ["classification", 3],
-      ["property", 3],
-      ["material", 5],
+      ["material", 6],
     ]);
   });
 });

@@ -104,13 +104,33 @@ describe("compileValue", () => {
   });
 
   it("compiles a range, and drops an edge that is not a number rather than comparing NaN", () => {
-    expect(compileValue({ kind: "bounds", min: { value: "10", inclusive: true }, max: null })).toEqual(
-      { kind: "bounds", min: { value: 10, inclusive: true }, max: null }
-    );
+    const range = (value: string): ValueDraft => ({
+      kind: "bounds",
+      base: "xs:double",
+      min: { value, inclusive: true },
+      max: null,
+    });
+
+    expect(compileValue(range("10"))).toEqual({
+      kind: "bounds",
+      min: { value: 10, inclusive: true },
+      max: null,
+    });
     // Every comparison against NaN answers false, so a bad edge would reject silently.
-    expect(
-      compileValue({ kind: "bounds", min: { value: "ten", inclusive: true }, max: null })
-    ).toEqual({ kind: "bounds", min: null, max: null });
+    expect(compileValue(range("ten"))).toEqual({ kind: "bounds", min: null, max: null });
+  });
+
+  // The base is the author's, not ours: real files write a range as xs:double, xs:integer, and
+  // even a capitalised xs:Decimal. It is carried so the export can hand back what came in.
+  it("carries the base without letting it reach the compiled restriction", () => {
+    const compiled = compileValue({
+      kind: "bounds",
+      base: "xs:Decimal",
+      min: null,
+      max: { value: "5", inclusive: false },
+    });
+
+    expect(compiled).toEqual({ kind: "bounds", min: null, max: { value: 5, inclusive: false } });
   });
 });
 
@@ -167,7 +187,7 @@ describe("the friendly operators are a reading of the value, not the storage", (
   it("has no reading for what the eight operators cannot say", () => {
     // A range.
     expect(
-      friendlyReadingOf(condition({ value: { kind: "bounds", min: null, max: null } }))
+      friendlyReadingOf(condition({ value: { kind: "bounds", base: "xs:double", min: null, max: null } }))
     ).toBeNull();
     // "Must not be Steel" — notExists would widen it to "must not be present at all".
     expect(

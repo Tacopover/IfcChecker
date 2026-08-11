@@ -47,13 +47,18 @@ export type AffixOperator = "contains" | "startsWith" | "endsWith";
  *
  * The compiled source is rebuilt from the literal rather than carried, which is safe because
  * `affixReadingOf` only reads a literal back out when re-escaping it reproduces the source exactly.
+ *
+ * `bounds` carries its own `base` because a range is the one value whose base is not a string, and
+ * real files do not agree on which type it is: over the corpus, 63 ranges are written `xs:double`,
+ * 4 `xs:integer`, and 6 with a capitalised spelling `xs:Decimal` or `xs:Integer` that no XSD type
+ * has. Assuming `xs:double` would hand 8 authors back a file they did not write.
  */
 export type ValueDraft =
   | { kind: "simple"; value: string }
   | { kind: "enum"; values: string[] }
   | { kind: "pattern"; source: string }
   | { kind: "affix"; operator: AffixOperator; literal: string }
-  | { kind: "bounds"; min: BoundDraft | null; max: BoundDraft | null };
+  | { kind: "bounds"; base: string; min: BoundDraft | null; max: BoundDraft | null };
 
 export interface ConditionDraft {
   id: string;

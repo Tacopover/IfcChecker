@@ -223,7 +223,7 @@ describe("ConditionRow", () => {
   it.each([
     [
       "a numeric range",
-      { value: { kind: "bounds", min: { value: "10", inclusive: true }, max: null } },
+      { value: { kind: "bounds", base: "xs:double", min: { value: "10", inclusive: true }, max: null } },
       /numeric range/,
     ],
     [
