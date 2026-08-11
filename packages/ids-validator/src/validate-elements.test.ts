@@ -201,9 +201,12 @@ describe("validateBySpecification", () => {
   });
 
   it("runs a specification that only lost a requirement, and says what it lost", () => {
+    // A facet from no version of the schema this build knows: each of the six IDS 1.0 facets
+    // becomes readable as it lands, so one of them would stop being "lost" and this test would
+    // quietly start asserting nothing.
     const idsXml = IDS_XML.replace(
       "</requirements>",
-      "<material><value><simpleValue>Concrete</simpleValue></value></material></requirements>"
+      "<zone><value><simpleValue>Concrete</simpleValue></value></zone></requirements>"
     );
 
     const [outcome] = validateBySpecification([compliantWall, failingWall], idsXml);
@@ -213,7 +216,7 @@ describe("validateBySpecification", () => {
     expect(outcome.checked).toBe(true);
     expect(outcome.applicableCount).toBe(2);
     expect(outcome.unsupported).toContainEqual(
-      expect.objectContaining({ section: "requirements", construct: "material" })
+      expect.objectContaining({ section: "requirements", construct: "zone" })
     );
   });
 

@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { isEvaluable, parseIdsXml } from "./parse-ids.js";
+import type { ParsedRequirementFacet, ParsedRestriction } from "./parse-ids.js";
+
+/**
+ * The restriction on a facet that reads one value slot.
+ *
+ * `ParsedRequirementFacet` is a union, and a classification constrains two parameters rather than
+ * one — every case here parses an attribute or a property, so narrowing loudly beats casting.
+ */
+function slotRestriction(facet: ParsedRequirementFacet): ParsedRestriction | null {
+  if (facet.kind !== "attribute" && facet.kind !== "property") {
+    throw new Error(`expected a slot facet, got ${facet.kind}`);
+  }
+  return facet.restriction;
+}
+
 
 const SAMPLE_IDS = `<?xml version="1.0" encoding="utf-8"?>
 <ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd" xmlns="http://standards.buildingsmart.org/IDS">
@@ -70,7 +85,7 @@ describe("parseIdsXml", () => {
 
   it("anchors a parsed pattern so it must match the whole value", () => {
     const [spec] = parseIdsXml(SAMPLE_IDS);
-    const restriction = spec.requirements[0].restriction;
+    const restriction = slotRestriction(spec.requirements[0]);
     if (restriction?.kind !== "pattern") throw new Error("expected a pattern restriction");
 
     expect(restriction.regex.test("W-12")).toBe(true);
@@ -84,7 +99,7 @@ describe("parseIdsXml", () => {
       )
     );
 
-    expect(spec.requirements[0].restriction).toEqual({ kind: "exact", value: "W-1" });
+    expect(slotRestriction(spec.requirements[0])).toEqual({ kind: "exact", value: "W-1" });
   });
 
   it("reads an xs:enumeration list as an enum restriction, on a property facet too", () => {
@@ -100,7 +115,7 @@ describe("parseIdsXml", () => {
       )
     );
 
-    expect(spec.requirements[0].restriction).toEqual({ kind: "enum", values: ["SA", "RA"] });
+    expect(slotRestriction(spec.requirements[0])).toEqual({ kind: "enum", values: ["SA", "RA"] });
   });
 
   it('reads cardinality="prohibited" and defaults to required when the attribute is absent', () => {
@@ -142,7 +157,7 @@ describe("parseIdsXml", () => {
         `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="(" /></xs:restriction></value></attribute>`
       )
     );
-    const restriction = spec.requirements[0].restriction;
+    const restriction = slotRestriction(spec.requirements[0]);
     if (restriction?.kind !== "pattern") throw new Error("expected a pattern restriction");
 
     expect(restriction.source).toBe("(");
@@ -150,16 +165,20 @@ describe("parseIdsXml", () => {
   });
 
   it("reports an unrecognized requirement facet instead of dropping it silently", () => {
-    const xmlWithClassification = SAMPLE_IDS.replace(
+    // A facet name from no version of the schema this build knows. The six IDS 1.0 facets are
+    // deliberately not used here: each becomes readable as it lands, and a test written against
+    // one would then be asserting the opposite of what it was for. This is the pass-through
+    // safety net doing the job it exists for.
+    const xmlWithFutureFacet = SAMPLE_IDS.replace(
       "</requirements>",
-      "<classification><value><simpleValue>Foo</simpleValue></value></classification></requirements>"
+      "<zone><value><simpleValue>Foo</simpleValue></value></zone></requirements>"
     );
 
-    const [spec] = parseIdsXml(xmlWithClassification);
+    const [spec] = parseIdsXml(xmlWithFutureFacet);
 
     expect(spec.requirements).toHaveLength(2);
     expect(spec.unsupported).toContainEqual(
-      expect.objectContaining({ section: "requirements", construct: "classification" })
+      expect.objectContaining({ section: "requirements", construct: "zone" })
     );
     // The rule still selects the elements its author meant, so it can be run — just weakened.
     expect(spec.applicabilityComplete).toBe(true);
@@ -222,7 +241,7 @@ describe("parseIdsXml", () => {
       </property>`)
     );
 
-    expect(spec.requirements[0].restriction).toEqual({
+    expect(slotRestriction(spec.requirements[0])).toEqual({
       kind: "bounds",
       min: null,
       max: { value: 0.24, inclusive: true },
@@ -276,7 +295,7 @@ describe("parseIdsXml — numeric bounds", () => {
       `<xs:minInclusive value="0" /><xs:maxExclusive value="10.5" />`
     );
 
-    expect(spec.requirements[0].restriction).toEqual({
+    expect(slotRestriction(spec.requirements[0])).toEqual({
       kind: "bounds",
       min: { value: 0, inclusive: true },
       max: { value: 10.5, inclusive: false },
@@ -284,7 +303,7 @@ describe("parseIdsXml — numeric bounds", () => {
   });
 
   it("reads a one-sided range", () => {
-    expect(boundsAttribute(`<xs:minExclusive value="-3" />`).requirements[0].restriction).toEqual({
+    expect(slotRestriction(boundsAttribute(`<xs:minExclusive value="-3" />`).requirements[0])).toEqual({
       kind: "bounds",
       min: { value: -3, inclusive: false },
       max: null,
@@ -302,7 +321,7 @@ describe("parseIdsXml — numeric bounds", () => {
   // rather than silently rejecting everything.
   it("leaves an edge unset when its value is not a number", () => {
     const spec = boundsAttribute(`<xs:minInclusive value="abc" /><xs:maxInclusive value="10" />`);
-    expect(spec.requirements[0].restriction).toEqual({
+    expect(slotRestriction(spec.requirements[0])).toEqual({
       kind: "bounds",
       min: null,
       max: { value: 10, inclusive: true },
@@ -313,7 +332,7 @@ describe("parseIdsXml — numeric bounds", () => {
     const spec = boundsAttribute(
       `<xs:minInclusive value="0" /><xs:enumeration value="5" />`
     );
-    expect(spec.requirements[0].restriction).toMatchObject({ kind: "bounds" });
+    expect(slotRestriction(spec.requirements[0])).toMatchObject({ kind: "bounds" });
     expect(spec.unsupported).toEqual([
       expect.objectContaining({ construct: "xs:enumeration", section: "requirements" }),
     ]);

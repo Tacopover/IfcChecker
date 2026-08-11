@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { buildIdsXml } from "./build-ids.js";
 import { parseIdsXml } from "./parse-ids.js";
-import type { ParsedSpecification } from "./parse-ids.js";
+import type { ParsedRequirementFacet, ParsedRestriction, ParsedSpecification } from "./parse-ids.js";
+
+/**
+ * The restriction on a facet that reads one value slot.
+ *
+ * `ParsedRequirementFacet` is a union, and a classification constrains two parameters rather than
+ * one — every case here parses an attribute or a property, so narrowing loudly beats casting.
+ */
+function slotRestriction(facet: ParsedRequirementFacet): ParsedRestriction | null {
+  if (facet.kind !== "attribute" && facet.kind !== "property") {
+    throw new Error(`expected a slot facet, got ${facet.kind}`);
+  }
+  return facet.restriction;
+}
+
 import type { ConditionDraft, RuleDraft } from "./rule-draft.js";
 import { compileDraft } from "./rule-draft.js";
 
@@ -166,9 +180,11 @@ describe("buildIdsXml / compileDraft round-trip", () => {
     const exportedFacet = exported.requirements[1];
     const compiledFacet = compiled.requirements[1];
 
-    if (exportedFacet.restriction?.kind !== "pattern") throw new Error("expected a pattern");
-    if (compiledFacet.restriction?.kind !== "pattern") throw new Error("expected a pattern");
-    expect(exportedFacet.restriction.regex.source).toBe(compiledFacet.restriction.regex.source);
-    expect(exportedFacet.restriction.regex.test("W-12")).toBe(true);
+    const exportedRestriction = slotRestriction(exportedFacet);
+    const compiledRestriction = slotRestriction(compiledFacet);
+    if (exportedRestriction?.kind !== "pattern") throw new Error("expected a pattern");
+    if (compiledRestriction?.kind !== "pattern") throw new Error("expected a pattern");
+    expect(exportedRestriction.regex.source).toBe(compiledRestriction.regex.source);
+    expect(exportedRestriction.regex.test("W-12")).toBe(true);
   });
 });

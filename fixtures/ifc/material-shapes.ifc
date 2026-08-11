@@ -1,0 +1,65 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('fixture-materials.ifc','2026-08-10T00:00:00',(''),(''),'IFC QA Tool fixture','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0FMxV72Kn2gQBLPeGefPXc',$,'Material Fixture',$,$,$,$,(#8),#5);
+#5=IFCUNITASSIGNMENT((#6,#7));
+#6=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#7=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#8=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,#9,$);
+#9=IFCAXIS2PLACEMENT3D(#10,$,$);
+#10=IFCCARTESIANPOINT((0.0,0.0,0.0));
+#11=IFCSITE('1PPvKvz85AqQI7$4o09XlU',$,'Fixture Site',$,$,#12,$,$,.ELEMENT.,$,$,$,$,$);
+#12=IFCLOCALPLACEMENT($,#9);
+#13=IFCBUILDING('2Rf9ce5uz1qOB7WEOWMYye',$,'Fixture Building',$,$,#12,$,$,.ELEMENT.,$,$,$);
+#14=IFCBUILDINGSTOREY('3Kf5r2t7D6UwlEDlNjJKq1',$,'Level 1',$,$,#12,$,$,.ELEMENT.,0.0);
+
+/* The base materials, each with a Name and a Category — IDS matches either. */
+#40=IFCMATERIAL('Concrete',$,'Structural');
+#41=IFCMATERIAL('Insulation',$,'Thermal');
+#42=IFCMATERIAL('Steel',$,'Structural');
+
+/* Layer set: the set's own LayerSetName is matchable, as is each layer's Name and Category
+   and the Name/Category of the IfcMaterial behind it. */
+#43=IFCMATERIALLAYER(#40,200.,$,'CoreLayer',$,'LoadBearing',$);
+#44=IFCMATERIALLAYER(#41,50.,$,'InsulationLayer',$,'Thermal',$);
+#45=IFCMATERIALLAYERSET((#43,#44),'CavityWall',$);
+#15=IFCWALL('1abc2defGHI3jkl4mno5pq',$,'W-001',$,$,#12,$,'TAG-001',.STANDARD.);
+#46=IFCRELASSOCIATESMATERIAL('1aA0Q2zI93Na8uPOvZiWX1',$,$,$,(#15),#45);
+
+/* Profile set on a beam. */
+#47=IFCMATERIALPROFILE('IPE300Profile',$,#42,$,$,'Rolled');
+#48=IFCMATERIALPROFILESET('BeamProfiles',$,(#47),$);
+#16=IFCBEAM('2bcd3efgHIJ4klm5nop6qr',$,'B-001',$,$,#12,$,'TAG-002',.BEAM.);
+#49=IFCRELASSOCIATESMATERIAL('2bB1Q3zI93Na8uPOvZiWX2',$,$,$,(#16),#48);
+
+/* Constituent set on a slab. */
+#50=IFCMATERIALCONSTITUENT('Reinforcement',$,#42,$,'Rebar');
+#51=IFCMATERIALCONSTITUENTSET('SlabMix',$,(#50));
+#17=IFCSLAB('3cde4fghIJK5lmn6opq7rs',$,'S-001',$,$,#12,$,'TAG-003',.FLOOR.);
+#52=IFCRELASSOCIATESMATERIAL('3cC2Q4zI93Na8uPOvZiWX3',$,$,$,(#17),#51);
+
+/* Material list on a column. */
+#53=IFCMATERIALLIST((#40,#42));
+#18=IFCCOLUMN('4def5ghiJKL6mno7pqr8st',$,'C-001',$,$,#12,$,'TAG-004',.COLUMN.);
+#54=IFCRELASSOCIATESMATERIAL('4dD3Q5zI93Na8uPOvZiWX4',$,$,$,(#18),#53);
+
+/* Inherited from the type: the member has no association of its own. */
+#19=IFCMEMBER('5efg6hijKLM7nop8qrs9tu',$,'M-001',$,$,#12,$,'TAG-005',.BRACE.);
+#20=IFCMEMBERTYPE('6fgh7ijkLMN8opq9rst0uv',$,'MemberType-A',$,$,$,$,$,$,.BRACE.);
+#55=IFCRELDEFINESBYTYPE('5eE4Q6zI93Na8uPOvZiWX5',$,$,$,(#19),#20);
+#56=IFCRELASSOCIATESMATERIAL('6fF5Q7zI93Na8uPOvZiWX6',$,$,$,(#20),#42);
+
+/* No material at all: a required material facet must fail this one, and an optional facet
+   must waive it. Distinct from an association that names nothing. */
+#21=IFCPLATE('7ghi8jklMNO9pqr0stu1vw',$,'P-001',$,$,#12,$,'TAG-006',.SHEET.);
+
+#22=IFCRELAGGREGATES('3zR8O0xG71Ly6sNMtXgUVw',$,$,$,#1,(#11));
+#23=IFCRELAGGREGATES('4aS9P1yH82Mz7tONuYhVWx',$,$,$,#11,(#13));
+#24=IFCRELAGGREGATES('5bT0Q2zI93Na8uPOvZiWXy',$,$,$,#13,(#14));
+#25=IFCRELCONTAINEDINSPATIALSTRUCTURE('6cU1R3AJ04Ob9vQPwAjXYz',$,$,$,(#15,#16,#17,#18,#19,#21),#14);
+ENDSEC;
+END-ISO-10303-21;

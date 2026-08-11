@@ -1,0 +1,59 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('fixture-partof.ifc','2026-08-10T00:00:00',(''),(''),'IFC QA Tool fixture','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0FMxV72Kn2gQBLPeGefPXc',$,'PartOf Fixture',$,$,$,$,(#8),#5);
+#5=IFCUNITASSIGNMENT((#6,#7));
+#6=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#7=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#8=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,#9,$);
+#9=IFCAXIS2PLACEMENT3D(#10,$,$);
+#10=IFCCARTESIANPOINT((0.0,0.0,0.0));
+#11=IFCSITE('1PPvKvz85AqQI7$4o09XlU',$,'Fixture Site',$,$,#12,$,$,.ELEMENT.,$,$,$,$,$);
+#12=IFCLOCALPLACEMENT($,#9);
+#13=IFCBUILDING('2Rf9ce5uz1qOB7WEOWMYye',$,'Fixture Building',$,$,#12,$,$,.ELEMENT.,$,$,$);
+#14=IFCBUILDINGSTOREY('3Kf5r2t7D6UwlEDlNjJKq1',$,'Level 1',$,$,#12,$,$,.ELEMENT.,0.0);
+#20=IFCRELAGGREGATES('3zR8O0xG71Ly6sNMtXgUVw',$,$,$,#1,(#11));
+#21=IFCRELAGGREGATES('4aS9P1yH82Mz7tONuYhVWx',$,$,$,#11,(#13));
+#22=IFCRELAGGREGATES('5bT0Q2zI93Na8uPOvZiWXy',$,$,$,#13,(#14));
+
+/* Aggregation, two deep: the plate is part of the assembly and — through it — of the
+   IfcElementAssembly above. Any ancestral whole passes an aggregate check. */
+#30=IFCELEMENTASSEMBLY('1aaa2bbb3ccc4ddd5eee6f',$,'Outer assembly',$,$,#12,$,$,$,.ACCESSORY_ASSEMBLY.);
+#31=IFCELEMENTASSEMBLY('2bbb3ccc4ddd5eee6fff7g',$,'Inner assembly',$,$,#12,$,$,$,.NOTDEFINED.);
+#32=IFCPLATE('3ccc4ddd5eee6fff7ggg8h',$,'PL-001',$,$,#12,$,'TAG-001',.SHEET.);
+#33=IFCRELAGGREGATES('6cU1R3AJ04Ob9vQPwAjXY1',$,$,$,#30,(#31));
+#34=IFCRELAGGREGATES('7dV2S4BK15Pc0wRQxBkYZ2',$,$,$,#31,(#32));
+
+/* Nesting, two deep. Kept separate from aggregation on purpose: ifc-lite files both under one
+   edge type, so a checker reading the edge alone would let this satisfy an aggregate rule. */
+#35=IFCFURNITURE('4ddd5eee6fff7ggg8hhh9i',$,'Desk',$,$,#12,$,'TAG-002',.NOTDEFINED.);
+#36=IFCDISCRETEACCESSORY('5eee6fff7ggg8hhh9iii0j',$,'Bracket',$,$,#12,$,'TAG-003',.NOTDEFINED.);
+#37=IFCMECHANICALFASTENER('6fff7ggg8hhh9iii0jjj1k',$,'Bolt',$,$,#12,$,'TAG-004',$,$,.NOTDEFINED.);
+#38=IFCRELNESTS('8eW3T5CL26Qd1xSRyClZA3',$,$,$,#35,(#36));
+#39=IFCRELNESTS('9fX4U6DM37Re2yTSzDmAB4',$,$,$,#36,(#37));
+
+/* Containment: the beam is in a space, and the space is aggregated into the storey. The beam is
+   NOT part of the storey by containment — a chain may not change relation halfway. */
+#40=IFCSPACE('7ggg8hhh9iii0jjj1kkk2l',$,'Room 1',$,$,#12,$,$,.ELEMENT.,.INTERNAL.,$);
+#41=IFCBEAM('8hhh9iii0jjj1kkk2lll3m',$,'B-001',$,$,#12,$,'TAG-005',.BEAM.);
+#42=IFCRELAGGREGATES('AgY5V7EN48Sf3zUT0EnBC5',$,$,$,#14,(#40));
+#43=IFCRELCONTAINEDINSPATIALSTRUCTURE('BhZ6W8FO59Tg4AVU1FoCD6',$,$,$,(#41),#40);
+
+/* Group assignment. */
+#44=IFCGROUP('9iii0jjj1kkk2lll3mmm4n',$,'Fire compartment',$,$);
+#45=IFCRELASSIGNSTOGROUP('CiA7X9GP60Uh5BWV2GpDE7',$,$,$,(#41),$,#44);
+
+/* Void and fill: the opening is part of the wall it voids, the door part of the opening it fills. */
+#46=IFCWALL('AjjjBkkkClllDmmmEnnnFo',$,'W-001',$,$,#12,$,'TAG-006',.STANDARD.);
+#47=IFCOPENINGELEMENT('BkkkClllDmmmEnnnFoooGp',$,'OP-001',$,$,#12,$,'TAG-007',.OPENING.);
+#48=IFCDOOR('ClllDmmmEnnnFoooGpppHq',$,'D-001',$,$,#12,$,'TAG-008',$,$,.DOOR.,$,$);
+#49=IFCRELVOIDSELEMENT('DjB8Y0HQ71Vi6CXW3HqEF8',$,$,$,#46,#47);
+#50=IFCRELFILLSELEMENT('EkC9Z1IR82Wj7DYX4IrFG9',$,$,$,#47,#48);
+
+#51=IFCRELCONTAINEDINSPATIALSTRUCTURE('FlD0A2JS93Xk8EZY5JsGH0',$,$,$,(#30,#35,#46),#14);
+ENDSEC;
+END-ISO-10303-21;

@@ -284,6 +284,118 @@ describe("adapter parity", () => {
     expect(fromIfcLite.children.map((child: { ifcType: string }) => child.ifcType)).toEqual(["IFCSPACE"]);
     expect(fromIfcLite.elementCounts.IFCSPACE).toBeUndefined();
   });
+
+  it("both engines walk the same partOf chains, and keep nesting distinct from aggregation", async () => {
+    const path = fixturePath("part-of-relations.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const wholesOf = (result: typeof webIfcResult, name: string) =>
+      (result.idsScope.find((entity) => entity.name === name)?.partOf ?? [])
+        .map((whole) => `${whole.relation}:${whole.ifcType}:${whole.predefinedType ?? "-"}`)
+        .sort();
+
+    // Two levels of aggregation: the ancestral whole counts as well as the direct one.
+    expect(wholesOf(ifcLiteResult, "PL-001")).toEqual([
+      "IFCRELAGGREGATES:IFCELEMENTASSEMBLY:ACCESSORY_ASSEMBLY",
+      "IFCRELAGGREGATES:IFCELEMENTASSEMBLY:NOTDEFINED",
+    ]);
+
+    // Nesting must never surface as aggregation — ifc-lite's graph files both under one edge
+    // type, so reading the edge instead of the relationship entity would report AGGREGATES here.
+    expect(wholesOf(ifcLiteResult, "Bolt")).toEqual([
+      "IFCRELNESTS:IFCDISCRETEACCESSORY:NOTDEFINED",
+      "IFCRELNESTS:IFCFURNITURE:NOTDEFINED",
+    ]);
+
+    // The beam is contained in a space that is aggregated into the storey. The chain may not
+    // change relation halfway, so the storey is not among its wholes.
+    expect(wholesOf(ifcLiteResult, "B-001")).toEqual([
+      "IFCRELASSIGNSTOGROUP:IFCGROUP:-",
+      "IFCRELCONTAINEDINSPATIALSTRUCTURE:IFCSPACE:INTERNAL",
+    ]);
+
+    expect(wholesOf(ifcLiteResult, "OP-001")).toEqual(["IFCRELVOIDSELEMENT:IFCWALL:STANDARD"]);
+    expect(wholesOf(ifcLiteResult, "D-001")).toEqual([
+      "IFCRELFILLSELEMENT:IFCOPENINGELEMENT:OPENING",
+    ]);
+
+    for (const name of ["PL-001", "Bolt", "B-001", "OP-001", "D-001", "Outer assembly"]) {
+      expect([name, wholesOf(webIfcResult, name)]).toEqual([name, wholesOf(ifcLiteResult, name)]);
+    }
+  });
+
+  it("both engines flatten every material shape to the same matchable strings", async () => {
+    const path = fixturePath("material-shapes.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byType = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope.map((entity) => [
+          entity.ifcType,
+          entity.materials ? [...entity.materials].sort() : entity.materials,
+        ])
+      );
+
+    const fromWebIfc = byType(webIfcResult);
+    const fromIfcLite = byType(ifcLiteResult);
+
+    // A layer set contributes its own LayerSetName, each layer's name and category, and the
+    // name and category of the IfcMaterial behind each layer. IDS matches any of them.
+    expect(fromIfcLite.IFCWALL).toEqual(
+      ["CavityWall", "CoreLayer", "LoadBearing", "Concrete", "Structural", "InsulationLayer", "Thermal", "Insulation"].sort()
+    );
+    expect(fromIfcLite.IFCBEAM).toEqual(["BeamProfiles", "IPE300Profile", "Rolled", "Steel", "Structural"].sort());
+    expect(fromIfcLite.IFCSLAB).toEqual(["SlabMix", "Reinforcement", "Rebar", "Steel", "Structural"].sort());
+    expect(fromIfcLite.IFCCOLUMN).toEqual(["Concrete", "Structural", "Steel"].sort());
+    // Inherited from its IfcMemberType, which holds the only association.
+    expect(fromIfcLite.IFCMEMBER).toEqual(["Steel", "Structural"].sort());
+    // No association at all — distinct from one that names nothing, and the difference decides
+    // whether an empty material facet passes.
+    expect(fromIfcLite.IFCPLATE).toBeNull();
+
+    for (const ifcType of ["IFCWALL", "IFCBEAM", "IFCSLAB", "IFCCOLUMN", "IFCMEMBER", "IFCPLATE"]) {
+      expect([ifcType, fromWebIfc[ifcType]]).toEqual([ifcType, fromIfcLite[ifcType]]);
+    }
+  });
+
+  it("both engines resolve the same classification references, chain and all", async () => {
+    const path = fixturePath("classified-elements.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byType = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope
+          .filter((entity) => ["IFCWALL", "IFCSLAB", "IFCBEAM"].includes(entity.ifcType))
+          .map((entity) => [entity.ifcType, entity.classifications ?? []])
+      );
+    const bySystem = (references: { system: string | null }[]) =>
+      [...references].sort((a, b) => (a.system ?? "").localeCompare(b.system ?? ""));
+
+    const fromWebIfc = byType(webIfcResult);
+    const fromIfcLite = byType(ifcLiteResult);
+
+    // The wall's reference is nested one deep, so its system is only reachable by walking
+    // ReferencedSource — and the parent code has to survive alongside the leaf, which is what
+    // lets a rule naming EF_25 match an element classified EF_25_10.
+    expect(fromIfcLite.IFCWALL).toEqual([
+      { system: "Uniclass 2015", identifications: ["EF_25_10", "EF_25"] },
+    ]);
+    expect(fromWebIfc.IFCWALL).toEqual(fromIfcLite.IFCWALL);
+
+    // Classified through its IfcSlabType, plus a second system of its own: an adapter reading
+    // occurrence associations alone would report only one of the two.
+    expect(bySystem(fromIfcLite.IFCSLAB).map((reference) => reference.system)).toEqual([
+      "NL/SfB",
+      "Uniclass 2015",
+    ]);
+    expect(bySystem(fromWebIfc.IFCSLAB)).toEqual(bySystem(fromIfcLite.IFCSLAB));
+
+    expect(fromIfcLite.IFCBEAM).toEqual([]);
+    expect(fromWebIfc.IFCBEAM).toEqual([]);
+  });
 });
 
 // Unit conversion is the one place a parser disagreement becomes a *false pass*: IDS states a
@@ -291,6 +403,7 @@ describe("adapter parity", () => {
 // compared 1000x wrong and in the approving direction. Both engines must agree, and both fixtures
 // below declare .MILLI. .METRE. like every real Dutch model does.
 describe("adapter parity — unit scales", () => {
+
   it("both engines resolve the same SI scale for a millimetre model", async () => {
     for (const fixture of ["minimal-wall.ifc", "multi-valued-properties.ifc"]) {
       const path = fixturePath(fixture);

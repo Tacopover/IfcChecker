@@ -1,6 +1,7 @@
 import * as WebIFC from "web-ifc";
 import {
   simpleAttributeNamesFor,
+  type ClassificationReference,
   type ModelStructureNode,
   type NormalizedElement,
   type NormalizedValue,
@@ -11,6 +12,8 @@ import { identifyEntity } from "./entity-identity.js";
 import { assertWellFormedStepFile } from "./step-well-formed.js";
 import { normalizePropertyValue, normalizeValue } from "./normalize-property-value.js";
 import { UnitScaleCollector, siUnitScale } from "./unit-scales.js";
+import { resolvePartOf } from "./part-of.js";
+import { effectivePredefinedType } from "./predefined-type.js";
 
 type WebIfcLine = Record<string, any>;
 
@@ -181,6 +184,9 @@ export async function parseWebIfcBuffer(
 
   try {
     const idsScope: NormalizedElement[] = [];
+    // Kept parallel to idsScope so partOf can be resolved in a second pass, once every entity's
+    // identity is known — a whole is often normalized after the part that points at it.
+    const scopeExpressIds: number[] = [];
     const elementTypeByExpressId = new Map<number, string>();
     const unitScales = new UnitScaleCollector(webIfcUnitScales(ifcApi, modelID));
 
@@ -216,6 +222,213 @@ export async function parseWebIfcBuffer(
       if (typeId === undefined) continue;
       for (const ref of rel.RelatedObjects ?? []) {
         if (typeof ref?.value === "number") typeIdByElement.set(ref.value, typeId);
+      }
+    }
+
+    // Element expressId -> the classification references associated with it, from every
+    // IFCRELASSOCIATESCLASSIFICATION. ifc-lite resolves this graph itself; web-ifc has no
+    // equivalent, so the chain is walked by hand here — leaving it out would make the engine
+    // picker decide whether a classified model passes.
+    const classificationRefsByElement = new Map<number, number[]>();
+    const classificationRelIds = ifcApi.GetLineIDsWithType(
+      modelID,
+      WebIFC.IFCRELASSOCIATESCLASSIFICATION
+    );
+    for (let i = 0; i < classificationRelIds.size(); i++) {
+      const rel = ifcApi.GetLine(modelID, classificationRelIds.get(i)) as WebIfcLine;
+      const referenceId = rel.RelatingClassification?.value;
+      if (typeof referenceId !== "number") continue;
+      for (const ref of rel.RelatedObjects ?? []) {
+        const elementId = ref?.value;
+        if (typeof elementId !== "number") continue;
+        const bucket = classificationRefsByElement.get(elementId);
+        if (bucket) bucket.push(referenceId);
+        else classificationRefsByElement.set(elementId, [referenceId]);
+      }
+    }
+
+    /**
+     * Resolve one classification reference to the strings IDS compares it by.
+     *
+     * The system is only found by following `ReferencedSource` to the `IfcClassification` at the
+     * top, and each reference passed on the way contributes its own identification — which is what
+     * lets a rule naming a parent code match an element classified under one of its children.
+     * IFC2X3 spells that identification `ItemReference`, so both names are read.
+     *
+     * Cached per reference because one classification reference is typically shared by many
+     * elements, and the walk is otherwise repeated for each of them.
+     */
+    const classificationCache = new Map<number, ClassificationReference>();
+    function readClassificationReference(referenceId: number): ClassificationReference {
+      const cached = classificationCache.get(referenceId);
+      if (cached) return cached;
+
+      const identifications: string[] = [];
+      let system: string | null = null;
+      let currentId: number | undefined = referenceId;
+      // A malformed file can point a ReferencedSource chain back at itself; the seen set makes
+      // that a truncated answer rather than a hung parse.
+      const seen = new Set<number>();
+
+      while (typeof currentId === "number" && !seen.has(currentId)) {
+        seen.add(currentId);
+        const line = ifcApi.GetLine(modelID, currentId) as WebIfcLine | null;
+        if (!line) break;
+
+        if (line.type === WebIFC.IFCCLASSIFICATION) {
+          const name = normalizePropertyValue(line.Name);
+          system = typeof name === "string" && name !== "" ? name : null;
+          break;
+        }
+
+        const identification = normalizePropertyValue(line.Identification ?? line.ItemReference);
+        if (typeof identification === "string" && identification !== "") {
+          identifications.push(identification);
+        }
+        currentId = line.ReferencedSource?.value;
+      }
+
+      const resolved: ClassificationReference = { system, identifications };
+      classificationCache.set(referenceId, resolved);
+      return resolved;
+    }
+
+    // Element expressId -> the material definitions associated with it. Same shape as the
+    // classification map above, and needed for the same reason: ifc-lite resolves materials
+    // itself and web-ifc does not, so an unported engine would report every element unmaterialed.
+    const materialDefsByElement = new Map<number, number[]>();
+    const materialRelIds = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCRELASSOCIATESMATERIAL);
+    for (let i = 0; i < materialRelIds.size(); i++) {
+      const rel = ifcApi.GetLine(modelID, materialRelIds.get(i)) as WebIfcLine;
+      const defId = rel.RelatingMaterial?.value;
+      if (typeof defId !== "number") continue;
+      for (const ref of rel.RelatedObjects ?? []) {
+        const elementId = ref?.value;
+        if (typeof elementId !== "number") continue;
+        const bucket = materialDefsByElement.get(elementId);
+        if (bucket) bucket.push(defId);
+        else materialDefsByElement.set(elementId, [defId]);
+      }
+    }
+
+    /**
+     * Every string an IDS material facet may match behind one material definition.
+     *
+     * IFC reaches a material five ways — plainly, or through a layer, profile, constituent or list
+     * set — and IDS matches a name *or* a category at every level of whichever shape is used,
+     * including the set's own name. A `*Usage` is a placement wrapper around its set, so it is
+     * unwrapped rather than treated as a kind of its own.
+     *
+     * Cached per definition: a layer set defined once on a type is typically shared by every
+     * occurrence of it.
+     */
+    const materialCache = new Map<number, string[]>();
+    function readMaterialDefinition(defId: number | undefined): string[] {
+      if (typeof defId !== "number") return [];
+      const cached = materialCache.get(defId);
+      if (cached) return cached;
+
+      const names: string[] = [];
+      const add = (...candidates: unknown[]) => {
+        for (const candidate of candidates) {
+          const value = normalizePropertyValue(candidate);
+          if (typeof value === "string" && value !== "" && !names.includes(value)) names.push(value);
+        }
+      };
+      // A member's own name and category, plus those of the IfcMaterial behind it.
+      const addMember = (member: WebIfcLine | null | undefined) => {
+        if (!member) return;
+        add(member.Name, member.Category);
+        const materialId = member.Material?.value;
+        if (typeof materialId !== "number") return;
+        const material = ifcApi.GetLine(modelID, materialId) as WebIfcLine | null;
+        if (material) add(material.Name, material.Category);
+      };
+      const members = (refs: unknown): Array<WebIfcLine | null> =>
+        (Array.isArray(refs) ? refs : [])
+          .map((ref) => (ref as WebIfcLine)?.value)
+          .filter((id): id is number => typeof id === "number")
+          .map((id) => ifcApi.GetLine(modelID, id) as WebIfcLine | null);
+
+      const line = ifcApi.GetLine(modelID, defId) as WebIfcLine | null;
+      if (!line) return [];
+
+      switch (line.type) {
+        case WebIFC.IFCMATERIAL:
+          add(line.Name, line.Category);
+          break;
+        case WebIFC.IFCMATERIALLAYERSETUSAGE:
+          return readMaterialDefinition(line.ForLayerSet?.value);
+        case WebIFC.IFCMATERIALPROFILESETUSAGE:
+          return readMaterialDefinition(line.ForProfileSet?.value);
+        case WebIFC.IFCMATERIALLAYERSET:
+          add(line.LayerSetName);
+          for (const layer of members(line.MaterialLayers)) addMember(layer);
+          break;
+        case WebIFC.IFCMATERIALPROFILESET:
+          add(line.Name);
+          for (const profile of members(line.MaterialProfiles)) addMember(profile);
+          break;
+        case WebIFC.IFCMATERIALCONSTITUENTSET:
+          add(line.Name);
+          for (const constituent of members(line.MaterialConstituents)) addMember(constituent);
+          break;
+        case WebIFC.IFCMATERIALLIST:
+          for (const material of members(line.Materials)) {
+            if (material) add(material.Name, material.Category);
+          }
+          break;
+      }
+
+      materialCache.set(defId, names);
+      return names;
+    }
+
+    // Part expressId -> the wholes it belongs to, one entry per relationship. ifc-lite reads this
+    // off its relationship graph; web-ifc has no graph, so the six relationships IDS names are
+    // walked directly. Each names its whole and its parts through different attributes, which is
+    // the only reason this is a table rather than a loop over one shape.
+    const PART_OF_RELATIONSHIPS = [
+      { type: WebIFC.IFCRELAGGREGATES, name: "IFCRELAGGREGATES", whole: "RelatingObject", parts: "RelatedObjects" },
+      { type: WebIFC.IFCRELNESTS, name: "IFCRELNESTS", whole: "RelatingObject", parts: "RelatedObjects" },
+      {
+        type: WebIFC.IFCRELCONTAINEDINSPATIALSTRUCTURE,
+        name: "IFCRELCONTAINEDINSPATIALSTRUCTURE",
+        whole: "RelatingStructure",
+        parts: "RelatedElements",
+      },
+      { type: WebIFC.IFCRELASSIGNSTOGROUP, name: "IFCRELASSIGNSTOGROUP", whole: "RelatingGroup", parts: "RelatedObjects" },
+      {
+        type: WebIFC.IFCRELVOIDSELEMENT,
+        name: "IFCRELVOIDSELEMENT",
+        whole: "RelatingBuildingElement",
+        parts: "RelatedOpeningElement",
+      },
+      {
+        type: WebIFC.IFCRELFILLSELEMENT,
+        name: "IFCRELFILLSELEMENT",
+        whole: "RelatingOpeningElement",
+        parts: "RelatedBuildingElement",
+      },
+    ] as const;
+
+    const wholesByPart = new Map<number, Array<{ relation: string; wholeId: number }>>();
+    for (const shape of PART_OF_RELATIONSHIPS) {
+      if (shape.type === undefined) continue;
+      const relIds = ifcApi.GetLineIDsWithType(modelID, shape.type);
+      for (let i = 0; i < relIds.size(); i++) {
+        const rel = ifcApi.GetLine(modelID, relIds.get(i)) as WebIfcLine;
+        const wholeId = (rel[shape.whole] as WebIfcLine | undefined)?.value;
+        if (typeof wholeId !== "number") continue;
+        // Voids and fills name a single part; the other four name a list.
+        const partRefs = rel[shape.parts];
+        for (const ref of Array.isArray(partRefs) ? partRefs : [partRefs]) {
+          const partId = (ref as WebIfcLine | undefined)?.value;
+          if (typeof partId !== "number") continue;
+          const bucket = wholesByPart.get(partId);
+          if (bucket) bucket.push({ relation: shape.name, wholeId });
+          else wholesByPart.set(partId, [{ relation: shape.name, wholeId }]);
+        }
       }
     }
 
@@ -361,15 +574,60 @@ export async function parseWebIfcBuffer(
           attributes[attributeName] = normalizeValue(line[attributeName]);
         }
 
+        // Occurrence first, then the type's own — IDS inherits a type's classification down to its
+        // occurrences, the same way a type's property sets reach them.
+        const classifications = [
+          ...(classificationRefsByElement.get(expressID) ?? []),
+          ...(typeId === undefined ? [] : (classificationRefsByElement.get(typeId) ?? [])),
+        ].map(readClassificationReference);
+
+        // Occurrence overrides type, rather than adding to it: an element that states its own
+        // material has replaced the type's, and ifc-lite resolves it the same way. The suite pins
+        // both halves — one case inherits, the next overrides.
+        const materialDefs =
+          materialDefsByElement.get(expressID) ??
+          (typeId === undefined ? undefined : materialDefsByElement.get(typeId));
+        const materials =
+          materialDefs === undefined ? null : materialDefs.flatMap(readMaterialDefinition);
+
         idsScope.push({
           globalId: identifyEntity(typeName, globalId, expressID),
           ifcType: typeName,
-          predefinedType: stripEnumDots(line.PredefinedType),
+          predefinedType: effectivePredefinedType(
+            stripEnumDots(line.PredefinedType),
+            line.ObjectType,
+            line.ElementType
+          ),
           name: typeof name === "string" ? name : null,
           attributes,
           propertySets,
+          classifications,
+          materials,
         });
+        scopeExpressIds.push(expressID);
       }
+    }
+
+    const identityByExpressId = new Map(
+      scopeExpressIds.map((expressId, index) => [
+        expressId,
+        { ifcType: idsScope[index].ifcType, predefinedType: idsScope[index].predefinedType },
+      ])
+    );
+    const wholesOf = resolvePartOf(
+      (expressId) => wholesByPart.get(expressId) ?? [],
+      (expressId) => {
+        const known = identityByExpressId.get(expressId);
+        if (known) return known;
+        // A whole outside the normalized set can still be named by type; it has no predefined
+        // type to offer, so a facet asking for one correctly fails against it.
+        const line = ifcApi.GetLine(modelID, expressId) as WebIfcLine | null;
+        const typeName = line ? (ifcApi.GetNameFromTypeCode(line.type) ?? "").toUpperCase() : "";
+        return typeName === "" ? null : { ifcType: typeName, predefinedType: null };
+      }
+    );
+    for (const [index, expressId] of scopeExpressIds.entries()) {
+      idsScope[index].partOf = wholesOf(expressId);
     }
 
     warnAboutUnrecognizedTypes(unrecognized);

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js";
-import type { ParsedAttributeFacet, ParsedPropertyFacet } from "./parse-ids.js";
+import type {
+  ParsedAttributeFacet,
+  ParsedClassificationFacet,
+  ParsedMaterialFacet,
+  ParsedPartOfFacet,
+  ParsedPropertyFacet,
+} from "./parse-ids.js";
 
 function makeElement(overrides: Partial<NormalizedElement>): NormalizedElement {
   return {
@@ -670,5 +676,190 @@ describe("evaluateRequirement — unit conversion", () => {
       restriction: { kind: "exact", value: "REI60" },
     });
     expect(evaluateRequirement(element, facet, MILLIMETRES).passed).toBe(true);
+  });
+});
+
+describe("evaluateRequirement — classification", () => {
+  function classificationFacet(
+    overrides: Partial<ParsedClassificationFacet> = {}
+  ): ParsedClassificationFacet {
+    return { kind: "classification", system: null, value: null, cardinality: "required", ...overrides };
+  }
+
+  const uniclass = { system: "Uniclass 2015", identifications: ["EF_25_10", "EF_25"] };
+  const nlsfb = { system: "NL/SfB", identifications: ["21"] };
+
+  it("matches a parent code against an element classified under one of its children", () => {
+    const element = makeElement({ classifications: [uniclass] });
+    const facet = classificationFacet({ value: { kind: "exact", value: "EF_25" } });
+    expect(evaluateRequirement(element, facet).passed).toBe(true);
+  });
+
+  it("requires system and value to be satisfied by the same reference", () => {
+    const element = makeElement({ classifications: [uniclass, nlsfb] });
+    // Both strings are present on the element, but never together on one reference.
+    const facet = classificationFacet({
+      system: { kind: "exact", value: "NL/SfB" },
+      value: { kind: "exact", value: "EF_25_10" },
+    });
+    expect(evaluateRequirement(element, facet).passed).toBe(false);
+  });
+
+  it("treats a facet stating neither parameter as a check that the element is classified", () => {
+    const facet = classificationFacet();
+    expect(evaluateRequirement(makeElement({ classifications: [nlsfb] }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ classifications: [] }), facet).passed).toBe(false);
+  });
+
+  it("waives an optional facet only when the element carries no classification at all", () => {
+    const facet = classificationFacet({
+      cardinality: "optional",
+      value: { kind: "exact", value: "EF_25_10" },
+    });
+
+    expect(evaluateRequirement(makeElement({ classifications: [] }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ classifications: [uniclass] }), facet).passed).toBe(true);
+
+    // Classified, but not as the facet asks. The waiver must not extend to it — scoping the
+    // waiver by system instead would approve an element whose only classification names a
+    // system the facet does not accept, which the suite states as a document that must fail.
+    expect(evaluateRequirement(makeElement({ classifications: [nlsfb] }), facet).passed).toBe(false);
+  });
+
+  it("inverts for a prohibited facet", () => {
+    const facet = classificationFacet({
+      cardinality: "prohibited",
+      value: { kind: "exact", value: "EF_25_10" },
+    });
+    expect(evaluateRequirement(makeElement({ classifications: [uniclass] }), facet).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ classifications: [nlsfb] }), facet).passed).toBe(true);
+  });
+
+  it("does not match a classification code against a numeric range", () => {
+    const element = makeElement({ classifications: [nlsfb] });
+    const facet = classificationFacet({
+      value: { kind: "bounds", min: { value: 0, inclusive: true }, max: { value: 99, inclusive: true } },
+    });
+    expect(evaluateRequirement(element, facet).passed).toBe(false);
+  });
+});
+
+describe("evaluateRequirement — material", () => {
+  function materialFacet(overrides: Partial<ParsedMaterialFacet> = {}): ParsedMaterialFacet {
+    return { kind: "material", value: null, cardinality: "required", ...overrides };
+  }
+
+  it("matches any of the names and categories behind the element's material", () => {
+    const element = makeElement({ materials: ["CavityWall", "CoreLayer", "Concrete", "Structural"] });
+    for (const wanted of ["CavityWall", "CoreLayer", "Concrete", "Structural"]) {
+      expect(evaluateRequirement(element, materialFacet({ value: { kind: "exact", value: wanted } })).passed).toBe(true);
+    }
+    expect(evaluateRequirement(element, materialFacet({ value: { kind: "exact", value: "Timber" } })).passed).toBe(false);
+  });
+
+  // The distinction the whole `null` vs `[]` shape exists for: an element with no material
+  // association fails an empty facet, one whose association names nothing passes it — and a
+  // value check fails both, because neither has anything to match.
+  it("separates having no material from having a material that names nothing", () => {
+    const empty = materialFacet();
+    expect(evaluateRequirement(makeElement({ materials: null }), empty).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ materials: [] }), empty).passed).toBe(true);
+
+    const named = materialFacet({ value: { kind: "exact", value: "Concrete" } });
+    expect(evaluateRequirement(makeElement({ materials: null }), named).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ materials: [] }), named).passed).toBe(false);
+  });
+
+  it("waives an optional facet only when the element has no material at all", () => {
+    const facet = materialFacet({ cardinality: "optional", value: { kind: "exact", value: "Concrete" } });
+    expect(evaluateRequirement(makeElement({ materials: null }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ materials: ["Concrete"] }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ materials: ["Steel"] }), facet).passed).toBe(false);
+  });
+
+  it("inverts for a prohibited facet", () => {
+    const facet = materialFacet({ cardinality: "prohibited", value: { kind: "exact", value: "Steel" } });
+    expect(evaluateRequirement(makeElement({ materials: ["Steel"] }), facet).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ materials: ["Concrete"] }), facet).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ materials: null }), facet).passed).toBe(true);
+  });
+});
+
+describe("evaluateRequirement — partOf", () => {
+  function partOfFacet(overrides: Partial<ParsedPartOfFacet> = {}): ParsedPartOfFacet {
+    return {
+      kind: "partOf",
+      relations: [],
+      entityName: null,
+      predefinedType: null,
+      cardinality: "required",
+      ...overrides,
+    };
+  }
+
+  const nestedInFurniture = makeElement({
+    partOf: [{ relation: "IFCRELNESTS", ifcType: "IFCFURNITURE", predefinedType: "WATERBOTTLE" }],
+  });
+
+  it("does not let a nested element satisfy an aggregate facet", () => {
+    // ifc-lite files IFCRELNESTS under the same graph edge as IFCRELAGGREGATES, so a checker
+    // reading the edge rather than the relationship entity would approve this.
+    expect(
+      evaluateRequirement(nestedInFurniture, partOfFacet({ relations: ["IFCRELAGGREGATES"] })).passed
+    ).toBe(false);
+    expect(
+      evaluateRequirement(nestedInFurniture, partOfFacet({ relations: ["IFCRELNESTS"] })).passed
+    ).toBe(true);
+  });
+
+  it("accepts any relation when the facet names none", () => {
+    expect(evaluateRequirement(nestedInFurniture, partOfFacet()).passed).toBe(true);
+    expect(evaluateRequirement(makeElement({ partOf: [] }), partOfFacet()).passed).toBe(false);
+  });
+
+  // "IFCRELVOIDSELEMENT IFCRELFILLSELEMENT" is a single enumeration value in ids.xsd — one string
+  // containing a space — meaning either relationship.
+  it("treats the two-name enumeration value as either relationship", () => {
+    const facet = partOfFacet({ relations: ["IFCRELVOIDSELEMENT", "IFCRELFILLSELEMENT"] });
+    const opening = makeElement({
+      partOf: [{ relation: "IFCRELVOIDSELEMENT", ifcType: "IFCWALL", predefinedType: "STANDARD" }],
+    });
+    expect(evaluateRequirement(opening, facet).passed).toBe(true);
+    expect(evaluateRequirement(nestedInFurniture, facet).passed).toBe(false);
+  });
+
+  it("matches the whole's entity name exactly rather than by subtype", () => {
+    const inGroup = makeElement({
+      partOf: [{ relation: "IFCRELASSIGNSTOGROUP", ifcType: "IFCSYSTEM", predefinedType: null }],
+    });
+    // An applicability entity name matches subtypes; a partOf entity name does not — the suite
+    // says the group's entity "must match exactly".
+    expect(
+      evaluateRequirement(inGroup, partOfFacet({ entityName: { kind: "exact", value: "IFCGROUP" } })).passed
+    ).toBe(false);
+    expect(
+      evaluateRequirement(inGroup, partOfFacet({ entityName: { kind: "exact", value: "IFCSYSTEM" } })).passed
+    ).toBe(true);
+  });
+
+  it("requires the whole's predefined type when the facet states one", () => {
+    expect(
+      evaluateRequirement(
+        nestedInFurniture,
+        partOfFacet({ predefinedType: { kind: "exact", value: "WATERBOTTLE" } })
+      ).passed
+    ).toBe(true);
+    expect(
+      evaluateRequirement(
+        nestedInFurniture,
+        partOfFacet({ predefinedType: { kind: "exact", value: "CHAIR" } })
+      ).passed
+    ).toBe(false);
+  });
+
+  it("inverts for a prohibited facet", () => {
+    const facet = partOfFacet({ relations: ["IFCRELNESTS"], cardinality: "prohibited" });
+    expect(evaluateRequirement(nestedInFurniture, facet).passed).toBe(false);
+    expect(evaluateRequirement(makeElement({ partOf: [] }), facet).passed).toBe(true);
   });
 });

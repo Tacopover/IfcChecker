@@ -5,13 +5,31 @@ import type {
   PropertyValue,
   UnitScales,
 } from "@ifc-qa/shared-types";
-import type { ParsedBound, ParsedRequirementFacet, ParsedRestriction } from "./parse-ids.js";
+import type {
+  ParsedAttributeFacet,
+  ParsedBound,
+  ParsedClassificationFacet,
+  ParsedMaterialFacet,
+  ParsedPartOfFacet,
+  ParsedPropertyFacet,
+  ParsedRequirementFacet,
+  ParsedRestriction,
+} from "./parse-ids.js";
 import { isSubtypeOf } from "./ifc-type-hierarchy.js";
 
 export interface FacetCheckResult {
   passed: boolean;
   message: string;
 }
+
+/**
+ * The facets that read one value slot off the element.
+ *
+ * A classification is not one of them: it matches a *set* of references, each with two parameters
+ * of its own, so the slot-reading helpers below say nothing useful about it and are typed to
+ * exclude it rather than silently returning null for it.
+ */
+type SlotFacet = ParsedAttributeFacet | ParsedPropertyFacet;
 
 /**
  * The three identity fields live on the element rather than in its attribute bag, so they are
@@ -41,10 +59,7 @@ function readAttributeValue(element: NormalizedElement, attributeName: string): 
   return null;
 }
 
-function readFacetValue(
-  element: NormalizedElement,
-  facet: ParsedRequirementFacet
-): NormalizedValue | null {
+function readFacetValue(element: NormalizedElement, facet: SlotFacet): NormalizedValue | null {
   if (facet.kind === "attribute") {
     return readAttributeValue(element, facet.name);
   }
@@ -58,13 +73,13 @@ function isFilledIn(slot: NormalizedValue | null): boolean {
   return slot !== null && slot !== undefined && slot.value !== null && String(slot.value) !== "";
 }
 
-function facetLabel(facet: ParsedRequirementFacet): string {
+function facetLabel(facet: SlotFacet): string {
   return facet.kind === "attribute"
     ? `Attribute "${facet.name}"`
     : `Property "${facet.baseName}" in property set "${facet.propertySet}"`;
 }
 
-function missingMessage(facet: ParsedRequirementFacet): string {
+function missingMessage(facet: SlotFacet): string {
   return facet.kind === "attribute"
     ? `Attribute "${facet.name}" is missing`
     : `Property "${facet.baseName}" is missing in property set "${facet.propertySet}"`;
@@ -135,7 +150,7 @@ function matchesLiteral(raw: PropertyValue, literal: string, wholeNumber: boolea
  */
 function holdsWholeNumber(
   element: NormalizedElement,
-  facet: ParsedRequirementFacet,
+  facet: SlotFacet,
   slot: NormalizedValue
 ): boolean {
   return facet.kind === "property"
@@ -221,7 +236,7 @@ function boundsLabel(min: ParsedBound | null, max: ParsedBound | null): string {
 }
 
 function restrictionFailure(
-  facet: ParsedRequirementFacet,
+  facet: SlotFacet,
   restriction: ParsedRestriction,
   slot: NormalizedValue,
   wholeNumber: boolean,
@@ -258,12 +273,186 @@ function restrictionFailure(
   }
 }
 
+/**
+ * Whether a restriction admits a string, with none of the numeric machinery above.
+ *
+ * A classification code, a system name and a material name are text by construction — `EF_25_10`
+ * is not a number that happens to be written oddly — so there is no lexical casting, no tolerance
+ * and no unit conversion here. A numeric range says nothing about such a value, so `bounds`
+ * admits nothing rather than coercing the string into a comparison it was never meant for.
+ */
+function admitsString(restriction: ParsedRestriction, candidate: string): boolean {
+  switch (restriction.kind) {
+    case "exact":
+      return candidate === restriction.value;
+    case "enum":
+      return restriction.values.includes(candidate);
+    case "pattern":
+      return restriction.regex.test(candidate);
+    case "bounds":
+      return false;
+  }
+}
+
+/** `null` states no constraint, so it admits everything — including an element that has no value. */
+function admitsAny(restriction: ParsedRestriction | null, candidates: string[]): boolean {
+  if (restriction === null) return true;
+  return candidates.some((candidate) => admitsString(restriction, candidate));
+}
+
+function restrictionLabel(restriction: ParsedRestriction): string {
+  switch (restriction.kind) {
+    case "exact":
+      return `"${restriction.value}"`;
+    case "enum":
+      return `one of: ${restriction.values.join(", ")}`;
+    case "pattern":
+      return `matching "${restriction.source}"`;
+    case "bounds":
+      return boundsLabel(restriction.min, restriction.max);
+  }
+}
+
+function classificationLabel(facet: ParsedClassificationFacet): string {
+  const parts: string[] = [];
+  if (facet.system) parts.push(`system ${restrictionLabel(facet.system)}`);
+  if (facet.value) parts.push(`value ${restrictionLabel(facet.value)}`);
+  return parts.length > 0 ? `a classification with ${parts.join(" and ")}` : "any classification";
+}
+
+/**
+ * Whether the element carries a classification the facet accepts.
+ *
+ * Both parameters must be satisfied by **the same reference** — IDS says all stated parameters
+ * must match, not any, so an element classified `Uniclass · EF_25` and separately `NLSfB · 21`
+ * does not satisfy a facet asking for `Uniclass · 21`.
+ *
+ * `optional` turns on whether the element is classified **at all**, not on whether it is classified
+ * in the system the facet names. The suite pins the difference: a wall associated with an
+ * `IfcClassification` whose name is empty does not match a `\w+` system, yet an optional facet
+ * against it must *fail* rather than being waived. The element carries a classification, so the
+ * rule engages — scoping the waiver by system would approve exactly the case that must fail.
+ */
+function evaluateClassification(
+  element: NormalizedElement,
+  facet: ParsedClassificationFacet
+): FacetCheckResult {
+  const references = element.classifications ?? [];
+  const matching = references.filter(
+    (reference) =>
+      admitsAny(facet.system, reference.system === null ? [] : [reference.system]) &&
+      admitsAny(facet.value, reference.identifications)
+  );
+
+  if (facet.cardinality === "prohibited") {
+    return matching.length === 0
+      ? { passed: true, message: "" }
+      : { passed: false, message: `Element must not have ${classificationLabel(facet)}` };
+  }
+
+  if (facet.cardinality === "optional" && references.length === 0) {
+    return { passed: true, message: "" };
+  }
+
+  return matching.length > 0
+    ? { passed: true, message: "" }
+    : {
+        passed: false,
+        message:
+          references.length === 0
+            ? `Element has no classification, but ${classificationLabel(facet)} is required`
+            : `Element has no ${classificationLabel(facet)}`,
+      };
+}
+
+/**
+ * Whether the element is made of a material the facet accepts.
+ *
+ * The distinction that carries the weight is between an element with *no* material association
+ * and one whose association names nothing. A facet stating no value asks only whether a material
+ * is present, so the first fails it and the second passes — and a value check fails both, because
+ * there is nothing to match either way.
+ *
+ * `optional` waives the facet on the same footing as a classification: only when the element has
+ * no material at all.
+ */
+function evaluateMaterial(
+  element: NormalizedElement,
+  facet: ParsedMaterialFacet
+): FacetCheckResult {
+  const materials = element.materials ?? null;
+  const wanted = facet.value === null ? "a material" : `a material ${restrictionLabel(facet.value)}`;
+  const matches = materials !== null && admitsAny(facet.value, materials);
+
+  if (facet.cardinality === "prohibited") {
+    return matches
+      ? { passed: false, message: `Element must not have ${wanted}` }
+      : { passed: true, message: "" };
+  }
+
+  if (facet.cardinality === "optional" && materials === null) {
+    return { passed: true, message: "" };
+  }
+
+  if (matches) return { passed: true, message: "" };
+  return {
+    passed: false,
+    message:
+      materials === null
+        ? `Element has no material, but ${wanted} is required`
+        : `Element is made of ${materials.length > 0 ? materials.join(", ") : "an unnamed material"}, which is not ${wanted}`,
+  };
+}
+
+function partOfLabel(facet: ParsedPartOfFacet): string {
+  const entity = facet.entityName === null ? "anything" : `a ${restrictionLabel(facet.entityName)}`;
+  const predefined =
+    facet.predefinedType === null ? "" : ` of predefined type ${restrictionLabel(facet.predefinedType)}`;
+  const via = facet.relations.length === 0 ? "" : ` by ${facet.relations.join(" or ")}`;
+  return `part of ${entity}${predefined}${via}`;
+}
+
+/**
+ * Whether the element is a part of a whole the facet accepts.
+ *
+ * The entity is matched on its type name **exactly**, not by subtype: the suite says a group's
+ * entity "must match exactly", so an `IfcGroup` rule is not satisfied by an `IfcSystem`. That is
+ * the opposite of how an applicability entity name works, and deliberately so.
+ *
+ * Chaining through ancestors is the adapter's job; by the time a facet sees `element.partOf` the
+ * ancestral wholes are already listed, each tagged with the relation that reaches it.
+ */
+function evaluatePartOf(element: NormalizedElement, facet: ParsedPartOfFacet): FacetCheckResult {
+  const matching = (element.partOf ?? []).filter((whole) => {
+    if (facet.relations.length > 0 && !facet.relations.includes(whole.relation)) return false;
+    if (!admitsAny(facet.entityName, [whole.ifcType])) return false;
+    return admitsAny(
+      facet.predefinedType,
+      whole.predefinedType === null ? [] : [whole.predefinedType]
+    );
+  });
+
+  if (facet.cardinality === "prohibited") {
+    return matching.length === 0
+      ? { passed: true, message: "" }
+      : { passed: false, message: `Element must not be ${partOfLabel(facet)}` };
+  }
+
+  return matching.length > 0
+    ? { passed: true, message: "" }
+    : { passed: false, message: `Element is not ${partOfLabel(facet)}` };
+}
+
 export function evaluateRequirement(
   element: NormalizedElement,
   facet: ParsedRequirementFacet,
   /** Empty for a model already in SI, and for a caller that has no unit information at all. */
   unitScales: UnitScales = {}
 ): FacetCheckResult {
+  if (facet.kind === "classification") return evaluateClassification(element, facet);
+  if (facet.kind === "material") return evaluateMaterial(element, facet);
+  if (facet.kind === "partOf") return evaluatePartOf(element, facet);
+
   const slot = readFacetValue(element, facet);
   const filledIn = isFilledIn(slot);
 

@@ -31,7 +31,58 @@ export interface ParsedPropertyFacet {
   cardinality: FacetCardinality;
 }
 
-export type ParsedRequirementFacet = ParsedAttributeFacet | ParsedPropertyFacet;
+/**
+ * A classification the element must carry.
+ *
+ * Both parameters are restrictions rather than plain names, because IDS lets an author constrain
+ * either — `system` by a pattern is how the conformance suite writes "any system at all". Both are
+ * nullable: `value` is optional in the schema, and a `<system>` written without a `<simpleValue>`
+ * states no system, which makes the facet a check that the element is classified at all.
+ */
+export interface ParsedClassificationFacet {
+  kind: "classification";
+  system: ParsedRestriction | null;
+  value: ParsedRestriction | null;
+  cardinality: FacetCardinality;
+}
+
+/**
+ * A material the element must be made of.
+ *
+ * One parameter, and it is optional: a `<material>` stating no value asks only whether the element
+ * has a material at all.
+ */
+export interface ParsedMaterialFacet {
+  kind: "material";
+  value: ParsedRestriction | null;
+  cardinality: FacetCardinality;
+}
+
+/**
+ * A whole the element must be a part of.
+ *
+ * `relations` is the set of IFC relationship names the facet accepts, empty meaning any of them.
+ * It is a set rather than a single name because `ids.xsd` gives the `relations` enumeration a
+ * member that is itself two names separated by a space —
+ * `"IFCRELVOIDSELEMENT IFCRELFILLSELEMENT"` — one value meaning either.
+ *
+ * The nested `<entity>` is matched by name and optionally by predefined type, both as restrictions
+ * because the suite writes an "any whole at all" check as a `.*` pattern on the name.
+ */
+export interface ParsedPartOfFacet {
+  kind: "partOf";
+  relations: string[];
+  entityName: ParsedRestriction | null;
+  predefinedType: ParsedRestriction | null;
+  cardinality: FacetCardinality;
+}
+
+export type ParsedRequirementFacet =
+  | ParsedAttributeFacet
+  | ParsedPropertyFacet
+  | ParsedClassificationFacet
+  | ParsedMaterialFacet
+  | ParsedPartOfFacet;
 
 /** Something the source document asked for that this parser cannot represent. */
 export interface UnsupportedConstruct {
@@ -223,13 +274,19 @@ function readBounds(restrictionChildren: OrderedNode[]): ParsedRestriction | nul
   return min === null && max === null ? null : { kind: "bounds", min, max };
 }
 
+/**
+ * The restriction under one of a facet's parameters, named because a facet may carry several: a
+ * `<classification>` constrains its `<system>` and its `<value>` independently, and each is an
+ * `idsValue` in its own right.
+ */
 function parseRestriction(
   facetChildren: OrderedNode[],
+  parameter: string,
   unsupported: UnsupportedConstruct[]
 ): ParsedRestriction | null {
-  const valueNode = facetChildren.find((candidate) => tagOf(candidate) === "value");
+  const valueNode = facetChildren.find((candidate) => tagOf(candidate) === parameter);
   if (!valueNode) return null;
-  const valueChildren = childrenOf(valueNode, "value");
+  const valueChildren = childrenOf(valueNode, parameter);
 
   const simpleValue = readSimpleValue(valueChildren);
   if (simpleValue !== null) return { kind: "exact", value: simpleValue };
@@ -425,11 +482,36 @@ function readRequirements(
     const tag = tagOf(node);
     if (tag === null || tag === TEXT_KEY) continue;
 
-    if (tag !== "attribute" && tag !== "property") {
+    if (
+      tag !== "attribute" &&
+      tag !== "property" &&
+      tag !== "classification" &&
+      tag !== "material" &&
+      tag !== "partOf"
+    ) {
       unsupported.push({
         section: "requirements",
         construct: tag,
         description: `Requires <${tag}>, which cannot be represented, so it is not checked.`,
+      });
+      continue;
+    }
+
+    if (tag === "classification") {
+      requirements.push(parseClassificationFacet(node, unsupported));
+      continue;
+    }
+
+    if (tag === "partOf") {
+      requirements.push(parsePartOfFacet(node, unsupported));
+      continue;
+    }
+
+    if (tag === "material") {
+      requirements.push({
+        kind: "material",
+        value: parseRestriction(childrenOf(node, "material"), "value", unsupported),
+        cardinality: readCardinality(node),
       });
       continue;
     }
@@ -461,7 +543,47 @@ function parseAttributeFacet(
   return {
     kind: "attribute",
     name,
-    restriction: parseRestriction(children, unsupported),
+    restriction: parseRestriction(children, "value", unsupported),
+    cardinality: readCardinality(node),
+  };
+}
+
+/**
+ * The `relation` attribute splits on whitespace, because one member of the schema's enumeration is
+ * two relationship names in a single value. An absent attribute states no constraint at all, which
+ * is not the same as an empty list of accepted relations — hence `[]` meaning "any".
+ */
+function parsePartOfFacet(
+  node: OrderedNode,
+  unsupported: UnsupportedConstruct[]
+): ParsedPartOfFacet {
+  const children = childrenOf(node, "partOf");
+  const entityChildren = descend(children, "entity");
+  const relation = attributesOf(node)["@_relation"];
+
+  return {
+    kind: "partOf",
+    relations: relation === undefined ? [] : relation.trim().split(/\s+/).filter(Boolean),
+    entityName: parseRestriction(entityChildren, "name", unsupported),
+    predefinedType: parseRestriction(entityChildren, "predefinedType", unsupported),
+    cardinality: readCardinality(node),
+  };
+}
+
+/**
+ * Never `null`: unlike an attribute or a property, a classification facet names nothing that could
+ * be unreadable. Both of its parameters are optional, and a facet stating neither is the schema's
+ * own way of asking "is this element classified at all".
+ */
+function parseClassificationFacet(
+  node: OrderedNode,
+  unsupported: UnsupportedConstruct[]
+): ParsedClassificationFacet {
+  const children = childrenOf(node, "classification");
+  return {
+    kind: "classification",
+    system: parseRestriction(children, "system", unsupported),
+    value: parseRestriction(children, "value", unsupported),
     cardinality: readCardinality(node),
   };
 }
@@ -479,7 +601,7 @@ function parsePropertyFacet(
     propertySet,
     baseName,
     dataType: attributesOf(node)["@_dataType"] ?? null,
-    restriction: parseRestriction(children, unsupported),
+    restriction: parseRestriction(children, "value", unsupported),
     cardinality: readCardinality(node),
   };
 }

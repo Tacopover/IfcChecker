@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The three specification shapes from buildingSMART's "Demo - BIM basis ILS" example, trimmed to
-  a readable size. Two of them select their elements in ways this parser cannot represent — an
-  attribute-value filter and an entity-name enumeration — and before those were reported, both
-  parsed into an empty entity list, matched nothing, and reported the model clean.
+  Specification shapes from buildingSMART's "Demo - BIM basis ILS" example, trimmed to a readable
+  size. One selects its elements by an attribute-value filter this parser cannot represent, and
+  before that was reported it parsed into an empty entity list, matched nothing, and reported the
+  model clean.
+
+  The last one is refused from the other side: its applicability is readable, but its only
+  requirement names a property by pattern rather than by name, so there is nothing left to check
+  and "all pass" would be a verdict on nothing. The classification specification above it used to
+  sit in that same position and is now checked on its merits.
 -->
 <ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd" xmlns="http://standards.buildingsmart.org/IDS">
   <info>
@@ -60,6 +65,24 @@
         <classification>
           <system><simpleValue>NL-SfB</simpleValue></system>
         </classification>
+      </requirements>
+    </specification>
+
+    <specification name="Brandwerendheid" ifcVersion="IFC4">
+      <applicability maxOccurs="unbounded">
+        <entity>
+          <name><simpleValue>IFCWALL</simpleValue></name>
+        </entity>
+      </applicability>
+      <requirements>
+        <property dataType="IFCLABEL">
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName>
+            <xs:restriction base="xs:string">
+              <xs:pattern value="Fire.*" />
+            </xs:restriction>
+          </baseName>
+        </property>
       </requirements>
     </specification>
   </specifications>

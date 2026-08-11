@@ -42,6 +42,43 @@ export type NormalizedValue = z.infer<typeof NormalizedValueSchema>;
 export const UnitScalesSchema = z.record(z.string(), z.number());
 export type UnitScales = z.infer<typeof UnitScalesSchema>;
 
+/**
+ * One classification reference an element carries, resolved to the strings IDS compares.
+ *
+ * `system` is the name of the `IfcClassification` at the root of the reference chain, not of the
+ * reference itself — a nested `IfcClassificationReference` names its parent through
+ * `ReferencedSource`, and the system is only found by walking to the top.
+ *
+ * `identifications` is the leaf's own `Identification` followed by each ancestor's, root-ward.
+ * IDS matches a classification value against *any* of them, which is what "a full classification
+ * matches its subreferences" means: a rule asking for `EF_25_10` is satisfied by an element
+ * classified `EF_25_10_25`, because the shorter code is the longer one's parent in the file.
+ */
+export const ClassificationReferenceSchema = z.object({
+  system: z.string().nullable(),
+  identifications: z.array(z.string()),
+});
+export type ClassificationReference = z.infer<typeof ClassificationReferenceSchema>;
+
+/**
+ * One whole this element is a part of, and the relationship that makes it one.
+ *
+ * `relation` is the IFC relationship entity's own name rather than a normalized category, because
+ * IDS distinguishes aggregation from nesting — and ifc-lite's relationship graph deliberately
+ * files both under one edge type, so a checker reading that would approve a nested element
+ * against an `IFCRELAGGREGATES` rule.
+ *
+ * Ancestors are included, but only through chains of a **single** relation: a beam contained in a
+ * space that is aggregated into a building is not part of that building by aggregation, and the
+ * suite states that document as one that must fail.
+ */
+export const PartOfRelationSchema = z.object({
+  relation: z.string(),
+  ifcType: z.string(),
+  predefinedType: z.string().nullable(),
+});
+export type PartOfRelation = z.infer<typeof PartOfRelationSchema>;
+
 export const NormalizedElementSchema = z.object({
   globalId: z.string(),
   ifcType: z.string(),
@@ -49,6 +86,31 @@ export const NormalizedElementSchema = z.object({
   name: z.string().nullable(),
   attributes: z.record(z.string(), NormalizedValueSchema),
   propertySets: z.record(z.string(), z.record(z.string(), NormalizedValueSchema)),
+  /**
+   * Every classification reference on the element, occurrence and type alike.
+   *
+   * Optional because an element carrying none and a caller that never collected any are the same
+   * thing to every reader — a required classification facet fails either way. Both adapters always
+   * state it, so the engines stay comparable.
+   */
+  classifications: z.array(ClassificationReferenceSchema).optional(),
+  /**
+   * Every string a material facet may match: the names and categories of the element's materials,
+   * of the layer/profile/constituent sets holding them, and of each member within those sets. IDS
+   * gives a material facet one parameter, so which of them a match came from never matters — a
+   * flat list says exactly what can be checked and nothing more.
+   *
+   * `null` when the element has no material association at all, which is a different thing from
+   * an association naming nothing: an empty material facet asks only whether the element *has* a
+   * material, so `null` fails it and `[]` passes it while still failing any value check.
+   */
+  materials: z.array(z.string()).nullable().optional(),
+  /**
+   * Every whole the element is a part of, direct and ancestral. Empty for an element that is part
+   * of nothing — including the container of everything else, which is why "the container itself"
+   * fails a containment facet.
+   */
+  partOf: z.array(PartOfRelationSchema).optional(),
 });
 export type NormalizedElement = z.infer<typeof NormalizedElementSchema>;
 

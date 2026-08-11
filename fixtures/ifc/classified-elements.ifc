@@ -1,0 +1,54 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('fixture-classified.ifc','2026-08-10T00:00:00',(''),(''),'IFC QA Tool fixture','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0FMxV72Kn2gQBLPeGefPXc',$,'Classification Fixture',$,$,$,$,(#8),#5);
+#5=IFCUNITASSIGNMENT((#6,#7));
+#6=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#7=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#8=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,#9,$);
+#9=IFCAXIS2PLACEMENT3D(#10,$,$);
+#10=IFCCARTESIANPOINT((0.0,0.0,0.0));
+#11=IFCSITE('1PPvKvz85AqQI7$4o09XlU',$,'Fixture Site',$,$,#12,$,$,.ELEMENT.,$,$,$,$,$);
+#12=IFCLOCALPLACEMENT($,#9);
+#13=IFCBUILDING('2Rf9ce5uz1qOB7WEOWMYye',$,'Fixture Building',$,$,#12,$,$,.ELEMENT.,$,$,$);
+#14=IFCBUILDINGSTOREY('3Kf5r2t7D6UwlEDlNjJKq1',$,'Level 1',$,$,#12,$,$,.ELEMENT.,0.0);
+
+/* The classification system, and a two-level reference chain beneath it. A rule naming the
+   parent code EF_25 must match the wall classified EF_25_10, which is what the chain is for. */
+#30=IFCCLASSIFICATION($,'2015',$,'Uniclass 2015',$,$,$);
+#31=IFCCLASSIFICATIONREFERENCE($,'EF_25',$,#30,$,$);
+#32=IFCCLASSIFICATIONREFERENCE($,'EF_25_10',$,#31,$,$);
+
+/* A second system, so "both system and value must match on the same reference" has something
+   to get wrong: the slab is in NL/SfB 21 and in Uniclass EF_25_10, and neither cross-pairing
+   may satisfy a facet. */
+#33=IFCCLASSIFICATION($,'2005',$,'NL/SfB',$,$,$);
+#34=IFCCLASSIFICATIONREFERENCE($,'21',$,#33,$,$);
+
+/* Occurrence-level: the wall carries the nested reference directly. */
+#15=IFCWALL('1abc2defGHI3jkl4mno5pq',$,'W-001',$,$,#12,$,'TAG-001',.STANDARD.);
+#35=IFCRELASSOCIATESCLASSIFICATION('1cA0Q2zI93Na8uPOvZiWX1',$,$,$,(#15),#32);
+
+/* Type-level: the slab is classified only through its IfcSlabType, so an adapter reading
+   occurrence associations alone sees it as unclassified. It also carries a second system
+   directly, which is the cross-pairing guard above. */
+#16=IFCSLAB('2bcd3efgHIJ4klm5nop6qr',$,'S-001',$,$,#12,$,'TAG-002',.FLOOR.);
+#17=IFCSLABTYPE('3cde4fghIJK5lmn6opq7rs',$,'SlabType-A',$,$,$,$,$,$,.FLOOR.);
+#36=IFCRELDEFINESBYTYPE('4dA1Q3zI93Na8uPOvZiWX2',$,$,$,(#16),#17);
+#37=IFCRELASSOCIATESCLASSIFICATION('5eB2Q4zI93Na8uPOvZiWX3',$,$,$,(#17),#32);
+#38=IFCRELASSOCIATESCLASSIFICATION('6fC3Q5zI93Na8uPOvZiWX4',$,$,$,(#16),#34);
+
+/* Unclassified on purpose: a required classification facet must fail this one, and an
+   optional facet must waive it. */
+#18=IFCBEAM('4def5ghiJKL6mno7pqr8st',$,'B-001',$,$,#12,$,'TAG-003',.BEAM.);
+
+#20=IFCRELAGGREGATES('3zR8O0xG71Ly6sNMtXgUVw',$,$,$,#1,(#11));
+#21=IFCRELAGGREGATES('4aS9P1yH82Mz7tONuYhVWx',$,$,$,#11,(#13));
+#22=IFCRELAGGREGATES('5bT0Q2zI93Na8uPOvZiWXy',$,$,$,#13,(#14));
+#23=IFCRELCONTAINEDINSPATIALSTRUCTURE('6cU1R3AJ04Ob9vQPwAjXYz',$,$,$,(#15,#16,#18),#14);
+ENDSEC;
+END-ISO-10303-21;

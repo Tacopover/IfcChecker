@@ -3,6 +3,8 @@ import {
   extractPropertiesOnDemand,
   extractTypePropertiesOnDemand,
   extractAllEntityAttributes,
+  extractAllMaterialsOnDemand,
+  extractClassificationsOnDemand,
   extractProjectUnits,
   type IfcDataStore,
 } from "@ifc-lite/parser";
@@ -13,6 +15,9 @@ import {
   type NormalizedElement,
   type NormalizedValue,
 } from "@ifc-qa/shared-types";
+import type { ClassificationReference } from "@ifc-qa/shared-types";
+import { resolvePartOf } from "./part-of.js";
+import { effectivePredefinedType } from "./predefined-type.js";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { identifyEntity } from "./entity-identity.js";
@@ -58,6 +63,61 @@ function buildIfcLiteModelStructure(
   return project ? toModelStructureNode(project, elementTypeByExpressId) : null;
 }
 
+/**
+ * The element's classification references, as the strings IDS compares them by.
+ *
+ * ifc-lite resolves the `ReferencedSource` chain itself: `system` is already the root
+ * `IfcClassification`'s name even for a reference nested two deep, and `path` carries the
+ * ancestors' identifications. Concatenating the leaf with its path is what makes a rule asking for
+ * a parent code match an element classified under one of its children.
+ */
+function readClassifications(store: IfcDataStore, expressId: number): ClassificationReference[] {
+  return extractClassificationsOnDemand(store, expressId).map((reference) => ({
+    system: reference.system ?? null,
+    identifications: [reference.identification, ...(reference.path ?? [])].filter(
+      (identification): identification is string => typeof identification === "string" && identification !== ""
+    ),
+  }));
+}
+
+/**
+ * Every string an IDS material facet may match, or `null` when the element has no material at all.
+ *
+ * A material reaches an element as a plain `IfcMaterial` or through a layer, profile, constituent
+ * or list set, and IDS matches the name *or* the category at every level of that structure — the
+ * set's own name included, which is why `MaterialInfo.name` is read alongside its members'.
+ * ifc-lite resolves the whole shape, occurrence overriding type, so this only flattens it.
+ */
+function readMaterials(store: IfcDataStore, expressId: number): string[] | null {
+  const associations = extractAllMaterialsOnDemand(store, expressId);
+  if (associations.length === 0) return null;
+
+  const names = new Set<string>();
+  const add = (...candidates: Array<string | undefined>) => {
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate !== "") names.add(candidate);
+    }
+  };
+
+  for (const association of associations) {
+    add(association.name, association.category);
+    for (const layer of association.layers ?? []) {
+      add(layer.name, layer.category, layer.materialName, layer.materialCategory);
+    }
+    for (const profile of association.profiles ?? []) {
+      add(profile.name, profile.category, profile.materialName, profile.materialCategory);
+    }
+    for (const constituent of association.constituents ?? []) {
+      add(constituent.name, constituent.category, constituent.materialName, constituent.materialCategory);
+    }
+    for (const material of association.materials ?? []) {
+      add(material.name, material.category);
+    }
+  }
+
+  return [...names];
+}
+
 // Buffer-based entry point shared by the Node adapter (ifc-lite-adapter.ts,
 // which reads the file itself) and the browser client (apps/web), which only
 // ever has an in-memory ArrayBuffer from a <input type="file"> — never a
@@ -73,6 +133,9 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
   );
 
   const idsScope: NormalizedElement[] = [];
+  // Kept parallel to idsScope so partOf can be resolved in a second pass: the walk needs every
+  // entity's identity, including wholes that appear later in the type-sorted order.
+  const scopeExpressIds: number[] = [];
   const elementTypeByExpressId = new Map<number, string>();
 
   // ifc-lite already resolves the whole IfcUnitAssignment — SI prefixes, derived, conversion-based
@@ -186,12 +249,49 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
       idsScope.push({
         globalId: identifyEntity(typeName, store.entities.getGlobalId(expressId), expressId),
         ifcType: typeName,
-        predefinedType: stripEnumDots(findAttr("PredefinedType")),
+        predefinedType: effectivePredefinedType(
+          stripEnumDots(findAttr("PredefinedType")),
+          findAttr("ObjectType"),
+          findAttr("ElementType")
+        ),
         name: typeof name === "string" ? name : null,
         attributes,
         propertySets,
+        classifications: readClassifications(store, expressId),
+        materials: readMaterials(store, expressId),
       });
+      scopeExpressIds.push(expressId);
     }
+  }
+
+  // Second pass: every normalized entity's identity is known, so a whole can be described with the
+  // same predefinedType the element itself would report. An ancestor outside the normalized set
+  // falls back to the type the entity index names, with no predefined type to offer.
+  const identityByExpressId = new Map(
+    scopeExpressIds.map((expressId, index) => [
+      expressId,
+      { ifcType: idsScope[index].ifcType, predefinedType: idsScope[index].predefinedType },
+    ])
+  );
+  // ifc-lite's graph maps IFCRELNESTS onto the same `Aggregates` edge type as IFCRELAGGREGATES —
+  // sensible for a viewer, a false pass for IDS, which asks about one or the other. The edge
+  // carries the relationship entity's express id, so its real type is recoverable here without
+  // patching the library.
+  const wholesOf = resolvePartOf(
+    (expressId) =>
+      store.relationships.inverse.getEdges(expressId).flatMap((edge) => {
+        const relation = store.entityIndex.byId.get(edge.relationshipId)?.type?.toUpperCase();
+        return relation === undefined ? [] : [{ relation, wholeId: edge.target }];
+      }),
+    (expressId) => {
+      const known = identityByExpressId.get(expressId);
+      if (known) return known;
+      const indexed = store.entityIndex.byId.get(expressId);
+      return indexed ? { ifcType: indexed.type.toUpperCase(), predefinedType: null } : null;
+    }
+  );
+  for (const [index, expressId] of scopeExpressIds.entries()) {
+    idsScope[index].partOf = wholesOf(expressId);
   }
 
   warnAboutUnrecognizedTypes(unrecognized);
