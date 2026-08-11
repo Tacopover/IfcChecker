@@ -995,3 +995,133 @@ Applicability-side classification, material and partOf remain deliberately unimp
 and `storedPredefinedType` was deliberately **not** extended to a partOf whole: `partof` is 34/34 on
 the resolved name alone, and carrying the pair there would be a guess at a case the suite does not
 state.
+
+## Applicability entity matching, and the first of the authoring UI — landed and measured 2026-08-11
+
+Five commits on `feat/full-spec-authoring-ui`, off `master` at `e2fc39f`. **Conformance stayed at
+302 agreed of 334 throughout — 18 wrong, 14 refused, 0 errored, 0 false passes — and the corpus
+round-trip stayed at 7,784/7,784.** Neither number was expected to move; both were checked at
+every step, because a UI change that moves a conformance number means something leaked out of the
+draft model.
+
+### The applicability decision: exact matching, expansion first
+
+The open decision of 2026-08-11 is settled. **The specification wins, and IfcOpenShell settles it.**
+
+`ifctester`'s `Entity` class serves both sides. `Entity.filter`, which is the applicability path,
+selects with `ifc_file.by_type(self.name, include_subtypes=False)` — the flag written out rather
+than defaulted — and `Specification.validate` then skips the entity facet in its per-element loop
+because the filter already decided. The requirement path is `inst.is_a().upper() == self.name`.
+One class, exact on both sides. That is the reference implementation, and it removes the reading
+under which `entity-facet.md`'s two statements might have been about requirements only.
+
+**The suite still cannot decide it, verified rather than inherited.** Patching `matchesApplicability`
+to exact and refreshing the baseline produced a byte-identical file: 302/18/14/0, `lost: []`,
+`gained: []`, group counts equal. Every applicability name in the suite is present literally in its
+own model.
+
+**What decides it in practice** is that a user who checks a model here and then with any other
+conforming checker must get the same applicable count.
+
+### Expansion is what makes the switch a no-op
+
+The builder writes the concrete classes a pick stands for. `IFC_ABSTRACT_ENTITY_NAMES` (134
+entities) came from `@ifc-lite/data`, which reported the flag already and nothing read it;
+`concreteTypeNamesFor` is the name plus every concrete entity below it, abstract names dropped.
+
+Measured on the real 37 MB model, against `idsScope`:
+
+| picked | names written | subtype (before) | exact as written | exact expanded |
+| --- | --- | --- | --- | --- |
+| `IfcElement` | 135 | 757 | **0** | **757** |
+| `IfcFlowSegment` | 5 | 280 | 280 | 280 |
+| `IfcDistributionElementType` | 69 | 195 | **3** | **195** |
+| `IfcSanitaryTerminal` | 1 | 0 | 0 | 0 |
+
+Expansion reproduces subtype matching exactly, on every case tried. `IfcDistributionElementType` is
+the one worth keeping: exact-without-expansion would have lost 192 entities silently.
+
+**Expansion is for authored rules only.** An imported rule keeps the author's own list. Rewriting
+someone else's document is what the import work exists not to do, and a file naming an abstract
+class is now honestly reported as selecting nothing — the user's own `3.6_contain_NlSfb.ids` goes
+`applicable 757` → `applicable 0` with the applicability cardinality naming the cause, which is a
+loud result rather than a quiet one.
+
+**How exposed real files are, measured over the 464 hand-authored corpus specifications:** only
+**2** applicability entity names are abstract (`IFCBUILDINGELEMENT`, twice). 339 name a concrete
+class that also has concrete subtypes, but 236 of those are `IFCWALL`, whose only concrete
+subtypes are the deprecated `IfcWallStandardCase` and `IfcWallElementedCase`. 227 name a concrete
+leaf, where the two readings agree. The real 37 MB model contains no `*StandardCase` at all, and
+only 3 of its 73 classes have a descendant also present — none of them a reviewer element type.
+
+`isSubtypeOf` now has no production caller. Left exported: the builder hint that a model also holds
+subtypes the rule does not select will want it.
+
+### The builder was failing every element of the user's own model
+
+Found while measuring the applicability change end to end, and it is the strongest argument the
+authoring UI has. `BUILDER_PROPERTY_DATA_TYPE` was `"IFCLABEL"`, declared on every property facet
+the builder wrote. The checker enforces the declared type. Holding the applicability constant on
+the real model and varying only the declared type:
+
+| the rule as written | applicable | passed | failed |
+| --- | --- | --- | --- |
+| `dataType="IFCLABEL"` — what the builder wrote | 757 | **0** | **757** |
+| `dataType="IFCTEXT"` — what the model stores | 757 | **668** | 89 |
+| no `dataType` at all | 757 | 668 | 89 |
+
+**668 correctly classified elements were reported as failures.** The model stores
+`ASML · 3.6 NL-SfB code` as `IFCTEXT` on 756 of 757 elements.
+
+Two commits, landed separately so the fix and the feature are attributable:
+
+- **The default becomes `null`**, so nothing is declared until something is chosen. An honest
+  silence beats a guess that fails everything. An imported condition still states what its source
+  stated, including an explicit omission — so the corpus round-trip does not move.
+- **A stored-as picker**, offering the types the model reports with counts. `FieldSummary` gains
+  `dataTypes`. Three rules, each the honest reading: picking a property set or field declares the
+  type the model reports; a field stored two ways declares **nothing**, because declaring either
+  fails the other half; an attribute has no picker at all, since IDS declares `dataType` on
+  `<property>` alone. A type an imported rule states stays selectable, labelled "(not in file)".
+
+### `UnsupportedConstruct` was already on screen — in two of the three places
+
+The brief's note that these reasons "never reach the screen" is out of date. `CheckSummary` prints
+`construct — description` for every not-checked specification, and `RefusedSpecificationCard` does
+the same for a whole specification kept verbatim. The gap was the third place: an editable rule's
+kept facets were listed by tag name alone.
+
+`readFacet` returned a bare `null` from nine places; it now returns the one thing that stopped it,
+and `PassThrough.reason` carries it to the card. Two facets with the same tag are kept for
+entirely different reasons, and the tag alone never said which.
+
+### The measurement harness the refactor needs
+
+`.claude/plans/corpus-roundtrip.mjs` — import every corpus file, export it again, compare what a
+conforming reader sees. Baseline, so a direction can be read rather than a total:
+
+```
+files 7784 · reproduced 7784 · drifted 0 · import threw 0
+specifications 41751 · refused whole 41325 · facets passed through 279
+schema-invalid in / out 3 / 3
+
+why refused:  applicability/property 41300 · applicability/attribute 41294
+              applicability/entity/name 12 · entity/predefinedType 6
+              applicability/classification 3 · applicability/material 3
+passed through: property 82 · attribute 52 · classification 47 · partOf 39
+              material 34 · entity 25
+```
+
+The refusals are dominated by bSI Japan's applicability-side property and attribute facets, which
+are stage 5 and deliberately unimplemented. **Both totals must fall, never rise, as facets become
+representable.**
+
+### What is left of stage 2, and what it now knows
+
+The `ConditionDraft` → `FacetDraft` refactor is untouched and is still the real work. Two things
+this stage settled that it should carry:
+
+- `dataType` is no longer a constant the refactor has to unpick — it is already a per-condition
+  field fed by the model, and `FacetDraft`'s property variant can take it as it stands.
+- The pass-through reason machinery now exists per facet, so `isEvaluable` narrowing during the
+  refactor has somewhere to say why.
