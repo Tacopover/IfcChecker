@@ -2,8 +2,8 @@
   "generated": "2026-08-11",
   "totals": {
     "cases": 334,
-    "agreed": 300,
-    "wrong": 20,
+    "agreed": 301,
+    "wrong": 19,
     "refused": 14,
     "errored": 0
   },
@@ -24,8 +24,8 @@
     },
     "entity": {
       "total": 33,
-      "agreed": 27,
-      "wrong": 6,
+      "agreed": 28,
+      "wrong": 5,
       "refused": 0,
       "errored": 0
     },
@@ -173,6 +173,7 @@
     "entity/pass-overridden_predefined_types_should_pass",
     "entity/pass-restrictions_can_be_specified_for_the_predefined_type_1_3",
     "entity/pass-restrictions_can_be_specified_for_the_predefined_type_2_3",
+    "entity/pass-userdefined_predefined_types_may_be_specified",
     "ids/fail-a_minimal_ids_can_check_a_minimal_ifc_1_2",
     "ids/fail-a_specification_passes_only_if_all_requirements_pass_1_2",
     "ids/fail-prohibited_specifications_fails_if_the_applicability_matches",
@@ -461,12 +462,6 @@
     },
     {
       "case": "entity/pass-inherited_predefined_types_should_pass",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "entity/pass-userdefined_predefined_types_may_be_specified",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"

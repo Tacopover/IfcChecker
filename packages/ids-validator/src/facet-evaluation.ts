@@ -460,6 +460,10 @@ function evaluatePartOf(element: NormalizedElement, facet: ParsedPartOfFacet): F
  *
  * A stated predefined type is never satisfied by an element that has none — "unstated" is not a
  * value that can match one.
+ *
+ * An element that says `USERDEFINED` and names its own type elsewhere answers to **both** strings:
+ * the name it resolves to and the enumeration literal. That is stated in `entity-facet.md`'s table
+ * of examples, and the suite pairs the two halves against one model.
  */
 function evaluateEntity(element: NormalizedElement, facet: ParsedEntityFacet): FacetCheckResult {
   if (!admitsString(facet.name, element.ifcType)) {
@@ -478,7 +482,11 @@ function evaluateEntity(element: NormalizedElement, facet: ParsedEntityFacet): F
       message: `Element has no predefined type, but ${restrictionLabel(facet.predefinedType)} is required`,
     };
   }
-  return admitsString(facet.predefinedType, predefinedType)
+
+  const candidates = [predefinedType];
+  if (element.storedPredefinedType) candidates.push(element.storedPredefinedType);
+
+  return admitsAny(facet.predefinedType, candidates)
     ? { passed: true, message: "" }
     : {
         passed: false,

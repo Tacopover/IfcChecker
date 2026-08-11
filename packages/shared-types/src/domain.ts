@@ -83,6 +83,19 @@ export const NormalizedElementSchema = z.object({
   globalId: z.string(),
   ifcType: z.string(),
   predefinedType: z.string().nullable(),
+  /**
+   * The `PredefinedType` enumeration literal the file stores, when it is not what
+   * `predefinedType` reports — that is, `USERDEFINED` on an element whose real type name lives in
+   * `ObjectType`, `ElementType` or `ProcessType`.
+   *
+   * IDS accepts a requirement naming either one. `entity-facet.md` marks both "IDS says
+   * USERDEFINED against a stored USERDEFINED with ElementType FOO" and "IDS says FOO against the
+   * same element" as matches, so the resolved name alone cannot answer the first.
+   *
+   * `null` whenever the two would be the same string, which is every element that does not say
+   * `USERDEFINED` — so this costs nothing on the overwhelming majority of a model.
+   */
+  storedPredefinedType: z.string().nullable().optional(),
   name: z.string().nullable(),
   attributes: z.record(z.string(), NormalizedValueSchema),
   propertySets: z.record(z.string(), z.record(z.string(), NormalizedValueSchema)),

@@ -32,3 +32,32 @@ export function effectivePredefinedType(
   }
   return storedPredefinedType;
 }
+
+/**
+ * Both strings a rule may name the element's predefined type by.
+ *
+ * An element storing `.USERDEFINED.` with an `ElementType` of `WALDO` satisfies a requirement
+ * asking for `WALDO` *and* one asking for `USERDEFINED` — `entity-facet.md`'s own table marks both
+ * as matches, and the suite states each as a document that must pass. So the resolved name alone
+ * is not enough; the enumeration literal has to survive alongside it.
+ *
+ * `storedPredefinedType` is `null` whenever the two would be the same string, so nothing is
+ * carried twice: it is populated only for the USERDEFINED case that created the difference.
+ */
+export function resolvePredefinedType(
+  storedPredefinedType: string | null,
+  objectType: unknown,
+  elementType?: unknown,
+  processType?: unknown
+): { predefinedType: string | null; storedPredefinedType: string | null } {
+  const predefinedType = effectivePredefinedType(
+    storedPredefinedType,
+    objectType,
+    elementType,
+    processType
+  );
+  return {
+    predefinedType,
+    storedPredefinedType: predefinedType === storedPredefinedType ? null : storedPredefinedType,
+  };
+}

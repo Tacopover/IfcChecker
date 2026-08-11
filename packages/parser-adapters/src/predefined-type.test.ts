@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { effectivePredefinedType } from "./predefined-type.js";
+import { effectivePredefinedType, resolvePredefinedType } from "./predefined-type.js";
 
 describe("effectivePredefinedType", () => {
   it("passes an ordinary enumeration value through", () => {
@@ -27,5 +27,31 @@ describe("effectivePredefinedType", () => {
   // then fails to define it. Reporting null would let "is a predefined type stated" pass.
   it("keeps USERDEFINED when neither field names anything", () => {
     expect(effectivePredefinedType("USERDEFINED", null, "")).toBe("USERDEFINED");
+  });
+});
+
+describe("resolvePredefinedType", () => {
+  it("keeps the enumeration literal alongside the name it resolves to", () => {
+    expect(resolvePredefinedType("USERDEFINED", null, "WALDO")).toEqual({
+      predefinedType: "WALDO",
+      storedPredefinedType: "USERDEFINED",
+    });
+  });
+
+  // Nothing is carried twice: an ordinary value, an absent one, and a USERDEFINED that names
+  // nothing all resolve to themselves, so there is no second string for a rule to match.
+  it("states no stored value when the two would be the same string", () => {
+    expect(resolvePredefinedType("SOLIDWALL", null)).toEqual({
+      predefinedType: "SOLIDWALL",
+      storedPredefinedType: null,
+    });
+    expect(resolvePredefinedType(null, "ignored")).toEqual({
+      predefinedType: null,
+      storedPredefinedType: null,
+    });
+    expect(resolvePredefinedType("USERDEFINED", null, "")).toEqual({
+      predefinedType: "USERDEFINED",
+      storedPredefinedType: null,
+    });
   });
 });

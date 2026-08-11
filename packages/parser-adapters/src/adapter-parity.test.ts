@@ -350,6 +350,28 @@ describe("adapter parity", () => {
     expect(byName(webIfcResult)).toEqual(fromIfcLite);
   });
 
+  // A rule may name either string, so both engines have to keep both. Carrying the literal on an
+  // element that never said USERDEFINED would be a second value nothing can match.
+  it("both engines keep the stored enumeration only where it differs from the resolved name", async () => {
+    const path = fixturePath("predefined-types.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byName = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope
+          .filter((entity) => entity.name !== null)
+          .map((entity) => [entity.name, entity.storedPredefinedType ?? null])
+      );
+
+    const fromIfcLite = byName(ifcLiteResult);
+    expect(fromIfcLite["W-OBJECTTYPE"]).toBe("USERDEFINED");
+    expect(fromIfcLite["Task Type"]).toBe("USERDEFINED");
+    expect(fromIfcLite["W-PLAIN"]).toBeNull();
+
+    expect(byName(webIfcResult)).toEqual(fromIfcLite);
+  });
+
   it("both engines flatten every material shape to the same matchable strings", async () => {
     const path = fixturePath("material-shapes.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);

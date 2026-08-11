@@ -929,6 +929,29 @@ describe("evaluateRequirement — entity", () => {
     );
   });
 
+  // entity-facet.md marks both rows as matches: IDS asking USERDEFINED against a stored
+  // USERDEFINED that names WALDO elsewhere, and IDS asking WALDO against the same element.
+  it("matches a user-defined element on both its resolved name and the stored enumeration", () => {
+    const waldo = makeElement({
+      ifcType: "IFCWALLTYPE",
+      predefinedType: "WALDO",
+      storedPredefinedType: "USERDEFINED",
+    });
+    expect(evaluateRequirement(waldo, entityFacet(exact("IFCWALLTYPE"), exact("WALDO"))).passed).toBe(
+      true
+    );
+    expect(
+      evaluateRequirement(waldo, entityFacet(exact("IFCWALLTYPE"), exact("USERDEFINED"))).passed
+    ).toBe(true);
+  });
+
+  it("does not let an ordinary enumeration value answer to USERDEFINED", () => {
+    const solid = makeElement({ ifcType: "IFCWALL", predefinedType: "SOLIDWALL" });
+    expect(
+      evaluateRequirement(solid, entityFacet(exact("IFCWALL"), exact("USERDEFINED"))).passed
+    ).toBe(false);
+  });
+
   it("reads a predefined type given as a restriction", () => {
     const foobar = makeElement({ ifcType: "IFCWALL", predefinedType: "FOOBAR" });
     expect(
