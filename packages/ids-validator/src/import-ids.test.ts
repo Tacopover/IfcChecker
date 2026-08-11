@@ -230,6 +230,22 @@ describe("idsXmlToDrafts values", () => {
     expect(value).toMatchObject({ kind: "bounds", base: "xs:Decimal" });
   });
 
+  it("reads a length, keeping each count as the author wrote it", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:minLength value="2" /><xs:maxLength value="03" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "length", exact: null, min: "2", max: "03" });
+  });
+
+  it("reads an exact length beside the two bounds, because XSD allows all three", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:length value="2" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "length", exact: "2", min: null, max: null });
+  });
+
   // Prose that constrains nothing, and so reaches no compiled requirement. It is still the sentence
   // saying why the rule is there, and an import that dropped it would hand back a poorer file.
   it("carries the author's instructions on either kind of facet", () => {
@@ -289,9 +305,11 @@ describe("idsXmlToDrafts pass-through", () => {
       `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
       "classification",
     ],
+    // A length stating no readable edge compiles to a restriction that admits everything, so
+    // importing one would turn a malformed file into a rule that passes every element.
     [
-      "a length, which no parsed restriction can hold",
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="3" /></xs:restriction></value></attribute>`,
+      "a length whose count is not a number",
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="three" /></xs:restriction></value></attribute>`,
       "attribute",
     ],
     [
@@ -329,8 +347,8 @@ describe("idsXmlToDrafts pass-through", () => {
     // One sentence used to cover all of these. Over the corpus it was wrong about 8 of the facets
     // it refused, and the message is what tells the user which piece of work their file waits on.
     [
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="3" /></xs:restriction></value></attribute>`,
-      /length of its value/,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="three" /></xs:restriction></value></attribute>`,
+      /not a character count/,
     ],
     [
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,

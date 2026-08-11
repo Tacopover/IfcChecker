@@ -134,6 +134,15 @@ describe("compileValue", () => {
 
     expect(compiled).toEqual({ kind: "bounds", min: null, max: { value: 5, inclusive: false } });
   });
+
+  it("compiles a length, reading each count back as a number", () => {
+    expect(compileValue({ kind: "length", exact: null, min: "2", max: "03" })).toEqual({
+      kind: "length",
+      exact: null,
+      min: 2,
+      max: 3,
+    });
+  });
 });
 
 describe("cardinalityForOperator", () => {
@@ -190,6 +199,10 @@ describe("the friendly operators are a reading of the value, not the storage", (
     // A range.
     expect(
       friendlyReadingOf(condition({ value: { kind: "bounds", base: "xs:double", min: null, max: null } }))
+    ).toBeNull();
+    // A length.
+    expect(
+      friendlyReadingOf(condition({ value: { kind: "length", exact: "2", min: null, max: null } }))
     ).toBeNull();
     // "Must not be Steel" — notExists would widen it to "must not be present at all".
     expect(

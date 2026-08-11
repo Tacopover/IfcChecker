@@ -5,6 +5,7 @@ import type {
   ConditionDraft,
   ConditionalCardinality,
   ImportedRuleSource,
+  LengthDraft,
   PassThrough,
   RuleDraft,
   ValueDraft,
@@ -421,6 +422,13 @@ const BOUND_FACETS = [
   { tag: "maxExclusive", edge: "max", inclusive: false },
 ] as const;
 
+/** The three length facets, paired with the edge each one sets. */
+const LENGTH_FACETS = [
+  { tag: "length", edge: "exact" },
+  { tag: "minLength", edge: "min" },
+  { tag: "maxLength", edge: "max" },
+] as const;
+
 /**
  * The XSD facets a `ValueDraft` can carry. Unlike the validator, this list excludes `annotation`:
  * the validator can ignore prose, but an import that dropped an author's documentation and handed
@@ -430,9 +438,8 @@ const RESTRICTION_FACETS_READ = [
   "pattern",
   "enumeration",
   ...BOUND_FACETS.map((facet) => facet.tag),
+  ...LENGTH_FACETS.map((facet) => facet.tag),
 ];
-
-const LENGTH_FACETS = ["length", "minLength", "maxLength"];
 
 /**
  * Why a restriction could not be read, named by the one thing that stopped it.
@@ -442,15 +449,11 @@ const LENGTH_FACETS = ["length", "minLength", "maxLength"];
  * `xs:double` base, and the rest two `xs:pattern` children. Each of those is a different piece of
  * work, and the message is what tells the user which one their file is waiting on.
  *
- * The range half of that sentence is gone — ranges are read now. A length is still refused, because
- * `ParsedRestriction` has no length variant to compile one into.
+ * Both halves of that sentence are gone — ranges and lengths are read now.
  */
 function refuseRestrictionFacet(tag: string): FacetRefusal {
   if (tag === "annotation") {
     return refused("Documents its value with an <xs:annotation>, which the builder cannot show.");
-  }
-  if (LENGTH_FACETS.includes(tag)) {
-    return refused("Restricts the length of its value, which the builder cannot show.");
   }
   return refused(`Restricts its value with <xs:${tag}>, which the builder cannot show.`);
 }
@@ -487,10 +490,13 @@ function readValueDraft(
   const bounds = children.filter((child) =>
     BOUND_FACETS.some((facet) => facet.tag === tagOf(child))
   );
+  const lengths = children.filter((child) =>
+    LENGTH_FACETS.some((facet) => facet.tag === tagOf(child))
+  );
 
   // XSD would intersect two families, and a `ValueDraft` states one thing. Dropping either half
   // would export a rule that checks less than the file asks for.
-  const families = [patterns.length, enumerations.length, bounds.length].filter(
+  const families = [patterns.length, enumerations.length, bounds.length, lengths.length].filter(
     (count) => count > 0
   );
   if (families.length !== 1 || patterns.length > 1) {
@@ -500,8 +506,8 @@ function readValueDraft(
   // A range keeps whatever base the author wrote, right down to a capitalised `xs:Decimal`.
   if (bounds.length > 0) return readBoundsDraft(base ?? "xs:double", bounds);
 
-  // A pattern and an enumeration are string constructs, so anything left here is based on a type
-  // we would retype on the way back out.
+  // A pattern, an enumeration and a length are all string constructs, so anything left here is
+  // based on a type we would retype on the way back out.
   if (base !== null && base.slice(base.indexOf(":") + 1) !== "string") {
     return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
   }
@@ -509,6 +515,7 @@ function readValueDraft(
   if (patterns.length === 1) {
     return { value: patternValueDraft(attributeOrNull(patterns[0], "value") ?? "") };
   }
+  if (lengths.length > 0) return readLengthDraft(lengths);
   return {
     value: {
       kind: "enum",
@@ -544,4 +551,30 @@ function readBoundsDraft(
   }
 
   return { value: { kind: "bounds", base, ...edges } };
+}
+
+/**
+ * The character counts a restriction states, each kept as the author wrote it.
+ *
+ * Stricter than `readBoundsDraft` about a value it cannot read, and deliberately: a length stating
+ * no readable edge compiles to a restriction that admits everything, so importing one would turn a
+ * malformed file into a rule that passes every element. Keeping it verbatim says so instead.
+ */
+function readLengthDraft(lengthNodes: OrderedNode[]): { value: ValueDraft } | FacetRefusal {
+  const edges: LengthDraft = { exact: null, min: null, max: null };
+
+  for (const node of lengthNodes) {
+    const facet = LENGTH_FACETS.find((candidate) => candidate.tag === tagOf(node));
+    if (!facet) continue;
+    if (edges[facet.edge] !== null) {
+      return refused(`States <xs:${facet.tag}> twice, so the builder cannot show it as one length.`);
+    }
+    const count = attributeOrNull(node, "value") ?? "";
+    if (!/^\d+$/.test(count.trim())) {
+      return refused(`Gives <xs:${facet.tag}> the value "${count}", which is not a character count.`);
+    }
+    edges[facet.edge] = count;
+  }
+
+  return { value: { kind: "length", ...edges } };
 }

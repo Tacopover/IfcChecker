@@ -114,6 +114,9 @@ function unshownValue(condition: ConditionDraft): string {
   if (condition.cardinality === "prohibited") {
     return "Must not hold this particular value. Not editable here yet.";
   }
+  if (condition.value?.kind === "length") {
+    return "A limit on how many characters the value holds. Not editable here yet.";
+  }
   return "A numeric range. Not editable here yet.";
 }
 

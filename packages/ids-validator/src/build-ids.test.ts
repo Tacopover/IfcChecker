@@ -339,6 +339,34 @@ describe("buildIdsXml / compileDraft round-trip", () => {
     );
   });
 
+  // A length is reachable only from an imported file, so the exporter has to write it back with
+  // every count the source stated — `03` included, which a count read through a number would lose.
+  it("writes a length back with each count as the draft holds it", () => {
+    const drafts: RuleDraft[] = [
+      {
+        id: "r",
+        name: "Length",
+        entityTypes: ["IfcWall"],
+        conditions: [
+          {
+            id: "c1",
+            kind: "attribute",
+            propertySet: null,
+            name: "Name",
+            value: { kind: "length", exact: null, min: "2", max: "03" },
+            cardinality: "required",
+          },
+        ],
+      },
+    ];
+    const xml = buildIdsXml(drafts);
+
+    expect(xml).toContain('<xs:restriction base="xs:string">');
+    expect(xml).toContain('<xs:minLength value="2" />');
+    expect(xml).toContain('<xs:maxLength value="03" />');
+    expect(comparable(parseIdsXml(xml))).toEqual(comparable(compileDraft(drafts)));
+  });
+
   it("keeps the compiled and exported regexes behaviourally identical", () => {
     const [exported] = parseIdsXml(buildIdsXml(DRAFTS));
     const [compiled] = compileDraft(DRAFTS);
