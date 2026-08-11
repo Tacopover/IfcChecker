@@ -150,6 +150,8 @@ export function ConditionRow({
   // The operator is a reading of the stored value, never the storage. `null` is the honest answer
   // for a value none of the eight operators states.
   const reading = friendlyReadingOf(condition);
+  // ids.xsd gives uri to the property and not to the attribute, so the row asks before showing it.
+  const uri = condition.kind === "property" ? condition.uri : null;
 
   const nameOptions =
     condition.kind === "attribute"
@@ -166,12 +168,18 @@ export function ConditionRow({
     return reading ? valueDraftForOperator(reading.operator, reading.text, []) : condition.value;
   }
 
+  /** The fields both kinds share, so switching between them carries the rest of the row across. */
+  function shared() {
+    const { id, cardinality, instructions, explicitCardinality } = condition;
+    return { id, cardinality, instructions, explicitCardinality };
+  }
+
   function changeKind(kind: ConditionDraft["kind"]) {
     if (kind === "property") {
       const set = source.propertySets[0];
       const name = set?.fields[0]?.name ?? "";
       onChange({
-        ...condition,
+        ...shared(),
         kind,
         propertySet: set?.name ?? null,
         name,
@@ -180,18 +188,18 @@ export function ConditionRow({
       });
       return;
     }
+    // IDS declares dataType and uri on <property> alone, so neither crosses to an attribute.
     onChange({
-      ...condition,
+      ...shared(),
       kind,
       propertySet: null,
       name: source.attributes[0]?.name ?? "Name",
       value: retargetedValue(),
-      // IDS declares dataType on <property> alone, so an attribute states none.
-      dataType: null,
     });
   }
 
   function changePropertySet(propertySet: string) {
+    if (condition.kind !== "property") return;
     const set = source.propertySets.find((entry) => entry.name === propertySet);
     const name = set?.fields[0]?.name ?? condition.name;
     onChange({
@@ -204,11 +212,15 @@ export function ConditionRow({
   }
 
   function changeFieldName(name: string) {
+    if (condition.kind === "attribute") {
+      onChange({ ...condition, name, value: retargetedValue() });
+      return;
+    }
     onChange({
       ...condition,
       name,
       value: retargetedValue(),
-      dataType: condition.kind === "property" ? dataTypeFromModel(source, condition.propertySet, name) : null,
+      dataType: dataTypeFromModel(source, condition.propertySet, name),
     });
   }
 
@@ -364,11 +376,11 @@ export function ConditionRow({
         </button>
       </span>
 
-      {(condition.instructions || condition.uri) && (
+      {(condition.instructions || uri) && (
         <span className="cond-note">
           {condition.instructions}
           {/* Shown as text, never as a link: the address comes from a file someone else wrote. */}
-          {condition.uri && <span className="cond-uri">{condition.uri}</span>}
+          {uri && <span className="cond-uri">{uri}</span>}
         </span>
       )}
 

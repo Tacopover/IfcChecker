@@ -210,14 +210,11 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     name: string;
   }) {
     if (!selectionName) return;
-    const condition: ConditionDraft = {
-      id: nextDraftId("c"),
-      kind: field.kind,
-      propertySet: field.propertySet,
-      name: field.name,
-      value: null,
-      cardinality: "required",
-    };
+    const common = { id: nextDraftId("c"), name: field.name, value: null, cardinality: "required" } as const;
+    const condition: ConditionDraft =
+      field.kind === "attribute"
+        ? { ...common, kind: "attribute", propertySet: null }
+        : { ...common, kind: "property", propertySet: field.propertySet };
     const target = rules.find((rule) => rule.id === activeRuleId) ?? rules[0] ?? null;
 
     if (!target) {

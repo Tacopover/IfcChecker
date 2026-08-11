@@ -36,7 +36,9 @@ function condition(
     name: "Name",
     ...stating(operator, text, values),
     ...rest,
-  };
+    // `kind` widens back to the union through the spread, and a partial of a discriminated union
+    // cannot narrow it again. Asserted here so the call sites stay one line each.
+  } as ConditionDraft;
 }
 
 function rule(overrides: Partial<RuleDraft> = {}): RuleDraft {

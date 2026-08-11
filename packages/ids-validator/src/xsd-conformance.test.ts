@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildIdsXml } from "./build-ids.js";
+import { EVERY_FACET } from "./every-facet.fixture.js";
 import { idsSchemaViolations } from "./ids-schema-shape.js";
 import { idsXmlToDrafts } from "./import-ids.js";
 import type { ConditionDraft, ConditionOperator, RuleDraft } from "./rule-draft.js";
@@ -73,14 +74,19 @@ function condition(
   text: string,
   index: number
 ): ConditionDraft {
-  return {
+  const common = {
     id: `c${index}`,
-    kind,
-    propertySet: kind === "property" ? `Pset_${text === "" ? "Empty" : "Hostile"} & Set` : null,
     name: text === "" ? "Unnamed" : `Name ${text}`,
     value: valueDraftForOperator(operator, text, [text, `${text} second`, "plain"]),
     cardinality: cardinalityForOperator(operator),
-    dataType: kind === "property" ? DATA_TYPES[index % DATA_TYPES.length] : undefined,
+  };
+
+  if (kind === "attribute") return { ...common, kind, propertySet: null };
+  return {
+    ...common,
+    kind,
+    propertySet: `Pset_${text === "" ? "Empty" : "Hostile"} & Set`,
+    dataType: DATA_TYPES[index % DATA_TYPES.length],
   };
 }
 
@@ -133,6 +139,13 @@ describe("ids.xsd conformance of what we emit", () => {
     const xml = buildIdsXml([{ id: "r1", name: "Bare", entityTypes: ["IfcWall"], conditions: [] }]);
 
     expect(await idsXsdViolations(xml)).toEqual([]);
+  });
+
+  // The exporter is total over all six facets before the importer produces four of them, so this
+  // is the only check that the four it cannot yet read are written the way ids.xsd wants them —
+  // <value> before <system>, <name> nested inside partOf's <entity>, and no cardinality on entity.
+  it("emits a schema-valid document for every facet kind at once", async () => {
+    expect(await idsXsdViolations(buildIdsXml(EVERY_FACET))).toEqual([]);
   });
 });
 

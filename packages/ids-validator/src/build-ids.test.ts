@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildIdsXml } from "./build-ids.js";
+import { EVERY_FACET } from "./every-facet.fixture.js";
 import { parseIdsXml } from "./parse-ids.js";
 import type { ParsedRequirementFacet, ParsedRestriction, ParsedSpecification } from "./parse-ids.js";
 
@@ -40,7 +41,9 @@ function condition(
     value: valueDraftForOperator(operator, text, values),
     cardinality: cardinalityForOperator(operator),
     ...rest,
-  };
+    // `kind` widens back to the union through the spread, and a partial of a discriminated union
+    // cannot narrow it again. Asserted here so the call sites stay one line each.
+  } as ConditionDraft;
 }
 
 /** RegExp instances never compare equal, so compare their sources instead. */
@@ -305,6 +308,35 @@ describe("buildIdsXml / compileDraft round-trip", () => {
       },
     ];
     expect(comparable(parseIdsXml(buildIdsXml(drafts)))).toEqual(comparable(compileDraft(drafts)));
+  });
+
+  // The importer reads two of the six kinds and keeps the rest verbatim, so nothing here is
+  // reachable from a file yet. That is the point: the exporter and the compile are total over all
+  // six before the importer starts producing them, which is what makes reading them additive.
+  it("writes and compiles all six facet kinds, and the two agree", () => {
+    const parsed = parseIdsXml(buildIdsXml(EVERY_FACET));
+
+    expect(comparable(parsed)).toEqual(comparable(compileDraft(EVERY_FACET)));
+    expect(parsed[0].requirements.map((facet) => facet.kind)).toEqual([
+      "attribute",
+      "property",
+      "entity",
+      "classification",
+      "material",
+      "partOf",
+    ]);
+  });
+
+  // One member of the schema's relations enumeration is two names in a single attribute value.
+  it("splits a two-name relation on the way in and writes it back as one attribute", () => {
+    const [compiled] = compileDraft(EVERY_FACET);
+    const partOf = compiled.requirements[5];
+    if (partOf.kind !== "partOf") throw new Error("expected a partOf facet");
+
+    expect(partOf.relations).toEqual(["IFCRELVOIDSELEMENT", "IFCRELFILLSELEMENT"]);
+    expect(buildIdsXml(EVERY_FACET)).toContain(
+      'relation="IFCRELVOIDSELEMENT IFCRELFILLSELEMENT"'
+    );
   });
 
   it("keeps the compiled and exported regexes behaviourally identical", () => {

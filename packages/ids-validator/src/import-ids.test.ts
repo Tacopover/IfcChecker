@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { idsXmlToDrafts } from "./import-ids.js";
 import type { IdsImportResult } from "./import-ids.js";
 import type { ConditionDraft, RuleDraft } from "./rule-draft.js";
-import { friendlyReadingOf } from "./rule-draft.js";
+import { friendlyReadingOf, isConditionFacet } from "./rule-draft.js";
 
 function document(specifications: string): string {
   return [
@@ -34,7 +34,11 @@ function onlyCondition(xml: string): ConditionDraft {
   const rule = onlyRule(idsXmlToDrafts(xml));
   expect(rule.imported?.passThrough).toEqual([]);
   expect(rule.conditions).toHaveLength(1);
-  return rule.conditions[0];
+  const [facet] = rule.conditions;
+  // The draft model holds all six facets; the importer reads two of them and keeps the rest
+  // verbatim. An assertion rather than a cast, so that stops being true loudly.
+  if (!isConditionFacet(facet)) throw new Error(`imported a <${facet.kind}>, which it should not`);
+  return facet;
 }
 
 const MIXED = readFileSync(new URL("../fixtures/ids/mixed-fidelity.ids", import.meta.url), "utf8");
@@ -257,9 +261,8 @@ describe("idsXmlToDrafts values", () => {
       )
     );
 
-    expect(withUri.uri).toBe("https://example.org/rule");
-    expect(without.uri).toBeNull();
-    expect(without.instructions).toBeNull();
+    expect(withUri).toMatchObject({ kind: "property", uri: "https://example.org/rule" });
+    expect(without).toMatchObject({ kind: "property", uri: null, instructions: null });
   });
 
   it("carries the property data type, and its absence, rather than assuming a default", () => {
@@ -274,8 +277,8 @@ describe("idsXmlToDrafts values", () => {
       )
     );
 
-    expect(typed.dataType).toBe("IFCREAL");
-    expect(untyped.dataType).toBeNull();
+    expect(typed).toMatchObject({ kind: "property", dataType: "IFCREAL" });
+    expect(untyped).toMatchObject({ kind: "property", dataType: null });
   });
 });
 
@@ -373,7 +376,7 @@ describe("idsXmlToDrafts pass-through", () => {
   it("records how many conditions preceded each passed-through facet", () => {
     const [rule] = idsXmlToDrafts(MIXED).rules;
 
-    expect(rule.conditions.map((condition) => condition.name)).toEqual([
+    expect(rule.conditions.filter(isConditionFacet).map((condition) => condition.name)).toEqual([
       "Name",
       "Reference",
       "Status",

@@ -28,7 +28,9 @@ function condition(
     value: valueDraftForOperator(operator, text, values),
     cardinality: cardinalityForOperator(operator),
     ...rest,
-  };
+    // `kind` widens back to the union through the spread, and a partial of a discriminated union
+    // cannot narrow it again. Asserted here so the call sites stay one line each.
+  } as ConditionDraft;
 }
 
 /** The restriction an operator's value compiles to, which is what the validator ends up checking. */
