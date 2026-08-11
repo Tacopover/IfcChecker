@@ -226,6 +226,42 @@ describe("idsXmlToDrafts values", () => {
     expect(value).toMatchObject({ kind: "bounds", base: "xs:Decimal" });
   });
 
+  // Prose that constrains nothing, and so reaches no compiled requirement. It is still the sentence
+  // saying why the rule is there, and an import that dropped it would hand back a poorer file.
+  it("carries the author's instructions on either kind of facet", () => {
+    expect(
+      onlyCondition(
+        withRequirements(
+          `<attribute instructions="Ask the architect."><name><simpleValue>Name</simpleValue></name></attribute>`
+        )
+      ).instructions
+    ).toBe("Ask the architect.");
+    expect(
+      onlyCondition(
+        withRequirements(
+          `<property instructions="From the wall schedule."><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`
+        )
+      ).instructions
+    ).toBe("From the wall schedule.");
+  });
+
+  it("carries a property uri, and states nothing where the source stated nothing", () => {
+    const withUri = onlyCondition(
+      withRequirements(
+        `<property uri="https://example.org/rule"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`
+      )
+    );
+    const without = onlyCondition(
+      withRequirements(
+        `<property><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`
+      )
+    );
+
+    expect(withUri.uri).toBe("https://example.org/rule");
+    expect(without.uri).toBeNull();
+    expect(without.instructions).toBeNull();
+  });
+
   it("carries the property data type, and its absence, rather than assuming a default", () => {
     const typed = onlyCondition(
       withRequirements(
@@ -265,9 +301,11 @@ describe("idsXmlToDrafts pass-through", () => {
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
       "attribute",
     ],
+    // ids.xsd gives uri to classification, property and material alone, so one on an attribute is
+    // a document the schema does not describe.
     [
       "an attribute the builder does not model",
-      `<attribute instructions="Ask the architect."><name><simpleValue>Name</simpleValue></name></attribute>`,
+      `<attribute uri="https://example.org/rule"><name><simpleValue>Name</simpleValue></name></attribute>`,
       "attribute",
     ],
   ])("keeps %s verbatim instead of importing a weakened copy", (_label, facet, construct) => {
@@ -319,8 +357,8 @@ describe("idsXmlToDrafts pass-through", () => {
       /ids\.xsd does not give this facet/,
     ],
     [
-      `<attribute instructions="Ask the architect."><name><simpleValue>Name</simpleValue></name></attribute>`,
-      /Carries instructions/,
+      `<attribute uri="https://example.org/rule"><name><simpleValue>Name</simpleValue></name></attribute>`,
+      /Carries uri/,
     ],
     [
       `<attribute><name><xs:restriction base="xs:string"><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`,

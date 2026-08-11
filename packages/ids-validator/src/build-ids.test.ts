@@ -139,6 +139,40 @@ describe("buildIdsXml", () => {
     expect(xml.match(/cardinality="prohibited"/g)).toHaveLength(2);
   });
 
+  // ids.xsd gives uri to classification, property and material alone. A uri on an attribute would
+  // be a document no conforming checker reads, so the exporter writes it from the property branch.
+  it("writes instructions on either kind of facet and a uri only on a property", () => {
+    const xml = buildIdsXml([
+      {
+        id: "r1",
+        name: "Carried prose",
+        entityTypes: ["IfcWall"],
+        conditions: [
+          condition({ id: "c1", name: "Tag", instructions: "Ask the architect." }),
+          condition({
+            id: "c2",
+            kind: "property",
+            propertySet: "Pset_WallCommon",
+            name: "FireRating",
+            instructions: "From the wall schedule.",
+            uri: "https://example.org/rule",
+          }),
+        ],
+      },
+    ]);
+
+    expect(xml).toContain('<attribute instructions="Ask the architect.">');
+    expect(xml).toContain('uri="https://example.org/rule"');
+    expect(xml).toContain('instructions="From the wall schedule."');
+  });
+
+  it("states neither attribute for a condition that carries neither", () => {
+    const xml = buildIdsXml(DRAFTS);
+
+    expect(xml).not.toContain("instructions=");
+    expect(xml).not.toContain("uri=");
+  });
+
   // Cardinality and value are two separate statements in IDS, so the exporter writes each from its
   // own field. A prohibited facet keeping its value is "must not be TODO", not "must not be there".
   it("writes a cardinality and a value independently of each other", () => {

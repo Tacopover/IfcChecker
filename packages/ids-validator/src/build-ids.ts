@@ -85,10 +85,13 @@ function facetXml(condition: ConditionDraft): string {
   // file that wrote it out itself.
   const cardinality =
     value !== "required" || condition.explicitCardinality ? ` cardinality="${value}"` : "";
+  const instructions = attributeXml("instructions", condition.instructions);
 
   if (condition.kind === "attribute") {
+    // No `uri` here: ids.xsd gives it to classification, property and material alone, and emitting
+    // one on an attribute would produce a document no conforming checker reads.
     return [
-      `      <attribute${cardinality}>`,
+      `      <attribute${cardinality}${instructions}>`,
       `        <name><simpleValue>${escapeXml(condition.name)}</simpleValue></name>${restriction}`,
       `      </attribute>`,
     ].join("\n");
@@ -101,7 +104,7 @@ function facetXml(condition: ConditionDraft): string {
   const dataTypeAttribute = dataType === null ? "" : ` dataType="${escapeXml(dataType)}"`;
 
   return [
-    `      <property${dataTypeAttribute}${cardinality}>`,
+    `      <property${dataTypeAttribute}${attributeXml("uri", condition.uri)}${cardinality}${instructions}>`,
     `        <propertySet><simpleValue>${escapeXml(condition.propertySet ?? "")}</simpleValue></propertySet>`,
     `        <baseName><simpleValue>${escapeXml(condition.name)}</simpleValue></baseName>${restriction}`,
     `      </property>`,

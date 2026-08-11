@@ -76,6 +76,19 @@ export interface ConditionDraft {
    */
   dataType?: string | null;
   /**
+   * The author's prose for whoever runs the check — `instructions` in `ids.xsd`, which puts it on
+   * all six facets. It constrains nothing, so it never reaches the compiled requirement; losing it
+   * would still be losing the sentence that says why the rule is there.
+   */
+  instructions?: string | null;
+  /**
+   * A reference to whatever defines this requirement outside the file. `ids.xsd` gives `uri` to
+   * classification, property and material only, so it means nothing on an attribute — and the
+   * exporter writes it from the property branch alone, until stage 5 splits the union and the type
+   * can say so itself.
+   */
+  uri?: string | null;
+  /**
    * Whether the source wrote `cardinality` out. IDS defaults it to `required`, so this changes no
    * meaning — but a file the user only opened should come back out as it went in.
    */

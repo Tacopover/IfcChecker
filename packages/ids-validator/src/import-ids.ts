@@ -306,10 +306,16 @@ function readApplicability(
   return { entityTypes, asEnumeration };
 }
 
-/** Attributes a facet may carry and still be fully representable. */
+/**
+ * Attributes a facet may carry and still be fully representable.
+ *
+ * `uri` is on the property and not on the attribute because that is what `ids.xsd` says: it gives
+ * `uri` to classification, property and material alone. Allowing it on an attribute would import a
+ * document the schema does not describe and export it again unchanged.
+ */
 const FACET_ATTRIBUTES: Record<string, string[]> = {
-  attribute: ["@_cardinality"],
-  property: ["@_cardinality", "@_dataType"],
+  attribute: ["@_cardinality", "@_instructions"],
+  property: ["@_cardinality", "@_dataType", "@_uri", "@_instructions"],
 };
 
 /** Child elements a facet may carry and still be fully representable. */
@@ -382,6 +388,7 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
     value: value.value,
     cardinality: stated ?? "required",
     explicitCardinality: stated !== null,
+    instructions: attributeOrNull(node, "instructions"),
   };
 
   if (tag === "attribute") {
@@ -402,6 +409,7 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
     propertySet,
     name,
     dataType: attributeOrNull(node, "dataType"),
+    uri: attributeOrNull(node, "uri"),
   };
 }
 
