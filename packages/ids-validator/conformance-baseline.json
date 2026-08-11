@@ -2,8 +2,8 @@
   "generated": "2026-08-11",
   "totals": {
     "cases": 334,
-    "agreed": 301,
-    "wrong": 19,
+    "agreed": 302,
+    "wrong": 18,
     "refused": 14,
     "errored": 0
   },
@@ -24,8 +24,8 @@
     },
     "entity": {
       "total": 33,
-      "agreed": 28,
-      "wrong": 5,
+      "agreed": 29,
+      "wrong": 4,
       "refused": 0,
       "errored": 0
     },
@@ -170,6 +170,7 @@
     "entity/pass-entities_can_be_specified_as_a_xsd_regex_pattern_2_2",
     "entity/pass-entities_can_be_specified_as_an_enumeration_1_3",
     "entity/pass-entities_can_be_specified_as_an_enumeration_2_3",
+    "entity/pass-inherited_predefined_types_should_pass",
     "entity/pass-overridden_predefined_types_should_pass",
     "entity/pass-restrictions_can_be_specified_for_the_predefined_type_1_3",
     "entity/pass-restrictions_can_be_specified_for_the_predefined_type_2_3",
@@ -459,12 +460,6 @@
       "expected": "pass",
       "actual": "fail",
       "detail": "0 applicable, 0 passed, 0 failed (This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.)"
-    },
-    {
-      "case": "entity/pass-inherited_predefined_types_should_pass",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
       "case": "property/fail-all_matching_properties_must_satisfy_requirements_3_3",

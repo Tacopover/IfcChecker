@@ -32,25 +32,54 @@ describe("effectivePredefinedType", () => {
 
 describe("resolvePredefinedType", () => {
   it("keeps the enumeration literal alongside the name it resolves to", () => {
-    expect(resolvePredefinedType("USERDEFINED", null, "WALDO")).toEqual({
-      predefinedType: "WALDO",
-      storedPredefinedType: "USERDEFINED",
-    });
+    expect(
+      resolvePredefinedType({ predefinedType: "USERDEFINED", elementType: "WALDO" })
+    ).toEqual({ predefinedType: "WALDO", storedPredefinedType: "USERDEFINED" });
   });
 
   // Nothing is carried twice: an ordinary value, an absent one, and a USERDEFINED that names
   // nothing all resolve to themselves, so there is no second string for a rule to match.
   it("states no stored value when the two would be the same string", () => {
-    expect(resolvePredefinedType("SOLIDWALL", null)).toEqual({
+    expect(resolvePredefinedType({ predefinedType: "SOLIDWALL" })).toEqual({
       predefinedType: "SOLIDWALL",
       storedPredefinedType: null,
     });
-    expect(resolvePredefinedType(null, "ignored")).toEqual({
+    expect(resolvePredefinedType({ predefinedType: null, objectType: "ignored" })).toEqual({
       predefinedType: null,
       storedPredefinedType: null,
     });
-    expect(resolvePredefinedType("USERDEFINED", null, "")).toEqual({
+    expect(resolvePredefinedType({ predefinedType: "USERDEFINED", elementType: "" })).toEqual({
       predefinedType: "USERDEFINED",
+      storedPredefinedType: null,
+    });
+  });
+
+  it("takes the type object's value over the occurrence's own", () => {
+    expect(
+      resolvePredefinedType(
+        { predefinedType: null },
+        { predefinedType: "USERDEFINED", elementType: "X" }
+      )
+    ).toEqual({ predefinedType: "X", storedPredefinedType: "USERDEFINED" });
+
+    expect(
+      resolvePredefinedType({ predefinedType: "SOLIDWALL" }, { predefinedType: "PARTITIONING" })
+    ).toEqual({ predefinedType: "PARTITIONING", storedPredefinedType: null });
+  });
+
+  // NOTDEFINED is the enumeration saying "no value here", so a type carrying it defines nothing
+  // and the occurrence's own value stands. On the occurrence there is nowhere further to look, so
+  // the same literal is kept rather than reported as absent.
+  it("reads NOTDEFINED on a type as defining nothing, and keeps it on an occurrence", () => {
+    expect(
+      resolvePredefinedType(
+        { predefinedType: "USERDEFINED", objectType: "Y" },
+        { predefinedType: "NOTDEFINED" }
+      )
+    ).toEqual({ predefinedType: "Y", storedPredefinedType: "USERDEFINED" });
+
+    expect(resolvePredefinedType({ predefinedType: "NOTDEFINED" }, null)).toEqual({
+      predefinedType: "NOTDEFINED",
       storedPredefinedType: null,
     });
   });

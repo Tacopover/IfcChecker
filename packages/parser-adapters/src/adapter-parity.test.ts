@@ -372,6 +372,32 @@ describe("adapter parity", () => {
     expect(byName(webIfcResult)).toEqual(fromIfcLite);
   });
 
+  // The type object is consulted first and the occurrence only where the type defines nothing.
+  // NOTDEFINED on a type defines nothing, so it must not overwrite what the occurrence states.
+  it("both engines inherit a predefined type from the type object, and let NOTDEFINED fall through", async () => {
+    const path = fixturePath("predefined-types.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byName = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope
+          .filter((entity) => entity.name !== null)
+          .map((entity) => [
+            entity.name,
+            `${entity.predefinedType}/${entity.storedPredefinedType ?? "-"}`,
+          ])
+      );
+
+    const fromIfcLite = byName(ifcLiteResult);
+    // W-INHERITED states none of its own; the type says USERDEFINED with an ElementType of X.
+    expect(fromIfcLite["W-INHERITED"]).toBe("X/USERDEFINED");
+    // W-OVERRIDDEN states USERDEFINED with an ObjectType of Y; the type says NOTDEFINED.
+    expect(fromIfcLite["W-OVERRIDDEN"]).toBe("Y/USERDEFINED");
+
+    expect(byName(webIfcResult)).toEqual(fromIfcLite);
+  });
+
   it("both engines flatten every material shape to the same matchable strings", async () => {
     const path = fixturePath("material-shapes.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);
