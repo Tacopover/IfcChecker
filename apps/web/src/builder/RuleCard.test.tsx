@@ -6,6 +6,7 @@ import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { RuleDraft } from "@ifc-qa/ids-validator";
 import { RuleCard } from "./RuleCard";
 import { introspectModel } from "./introspect";
+import { stating } from "../test/conditions";
 
 function wall(index: number, fireRating: string | null): NormalizedElement {
   return {
@@ -47,9 +48,7 @@ const RULE: RuleDraft = {
       kind: "property",
       propertySet: "Pset_WallCommon",
       name: "FireRating",
-      operator: "exists",
-      values: [],
-      text: "",
+      ...stating("exists"),
     },
   ],
 };

@@ -225,7 +225,7 @@ export function RuleCard({
                   onDuplicate={() =>
                     updateConditions([
                       ...rule.conditions.slice(0, index + 1),
-                      { ...condition, id: nextDraftId("c"), values: [...condition.values] },
+                      { ...condition, id: nextDraftId("c") },
                       ...rule.conditions.slice(index + 1),
                     ])
                   }

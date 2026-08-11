@@ -4,6 +4,7 @@ import { buildIdsXml } from "./build-ids.js";
 import { idsSchemaViolations } from "./ids-schema-shape.js";
 import { idsXmlToDrafts } from "./import-ids.js";
 import type { ConditionDraft, ConditionOperator, RuleDraft } from "./rule-draft.js";
+import { cardinalityForOperator, valueDraftForOperator } from "./rule-draft.js";
 import { idsXsdViolations } from "./xsd-conformance.js";
 
 /**
@@ -77,9 +78,8 @@ function condition(
     kind,
     propertySet: kind === "property" ? `Pset_${text === "" ? "Empty" : "Hostile"} & Set` : null,
     name: text === "" ? "Unnamed" : `Name ${text}`,
-    operator,
-    values: [text, `${text} second`, "plain"],
-    text,
+    value: valueDraftForOperator(operator, text, [text, `${text} second`, "plain"]),
+    cardinality: cardinalityForOperator(operator),
     dataType: kind === "property" ? DATA_TYPES[index % DATA_TYPES.length] : undefined,
   };
 }

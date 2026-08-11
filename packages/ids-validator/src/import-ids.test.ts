@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { idsXmlToDrafts } from "./import-ids.js";
 import type { IdsImportResult } from "./import-ids.js";
 import type { ConditionDraft, RuleDraft } from "./rule-draft.js";
+import { friendlyReadingOf } from "./rule-draft.js";
 
 function document(specifications: string): string {
   return [
@@ -94,57 +95,85 @@ describe("idsXmlToDrafts applicability", () => {
   });
 });
 
-describe("idsXmlToDrafts operators", () => {
-  it("reads a facet with no value as exists", () => {
-    expect(onlyCondition(withRequirements(`<attribute><name><simpleValue>Name</simpleValue></name></attribute>`)))
-      .toMatchObject({ kind: "attribute", name: "Name", operator: "exists" });
+describe("idsXmlToDrafts values", () => {
+  /** An attribute facet on `Name` carrying whatever `<value>` the case is about. */
+  function attributeValue(value: string): ConditionDraft {
+    return onlyCondition(
+      withRequirements(`<attribute><name><simpleValue>Name</simpleValue></name>${value}</attribute>`)
+    );
+  }
+
+  it("reads a facet with no value as no restriction at all", () => {
+    expect(attributeValue("")).toMatchObject({
+      kind: "attribute",
+      name: "Name",
+      value: null,
+      cardinality: "required",
+    });
   });
 
-  it("reads a simpleValue as equals and an enumeration as oneOf", () => {
-    expect(
-      onlyCondition(
-        withRequirements(
-          `<attribute><name><simpleValue>Name</simpleValue></name><value><simpleValue>W-1</simpleValue></value></attribute>`
-        )
-      )
-    ).toMatchObject({ operator: "equals", text: "W-1" });
+  it("reads a simpleValue and an enumeration into the value they state", () => {
+    expect(attributeValue(`<value><simpleValue>W-1</simpleValue></value>`).value).toEqual({
+      kind: "simple",
+      value: "W-1",
+    });
 
     expect(
-      onlyCondition(
-        withRequirements(
-          `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:enumeration value="A" /><xs:enumeration value="B" /></xs:restriction></value></attribute>`
-        )
-      )
-    ).toMatchObject({ operator: "oneOf", values: ["A", "B"] });
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:enumeration value="A" /><xs:enumeration value="B" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "enum", values: ["A", "B"] });
   });
 
   it.each([
-    [".*A\\.B.*", "contains", "A.B"],
-    ["W-.*", "startsWith", "W-"],
-    [".*-01", "endsWith", "-01"],
+    [".*A\\.B.*", { kind: "affix", operator: "contains", literal: "A.B" }],
+    ["W-.*", { kind: "affix", operator: "startsWith", literal: "W-" }],
+    [".*-01", { kind: "affix", operator: "endsWith", literal: "-01" }],
     // Not something escapeRegExp would ever produce, so reading it as startsWith("W-") would
     // re-export the author's `W\-.*` as `W-.*` — the same matches, rewritten behind their back.
-    ["W\\-.*", "matches", "W\\-.*"],
-    ["W-\\d+", "matches", "W-\\d+"],
-    [".*[AB].*", "matches", ".*[AB].*"],
-  ])("reads the pattern %s as %s", (pattern, operator, text) => {
+    ["W\\-.*", { kind: "pattern", source: "W\\-.*" }],
+    ["W-\\d+", { kind: "pattern", source: "W-\\d+" }],
+    [".*[AB].*", { kind: "pattern", source: ".*[AB].*" }],
+  ])("stores the pattern %s as %o", (pattern, value) => {
     expect(
-      onlyCondition(
-        withRequirements(
-          `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="${pattern}" /></xs:restriction></value></attribute>`
-        )
-      )
-    ).toMatchObject({ operator, text });
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:pattern value="${pattern}" /></xs:restriction></value>`
+      ).value
+    ).toEqual(value);
   });
 
-  it("reads a prohibited facet with no value as notExists", () => {
+  // What the row shows is derived from the value, so the two have to agree on a real file.
+  it("reads every imported value back as the operator the file was written with", () => {
+    const readings = [
+      [``, "exists"],
+      [`<value><simpleValue>W-1</simpleValue></value>`, "equals"],
+      [
+        `<value><xs:restriction base="xs:string"><xs:enumeration value="A" /></xs:restriction></value>`,
+        "oneOf",
+      ],
+      [
+        `<value><xs:restriction base="xs:string"><xs:pattern value=".*A.*" /></xs:restriction></value>`,
+        "contains",
+      ],
+      [
+        `<value><xs:restriction base="xs:string"><xs:pattern value="W-\\d+" /></xs:restriction></value>`,
+        "matches",
+      ],
+    ] as const;
+
+    for (const [value, operator] of readings) {
+      expect(friendlyReadingOf(attributeValue(value))?.operator).toBe(operator);
+    }
+  });
+
+  it("reads a prohibited facet with no value as a prohibited condition", () => {
     expect(
       onlyCondition(
         withRequirements(
           `<attribute cardinality="prohibited"><name><simpleValue>Tag</simpleValue></name></attribute>`
         )
       )
-    ).toMatchObject({ operator: "notExists", explicitCardinality: true });
+    ).toMatchObject({ cardinality: "prohibited", value: null, explicitCardinality: true });
   });
 
   it("carries the property data type, and its absence, rather than assuming a default", () => {
@@ -213,7 +242,25 @@ describe("idsXmlToDrafts pass-through", () => {
     ],
     [
       `<property dataType="IFCREAL"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName><value><xs:restriction base="xs:double"><xs:maxInclusive value="0.24" /></xs:restriction></value></property>`,
-      /a range or a length/,
+      /numeric range/,
+    ],
+    // One sentence used to cover all of these. Over the corpus it was wrong about 8 of the facets
+    // it refused, and the message is what tells the user which piece of work their file waits on.
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="3" /></xs:restriction></value></attribute>`,
+      /length of its value/,
+    ],
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
+      /xs:annotation/,
+    ],
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:enumeration value="42" /></xs:restriction></value></attribute>`,
+      /base="xs:double"/,
+    ],
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="[a-z]{2}" /><xs:pattern value="[A-Z]{2}" /></xs:restriction></value></attribute>`,
+      /Combines several restrictions/,
     ],
     [
       `<property cardinality="optional"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,

@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { parseIdsXml, type RuleDraft } from "@ifc-qa/ids-validator";
 import { IdsXmlPreview } from "./IdsXmlPreview";
+import { stating } from "../test/conditions";
 
 const RULES: RuleDraft[] = [
   {
@@ -15,9 +16,7 @@ const RULES: RuleDraft[] = [
         kind: "property",
         propertySet: "Pset_WallCommon",
         name: "FireRating",
-        operator: "oneOf",
-        values: ["60", "90"],
-        text: "",
+        ...stating("oneOf", "", ["60", "90"]),
       },
     ],
   },
@@ -90,7 +89,7 @@ describe("IdsXmlPreview", () => {
 
     // oneOf with nothing ticked: an empty xs:restriction is an unrestricted string in XSD.
     const incomplete: RuleDraft[] = [
-      { ...RULES[0], conditions: [{ ...RULES[0].conditions[0], values: [] }] },
+      { ...RULES[0], conditions: [{ ...RULES[0].conditions[0], ...stating("oneOf") }] },
     ];
     render(<IdsXmlPreview rules={incomplete} title="Tower-A.ifc" />);
 

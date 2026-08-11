@@ -1,10 +1,14 @@
-import type { ParsedRestriction } from "./parse-ids.js";
-import type { ConditionDraft, PassThrough, RuleDraft } from "./rule-draft.js";
+import type {
+  BoundDraft,
+  ConditionDraft,
+  PassThrough,
+  RuleDraft,
+  ValueDraft,
+} from "./rule-draft.js";
 import {
   BUILDER_PROPERTY_DATA_TYPE,
+  affixPatternSource,
   applicabilityEntityNamesOf,
-  cardinalityForCondition,
-  restrictionForCondition,
 } from "./rule-draft.js";
 
 export interface IdsDocumentInfo {
@@ -28,39 +32,59 @@ function escapeXml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => XML_ESCAPES[character]);
 }
 
-function restrictionXml(restriction: ParsedRestriction | null): string {
-  if (!restriction) return "";
-  if (restriction.kind === "exact") {
-    return `\n        <value><simpleValue>${escapeXml(restriction.value)}</simpleValue></value>`;
-  }
-  // A range is the one restriction whose base is not a string, so it carries its own.
-  if (restriction.kind === "bounds") {
-    const edges = [
-      restriction.min && `min${restriction.min.inclusive ? "Inclusive" : "Exclusive"}`,
-      restriction.max && `max${restriction.max.inclusive ? "Inclusive" : "Exclusive"}`,
-    ];
-    const values = [restriction.min?.value, restriction.max?.value];
-    const body = edges
-      .map((facet, index) => (facet ? `\n            <xs:${facet} value="${values[index]}" />` : ""))
-      .join("");
-    return `\n        <value>\n          <xs:restriction base="xs:double">${body}\n          </xs:restriction>\n        </value>`;
-  }
+function restrictionBodyXml(base: string, body: string): string {
+  return `\n        <value>\n          <xs:restriction base="${base}">${body}\n          </xs:restriction>\n        </value>`;
+}
 
-  const body =
-    restriction.kind === "enum"
-      ? restriction.values
-          .map((value) => `\n            <xs:enumeration value="${escapeXml(value)}" />`)
+/**
+ * The `<value>` a facet parameter states, written from the draft rather than from the compiled
+ * restriction. The draft holds what the author wrote — a bound's `"1.50"`, a pattern's exact
+ * source — and compiling first would round those through a `number` and a `RegExp` and hand back
+ * a document that differs from the one that came in.
+ */
+function valueXml(value: ValueDraft | null): string {
+  if (value === null) return "";
+  switch (value.kind) {
+    case "simple":
+      return `\n        <value><simpleValue>${escapeXml(value.value)}</simpleValue></value>`;
+    case "enum":
+      return restrictionBodyXml(
+        "xs:string",
+        value.values
+          .map((entry) => `\n            <xs:enumeration value="${escapeXml(entry)}" />`)
           .join("")
-      : `\n            <xs:pattern value="${escapeXml(restriction.source)}" />`;
-  return `\n        <value>\n          <xs:restriction base="xs:string">${body}\n          </xs:restriction>\n        </value>`;
+      );
+    case "pattern":
+      return restrictionBodyXml(
+        "xs:string",
+        `\n            <xs:pattern value="${escapeXml(value.source)}" />`
+      );
+    case "affix":
+      return restrictionBodyXml(
+        "xs:string",
+        `\n            <xs:pattern value="${escapeXml(affixPatternSource(value.operator, value.literal))}" />`
+      );
+    // A range is the one value whose base is not a string, so it carries its own.
+    case "bounds": {
+      const edges: Array<[string, BoundDraft] | null> = [
+        value.min && [`min${value.min.inclusive ? "Inclusive" : "Exclusive"}`, value.min],
+        value.max && [`max${value.max.inclusive ? "Inclusive" : "Exclusive"}`, value.max],
+      ];
+      const body = edges
+        .map((edge) => (edge ? `\n            <xs:${edge[0]} value="${escapeXml(edge[1].value)}" />` : ""))
+        .join("");
+      return restrictionBodyXml("xs:double", body);
+    }
+  }
 }
 
 function facetXml(condition: ConditionDraft): string {
-  const restriction = restrictionXml(restrictionForCondition(condition));
-  const value = cardinalityForCondition(condition);
-  // `required` is the IDS default, so it is written out only for a file that wrote it out itself.
+  const restriction = valueXml(condition.value);
+  const value = condition.cardinality;
+  // `required` is the IDS default, so it is written out only where it is not the default or for a
+  // file that wrote it out itself.
   const cardinality =
-    value === "prohibited" || condition.explicitCardinality ? ` cardinality="${value}"` : "";
+    value !== "required" || condition.explicitCardinality ? ` cardinality="${value}"` : "";
 
   if (condition.kind === "attribute") {
     return [

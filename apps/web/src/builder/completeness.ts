@@ -1,4 +1,4 @@
-import type { ConditionDraft, ConditionOperator, RuleDraft } from "@ifc-qa/ids-validator";
+import type { ConditionDraft, ConditionOperator, RuleDraft, ValueDraft } from "@ifc-qa/ids-validator";
 
 /** Operators whose meaning lives entirely in the text box beside them. */
 export const OPERATORS_NEEDING_TEXT: ReadonlySet<ConditionOperator> = new Set<ConditionOperator>([
@@ -12,15 +12,27 @@ export const OPERATORS_NEEDING_TEXT: ReadonlySet<ConditionOperator> = new Set<Co
 /**
  * The validator compiles a pattern it cannot parse into one that never matches, so an invalid regex
  * would silently fail every element with nothing on screen to explain it.
+ *
+ * Only a pattern the user wrote themselves can be invalid: an affix operator escapes its literal,
+ * so `.*(dev.*` is unreachable from "must start with".
  */
 export function patternError(condition: ConditionDraft): string | null {
-  if (condition.operator !== "matches" || condition.text === "") return null;
+  const value = condition.value;
+  if (value?.kind !== "pattern" || value.source === "") return null;
   try {
-    new RegExp(`^(?:${condition.text})$`);
+    new RegExp(`^(?:${value.source})$`);
     return null;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
+}
+
+/** Whether the box the user types into is still empty. */
+function statesNoText(value: ValueDraft): boolean {
+  if (value.kind === "simple") return value.value === "";
+  if (value.kind === "affix") return value.literal === "";
+  if (value.kind === "pattern") return value.source === "";
+  return false;
 }
 
 /**
@@ -30,10 +42,12 @@ export function patternError(condition: ConditionDraft): string | null {
  * the UI counts as failing. An empty text box is the mirror image — a rule nothing can satisfy.
  */
 export function conditionProblem(condition: ConditionDraft): string | null {
-  if (condition.operator === "oneOf" && condition.values.length === 0) {
+  const value = condition.value;
+  if (value === null) return null;
+  if (value.kind === "enum" && value.values.length === 0) {
     return "Tick at least one value — with none, the exported rule accepts anything.";
   }
-  if (OPERATORS_NEEDING_TEXT.has(condition.operator) && condition.text === "") {
+  if (statesNoText(value)) {
     return "Enter a value — this condition can never pass while it is empty.";
   }
   const pattern = patternError(condition);

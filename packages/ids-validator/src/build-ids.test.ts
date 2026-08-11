@@ -16,19 +16,30 @@ function slotRestriction(facet: ParsedRequirementFacet): ParsedRestriction | nul
   return facet.restriction;
 }
 
-import type { ConditionDraft, RuleDraft } from "./rule-draft.js";
-import { compileDraft } from "./rule-draft.js";
+import type { ConditionDraft, ConditionOperator, RuleDraft } from "./rule-draft.js";
+import { cardinalityForOperator, compileDraft, valueDraftForOperator } from "./rule-draft.js";
 
-function condition(overrides: Partial<ConditionDraft> = {}): ConditionDraft {
+/**
+ * A condition written the way the builder's rows are: an operator plus whatever it needs. The two
+ * fields it sets are derived by the same functions the page uses, so these cases stay a test of
+ * what the exporter writes rather than of how the draft happens to be shaped.
+ */
+function condition(
+  overrides: Partial<ConditionDraft> & {
+    operator?: ConditionOperator;
+    text?: string;
+    values?: string[];
+  } = {}
+): ConditionDraft {
+  const { operator = "exists", text = "", values = [], ...rest } = overrides;
   return {
     id: "c1",
     kind: "attribute",
     propertySet: null,
     name: "Name",
-    operator: "exists",
-    values: [],
-    text: "",
-    ...overrides,
+    value: valueDraftForOperator(operator, text, values),
+    cardinality: cardinalityForOperator(operator),
+    ...rest,
   };
 }
 
@@ -156,15 +167,7 @@ describe("buildIdsXml", () => {
         name: "Codes",
         entityTypes: ["IfcSanitaryTerminal"],
         conditions: [
-          {
-            id: "c",
-            kind: "property",
-            propertySet: "ASML",
-            name: "3.6 NL-SfB code",
-            operator: "exists",
-            values: [],
-            text: "",
-          },
+          condition({ id: "c", kind: "property", propertySet: "ASML", name: "3.6 NL-SfB code" }),
         ],
       },
     ]);
@@ -181,16 +184,13 @@ describe("buildIdsXml", () => {
           name: "Codes",
           entityTypes: ["IfcSanitaryTerminal"],
           conditions: [
-            {
+            condition({
               id: "c",
               kind: "property",
               propertySet: "ASML",
               name: "3.6 NL-SfB code",
-              operator: "exists",
-              values: [],
-              text: "",
               dataType,
-            },
+            }),
           ],
         },
       ]);

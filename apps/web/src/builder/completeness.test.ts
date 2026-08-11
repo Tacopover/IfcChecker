@@ -7,27 +7,26 @@ import {
   patternError,
   ruleProblems,
 } from "./completeness";
+import { stating } from "../test/conditions";
 
 const CONDITION: ConditionDraft = {
   id: "c1",
   kind: "property",
   propertySet: "Pset_WallCommon",
   name: "FireRating",
-  operator: "exists",
-  values: [],
-  text: "",
+  ...stating("exists"),
 };
 
 const RULE: RuleDraft = {
   id: "r1",
   name: "Walls declare a fire rating",
   entityTypes: ["IfcWall"],
-  conditions: [{ ...CONDITION, operator: "oneOf", values: ["60", "90"] }],
+  conditions: [{ ...CONDITION, ...stating("oneOf", "", ["60", "90"]) }],
 };
 
 describe("conditionProblem", () => {
   it("rejects a oneOf with nothing ticked — the XML would accept every value", () => {
-    const empty: ConditionDraft = { ...CONDITION, operator: "oneOf", values: [] };
+    const empty: ConditionDraft = { ...CONDITION, ...stating("oneOf") };
 
     // Proof this is not a theoretical worry: what we would emit is an unrestricted xs:string.
     // Sliced at <requirements> because the applicability's own entity names are an enumeration.
@@ -37,23 +36,23 @@ describe("conditionProblem", () => {
     expect(requirements).not.toContain("<xs:enumeration");
 
     expect(conditionProblem(empty)).toMatch(/Tick at least one value/);
-    expect(conditionProblem({ ...empty, values: ["60"] })).toBeNull();
+    expect(conditionProblem({ ...empty, ...stating("oneOf", "", ["60"]) })).toBeNull();
   });
 
   it("rejects every text operator with an empty box, and only while it is empty", () => {
     for (const operator of ["equals", "contains", "startsWith", "endsWith", "matches"] as const) {
-      expect(conditionProblem({ ...CONDITION, operator, text: "" })).toMatch(/Enter a value/);
-      expect(conditionProblem({ ...CONDITION, operator, text: "REI" })).toBeNull();
+      expect(conditionProblem({ ...CONDITION, ...stating(operator, "") })).toMatch(/Enter a value/);
+      expect(conditionProblem({ ...CONDITION, ...stating(operator, "REI") })).toBeNull();
     }
   });
 
   it("leaves operators that need no value alone", () => {
-    expect(conditionProblem({ ...CONDITION, operator: "exists" })).toBeNull();
-    expect(conditionProblem({ ...CONDITION, operator: "notExists" })).toBeNull();
+    expect(conditionProblem({ ...CONDITION, ...stating("exists") })).toBeNull();
+    expect(conditionProblem({ ...CONDITION, ...stating("notExists") })).toBeNull();
   });
 
   it("folds an uncompilable pattern into the same report", () => {
-    expect(conditionProblem({ ...CONDITION, operator: "matches", text: "[A-Z" })).toMatch(
+    expect(conditionProblem({ ...CONDITION, ...stating("matches", "[A-Z") })).toMatch(
       /Invalid pattern/
     );
   });
@@ -61,10 +60,10 @@ describe("conditionProblem", () => {
 
 describe("patternError", () => {
   it("only reports on a matches condition whose text cannot compile", () => {
-    expect(patternError({ ...CONDITION, operator: "matches", text: "[A-Z]+" })).toBeNull();
-    expect(patternError({ ...CONDITION, operator: "matches", text: "" })).toBeNull();
-    expect(patternError({ ...CONDITION, operator: "contains", text: "[" })).toBeNull();
-    expect(patternError({ ...CONDITION, operator: "matches", text: "[" })).toContain("[");
+    expect(patternError({ ...CONDITION, ...stating("matches", "[A-Z]+") })).toBeNull();
+    expect(patternError({ ...CONDITION, ...stating("matches", "") })).toBeNull();
+    expect(patternError({ ...CONDITION, ...stating("contains", "[") })).toBeNull();
+    expect(patternError({ ...CONDITION, ...stating("matches", "[") })).toContain("[");
   });
 });
 
@@ -104,7 +103,7 @@ describe("isRuleComplete", () => {
   it("is false when any single condition is incomplete", () => {
     expect(isRuleComplete(RULE)).toBe(true);
     expect(
-      isRuleComplete({ ...RULE, conditions: [{ ...CONDITION, operator: "oneOf", values: [] }] })
+      isRuleComplete({ ...RULE, conditions: [{ ...CONDITION, ...stating("oneOf") }] })
     ).toBe(false);
   });
 });
@@ -116,7 +115,7 @@ describe("exportBlockers", () => {
 
   it("names the rule and the field behind each problem", () => {
     const [blocker] = exportBlockers([
-      { ...RULE, conditions: [{ ...CONDITION, operator: "contains", text: "" }] },
+      { ...RULE, conditions: [{ ...CONDITION, ...stating("contains", "") }] },
     ]);
 
     expect(blocker).toContain("Walls declare a fire rating");
@@ -132,7 +131,7 @@ describe("exportBlockers", () => {
     const blockers = exportBlockers([
       { ...RULE, id: "a", name: "A", entityTypes: [] },
       RULE,
-      { ...RULE, id: "b", name: "B", conditions: [{ ...CONDITION, operator: "oneOf", values: [] }] },
+      { ...RULE, id: "b", name: "B", conditions: [{ ...CONDITION, ...stating("oneOf") }] },
     ]);
 
     expect(blockers).toHaveLength(2);

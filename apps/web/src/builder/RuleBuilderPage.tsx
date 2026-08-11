@@ -215,9 +215,8 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
       kind: field.kind,
       propertySet: field.propertySet,
       name: field.name,
-      operator: "exists",
-      values: [],
-      text: "",
+      value: null,
+      cardinality: "required",
     };
     const target = rules.find((rule) => rule.id === activeRuleId) ?? rules[0] ?? null;
 
@@ -267,11 +266,8 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
       id: nextDraftId("r"),
       name: `${rule.name} (copy)`,
       entityTypes: [...rule.entityTypes],
-      conditions: rule.conditions.map((condition) => ({
-        ...condition,
-        id: nextDraftId("c"),
-        values: [...condition.values],
-      })),
+      // A ValueDraft is only ever replaced, never edited in place, so the copy can share it.
+      conditions: rule.conditions.map((condition) => ({ ...condition, id: nextDraftId("c") })),
     };
     const index = rules.indexOf(rule);
     setRules([...rules.slice(0, index + 1), copy, ...rules.slice(index + 1)]);

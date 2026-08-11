@@ -1,14 +1,13 @@
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
-import type { ParsedRestriction, UnsupportedConstruct } from "./parse-ids.js";
-import { patternRestriction } from "./parse-ids.js";
+import type { UnsupportedConstruct } from "./parse-ids.js";
 import type {
   ConditionDraft,
-  ConditionOperator,
   ImportedRuleSource,
   PassThrough,
   RuleDraft,
+  ValueDraft,
 } from "./rule-draft.js";
-import { escapeRegExp } from "./rule-draft.js";
+import { patternValueDraft } from "./rule-draft.js";
 
 /** A specification kept out of the rule list because its applicability cannot be represented. */
 export interface RefusedSpecification {
@@ -362,29 +361,26 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
     return refused(`Is cardinality="${cardinality}", which the builder has no equivalent for.`);
   }
 
-  const restriction = readRestriction(children);
-  if (restriction === UNREADABLE) {
-    return refused("Restricts its value in a way the builder cannot show, such as a range or a length.");
-  }
+  const value = readValueDraft(children);
+  if ("refused" in value) return value;
 
-  const operator = readOperator(restriction, cardinality === "prohibited");
-  if (!operator) {
+  // The builder's prohibited row carries no value, so "must not be this value" would export as the
+  // far broader "must not be present at all".
+  if (cardinality === "prohibited" && value.value !== null) {
     return refused("States a prohibited value, which the builder can only express as \u201cmust not be filled in\u201d.");
   }
 
-  const explicitCardinality = cardinality !== null;
+  const common = {
+    id: draftId("c"),
+    value: value.value,
+    cardinality: cardinality === "prohibited" ? ("prohibited" as const) : ("required" as const),
+    explicitCardinality: cardinality !== null,
+  };
 
   if (tag === "attribute") {
     const name = readSimpleValue(descend(children, "name"));
     if (name === null) return refused("Gives its attribute name as a pattern rather than a plain name.");
-    return {
-      id: draftId("c"),
-      kind: "attribute",
-      propertySet: null,
-      name,
-      explicitCardinality,
-      ...operator,
-    };
+    return { ...common, kind: "attribute", propertySet: null, name };
   }
 
   const propertySet = readSimpleValue(descend(children, "propertySet"));
@@ -394,111 +390,91 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
   }
 
   return {
-    id: draftId("c"),
+    ...common,
     kind: "property",
     propertySet,
     name,
     dataType: attributeOrNull(node, "dataType"),
-    explicitCardinality,
-    ...operator,
   };
 }
 
-/** Distinguishes "no restriction" from "a restriction we cannot represent". */
-const UNREADABLE = Symbol("unreadable restriction");
-
 /**
- * The XSD facets a `ParsedRestriction` can carry. Unlike the validator, this list excludes
- * `annotation`: the validator can ignore prose, but an import that dropped an author's
- * documentation and handed the file back without it would be destroying their work.
+ * The XSD facets a `ValueDraft` can carry. Unlike the validator, this list excludes `annotation`:
+ * the validator can ignore prose, but an import that dropped an author's documentation and handed
+ * the file back without it would be destroying their work.
  */
 const RESTRICTION_FACETS_READ = ["pattern", "enumeration"];
 
-function readRestriction(
+const BOUND_FACETS = ["minInclusive", "maxInclusive", "minExclusive", "maxExclusive"];
+const LENGTH_FACETS = ["length", "minLength", "maxLength"];
+
+/**
+ * Why a restriction could not be read, named by the one thing that stopped it.
+ *
+ * One sentence for all of them said "such as a range or a length", and over the 7,784-file corpus
+ * that was wrong about 8 of the facets it refused: two carry an `xs:annotation`, one an
+ * `xs:double` base, and the rest two `xs:pattern` children. Each of those is a different piece of
+ * work, and the message is what tells the user which one their file is waiting on.
+ */
+function refuseRestrictionFacet(tag: string): FacetRefusal {
+  if (tag === "annotation") {
+    return refused("Documents its value with an <xs:annotation>, which the builder cannot show.");
+  }
+  if (BOUND_FACETS.includes(tag)) {
+    return refused("Restricts its value to a numeric range, which the builder cannot show.");
+  }
+  if (LENGTH_FACETS.includes(tag)) {
+    return refused("Restricts the length of its value, which the builder cannot show.");
+  }
+  return refused(`Restricts its value with <xs:${tag}>, which the builder cannot show.`);
+}
+
+/** The value a facet states, or the reason it cannot be shown. `null` is "no restriction at all". */
+function readValueDraft(
   facetChildren: OrderedNode[]
-): ParsedRestriction | null | typeof UNREADABLE {
+): { value: ValueDraft | null } | FacetRefusal {
   const valueNode = findChild(facetChildren, "value");
-  if (!valueNode) return null;
+  if (!valueNode) return { value: null };
 
   const valueChildren = elementsOf(childrenOf(valueNode));
-  if (valueChildren.length !== 1) return UNREADABLE;
+  if (valueChildren.length !== 1) {
+    return refused("Gives its value more than one form, which the builder cannot show.");
+  }
   const [only] = valueChildren;
 
   if (tagOf(only) === "simpleValue") {
-    return { kind: "exact", value: textOf(childrenOf(only)) };
+    return { value: { kind: "simple", value: textOf(childrenOf(only)) } };
   }
-  if (tagOf(only) !== "restriction") return UNREADABLE;
+  if (tagOf(only) !== "restriction") {
+    return refused(`States its value as <${tagOf(only)}>, which the builder cannot show.`);
+  }
 
-  // Re-exporting under a different base would retype the value, so only the one we emit is safe.
-  const base = attributeOrNull(only, "base");
-  if (base !== null && base.slice(base.indexOf(":") + 1) !== "string") return UNREADABLE;
-
+  // What the restriction is made of, before what it is based on: a numeric range legitimately
+  // carries a numeric base, so checking the base first would report the range as a bad base.
   const children = elementsOf(childrenOf(only));
-  if (children.some((child) => !RESTRICTION_FACETS_READ.includes(tagOf(child) ?? ""))) {
-    return UNREADABLE;
+  const outside = children.find((child) => !RESTRICTION_FACETS_READ.includes(tagOf(child) ?? ""));
+  if (outside) return refuseRestrictionFacet(tagOf(outside) ?? "");
+
+  // A pattern and an enumeration are string constructs, so anything left here is based on a type
+  // we would retype on the way back out.
+  const base = attributeOrNull(only, "base");
+  if (base !== null && base.slice(base.indexOf(":") + 1) !== "string") {
+    return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
   }
 
   const patterns = children.filter((child) => tagOf(child) === "pattern");
   const enumerations = children.filter((child) => tagOf(child) === "enumeration");
 
   if (patterns.length === 1 && enumerations.length === 0) {
-    return patternRestriction(attributeOrNull(patterns[0], "value") ?? "");
+    return { value: patternValueDraft(attributeOrNull(patterns[0], "value") ?? "") };
   }
   if (enumerations.length > 0 && patterns.length === 0) {
     return {
-      kind: "enum",
-      values: enumerations.map((child) => attributeOrNull(child, "value") ?? ""),
+      value: {
+        kind: "enum",
+        values: enumerations.map((child) => attributeOrNull(child, "value") ?? ""),
+      },
     };
   }
-  return UNREADABLE;
-}
-
-type OperatorFields = Pick<ConditionDraft, "operator" | "values" | "text">;
-
-function readOperator(
-  restriction: ParsedRestriction | null,
-  prohibited: boolean
-): OperatorFields | null {
-  if (prohibited) {
-    // The builder's notExists carries no value, so "must not be this value" would export as the
-    // far broader "must not be present at all".
-    return restriction ? null : { operator: "notExists", values: [], text: "" };
-  }
-  if (!restriction) return { operator: "exists", values: [], text: "" };
-  if (restriction.kind === "exact") return { operator: "equals", values: [], text: restriction.value };
-  if (restriction.kind === "enum") return { operator: "oneOf", values: restriction.values, text: "" };
-  // No draft operator states a numeric range, so a rule carrying one is passed through verbatim.
-  // `readRestriction` refuses bounds before they reach here; this keeps that true if it stops.
-  if (restriction.kind === "bounds") return null;
-
-  const affix = readAffixPattern(restriction.source);
-  return affix ?? { operator: "matches", values: [], text: restriction.source };
-}
-
-const ANY = ".*";
-
-/**
- * `contains`/`startsWith`/`endsWith` if the pattern is exactly what those operators would build,
- * so re-exporting reproduces the source character for character. Anything else stays a `matches`
- * pattern, which is already stored verbatim.
- */
-function readAffixPattern(source: string): OperatorFields | null {
-  const attempts: [ConditionOperator, string][] = [
-    ["contains", source.startsWith(ANY) && source.endsWith(ANY) ? source.slice(2, -2) : ""],
-    ["startsWith", source.endsWith(ANY) ? source.slice(0, -2) : ""],
-    ["endsWith", source.startsWith(ANY) ? source.slice(2) : ""],
-  ];
-
-  for (const [operator, body] of attempts) {
-    if (body === "") continue;
-    const literal = unescapeRegExp(body);
-    if (literal !== null) return { operator, values: [], text: literal };
-  }
-  return null;
-}
-
-/** The literal `escapeRegExp` was given, or `null` when the body is not an escaped literal. */
-function unescapeRegExp(body: string): string | null {
-  const literal = body.replace(/\\([.*+?^${}()|[\]\\])/g, "$1");
-  return escapeRegExp(literal) === body ? literal : null;
+  return refused("Combines several restrictions on one value, which the builder cannot show.");
 }

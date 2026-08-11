@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { ConditionDraft, ConditionOperator } from "@ifc-qa/ids-validator";
+import { cardinalityForOperator, friendlyReadingOf, valueDraftForOperator } from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
 import { ValuePicker, type ObservedValue } from "./ValuePicker.js";
 import { conditionProblem, OPERATORS_NEEDING_TEXT } from "./completeness.js";
@@ -84,9 +85,8 @@ export function defaultConditionFor(source: FieldsForResult): ConditionDraft {
       kind: "property",
       propertySet: set.name,
       name,
-      operator: "exists",
-      values: [],
-      text: "",
+      value: null,
+      cardinality: "required",
       dataType: dataTypeFromModel(source, set.name, name),
     };
   }
@@ -95,10 +95,26 @@ export function defaultConditionFor(source: FieldsForResult): ConditionDraft {
     kind: "attribute",
     propertySet: null,
     name: source.attributes[0]?.name ?? "Name",
-    operator: "exists",
-    values: [],
-    text: "",
+    value: null,
+    cardinality: "required",
   };
+}
+
+/**
+ * Why a condition has no operator row, for the ones the eight operators cannot state.
+ *
+ * Unreachable from the builder's own controls today — the importer refuses all three — but the
+ * draft model can hold them, and a row that silently dropped its value would be worse than one
+ * that says what it is holding.
+ */
+function unshownValue(condition: ConditionDraft): string {
+  if (condition.cardinality === "optional") {
+    return "Optional — checked only where the value is present. Not editable here yet.";
+  }
+  if (condition.cardinality === "prohibited") {
+    return "Must not hold this particular value. Not editable here yet.";
+  }
+  return "A numeric range. Not editable here yet.";
 }
 
 function optionsWith(list: string[], current: string | null) {
@@ -131,6 +147,9 @@ export function ConditionRow({
   const observed = useMemo(() => observedValuesFor(source, condition), [source, condition]);
   const dataTypeOptions = useMemo(() => dataTypeOptionsFor(source, condition), [source, condition]);
   const error = conditionProblem(condition);
+  // The operator is a reading of the stored value, never the storage. `null` is the honest answer
+  // for a value none of the eight operators states.
+  const reading = friendlyReadingOf(condition);
 
   const nameOptions =
     condition.kind === "attribute"
@@ -142,6 +161,11 @@ export function ConditionRow({
   const scoreClass = matched === 0 ? "empty" : hits === matched ? "all-pass" : "has-fail";
   const errorId = `cond-error-${condition.id}`;
 
+  /** The same operator and text, with the ticked values dropped — a new field has its own. */
+  function retargetedValue() {
+    return reading ? valueDraftForOperator(reading.operator, reading.text, []) : condition.value;
+  }
+
   function changeKind(kind: ConditionDraft["kind"]) {
     if (kind === "property") {
       const set = source.propertySets[0];
@@ -151,7 +175,7 @@ export function ConditionRow({
         kind,
         propertySet: set?.name ?? null,
         name,
-        values: [],
+        value: retargetedValue(),
         dataType: dataTypeFromModel(source, set?.name ?? null, name),
       });
       return;
@@ -161,7 +185,7 @@ export function ConditionRow({
       kind,
       propertySet: null,
       name: source.attributes[0]?.name ?? "Name",
-      values: [],
+      value: retargetedValue(),
       // IDS declares dataType on <property> alone, so an attribute states none.
       dataType: null,
     });
@@ -174,7 +198,7 @@ export function ConditionRow({
       ...condition,
       propertySet,
       name,
-      values: [],
+      value: retargetedValue(),
       dataType: dataTypeFromModel(source, propertySet, name),
     });
   }
@@ -183,13 +207,31 @@ export function ConditionRow({
     onChange({
       ...condition,
       name,
-      values: [],
+      value: retargetedValue(),
       dataType: condition.kind === "property" ? dataTypeFromModel(source, condition.propertySet, name) : null,
     });
   }
 
+  function changeOperator(operator: ConditionOperator) {
+    onChange({
+      ...condition,
+      cardinality: cardinalityForOperator(operator),
+      value: valueDraftForOperator(operator, reading?.text ?? "", reading?.values ?? []),
+    });
+  }
+
+  function changeText(text: string) {
+    if (!reading) return;
+    onChange({ ...condition, value: valueDraftForOperator(reading.operator, text, reading.values) });
+  }
+
+  function changeValues(values: string[]) {
+    if (!reading) return;
+    onChange({ ...condition, value: valueDraftForOperator(reading.operator, reading.text, values) });
+  }
+
   return (
-    <div className={condition.operator === "notExists" ? "cond prohibited" : "cond"}>
+    <div className={condition.cardinality === "prohibited" ? "cond prohibited" : "cond"}>
       <select
         aria-label="Condition kind"
         value={condition.kind}
@@ -255,47 +297,47 @@ export function ConditionRow({
         </select>
       )}
 
-      <select
-        aria-label="Operator"
-        value={condition.operator}
-        onChange={(event) =>
-          onChange({ ...condition, operator: event.target.value as ConditionOperator })
-        }
-      >
-        {OPERATORS.map((operator) => (
-          <option key={operator.id} value={operator.id}>
-            {operator.label}
-          </option>
-        ))}
-      </select>
-
-      {OPERATORS_NEEDING_TEXT.has(condition.operator) && (
+      {reading === null ? (
+        <span className="cond-unshown">{unshownValue(condition)}</span>
+      ) : (
         <>
-          <input
-            className="tok"
-            type="text"
-            aria-label="Value"
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? errorId : undefined}
-            list={`values-${condition.id}`}
-            placeholder={condition.operator === "matches" ? "regex, e.g. [A-Z]{2}-\\d{4}" : "value"}
-            value={condition.text}
-            onChange={(event) => onChange({ ...condition, text: event.target.value })}
-          />
-          <datalist id={`values-${condition.id}`}>
-            {observed.slice(0, MAX_SUGGESTIONS).map((entry) => (
-              <option key={entry.value} value={entry.value} />
+          <select
+            aria-label="Operator"
+            value={reading.operator}
+            onChange={(event) => changeOperator(event.target.value as ConditionOperator)}
+          >
+            {OPERATORS.map((operator) => (
+              <option key={operator.id} value={operator.id}>
+                {operator.label}
+              </option>
             ))}
-          </datalist>
-        </>
-      )}
+          </select>
 
-      {condition.operator === "oneOf" && (
-        <ValuePicker
-          observed={observed}
-          selected={condition.values}
-          onChange={(values) => onChange({ ...condition, values })}
-        />
+          {OPERATORS_NEEDING_TEXT.has(reading.operator) && (
+            <>
+              <input
+                className="tok"
+                type="text"
+                aria-label="Value"
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? errorId : undefined}
+                list={`values-${condition.id}`}
+                placeholder={reading.operator === "matches" ? "regex, e.g. [A-Z]{2}-\\d{4}" : "value"}
+                value={reading.text}
+                onChange={(event) => changeText(event.target.value)}
+              />
+              <datalist id={`values-${condition.id}`}>
+                {observed.slice(0, MAX_SUGGESTIONS).map((entry) => (
+                  <option key={entry.value} value={entry.value} />
+                ))}
+              </datalist>
+            </>
+          )}
+
+          {reading.operator === "oneOf" && (
+            <ValuePicker observed={observed} selected={reading.values} onChange={changeValues} />
+          )}
+        </>
       )}
 
       <span className={`cond-score score ${scoreClass}`}>

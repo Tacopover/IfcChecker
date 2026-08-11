@@ -1064,6 +1064,14 @@ caption {
   padding: 0.1rem 0.28rem;
 }
 
+/* A value none of the eight operators states — a range, a prohibited value, an
+   optional facet. The row says what it holds rather than mislabelling it. */
+.cond-unshown {
+  font-size: 11.5px;
+  color: var(--faint);
+  font-style: italic;
+}
+
 /* A pattern the RegExp engine rejects would otherwise fail every element with
    no visible reason, so the row has to say so itself. */
 .cond-error {
