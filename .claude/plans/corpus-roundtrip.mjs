@@ -50,7 +50,38 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+/**
+ * How many facet elements each specification's `<requirements>` holds, counted from the text.
+ *
+ * Crude on purpose: it exists only to be compared against the importer's own count, and a reader
+ * sharing the importer's parser could share its mistake. Facet tags are the six ids.xsd allows.
+ */
+const FACET_TAG = /<(?:[A-Za-z0-9_.-]+:)?(entity|partOf|classification|attribute|property|material)\b/g;
+// A partOf wraps an <entity> of its own, which would otherwise count as a second facet.
+const PART_OF_ELEMENT = /<(?:[A-Za-z0-9_.-]+:)?partOf\b[^>]*>[\s\S]*?<\/(?:[A-Za-z0-9_.-]+:)?partOf>/g;
+const REQUIREMENTS =
+  /<(?:[A-Za-z0-9_.-]+:)?requirements\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z0-9_.-]+:)?requirements>/;
+
+const SPECIFICATION_ELEMENT =
+  /<(?:[A-Za-z0-9_.-]+:)?specification\b[^>]*>[\s\S]*?<\/(?:[A-Za-z0-9_.-]+:)?specification>/g;
+
+function sourceFacetCount(specificationXml) {
+  const requirements = REQUIREMENTS.exec(specificationXml);
+  if (!requirements) return 0;
+  const flattened = requirements[1].replace(PART_OF_ELEMENT, "<partOf/>");
+  return [...flattened.matchAll(FACET_TAG)].length;
+}
+
+function documentFacetCount(idsXml) {
+  return [...idsXml.matchAll(SPECIFICATION_ELEMENT)].reduce(
+    (total, match) => total + sourceFacetCount(match[0]),
+    0
+  );
+}
+
 let reproduced = 0;
+let facetsLost = 0;
+const facetLossExamples = [];
 let drifted = 0;
 let importFailed = 0;
 let specifications = 0;
@@ -90,6 +121,22 @@ for (const file of files) {
     for (const reason of entry.reasons) bump(refusalReasons, `${reason.section}/${reason.construct}`);
   }
 
+  // Every requirement facet is either shown or kept, never neither. A facet read into the model
+  // and then not compiled would leave `isEvaluable` calling a specification checked when part of
+  // it is not — the one way this import can produce a false pass.
+  const kept =
+    imported.rules.reduce(
+      (total, rule) => total + rule.conditions.length + (rule.imported?.passThrough.length ?? 0),
+      0
+    ) +
+    imported.refused.reduce((total, entry) => total + sourceFacetCount(entry.passThrough.xml), 0);
+  if (kept !== documentFacetCount(source)) {
+    facetsLost++;
+    if (facetLossExamples.length < 10) {
+      facetLossExamples.push(`${file} (source ${documentFacetCount(source)}, held ${kept})`);
+    }
+  }
+
   if (idsSchemaViolations(source).length > 0) violationsIn++;
   if (idsSchemaViolations(out).length > 0) violationsOut++;
 
@@ -115,8 +162,12 @@ console.log(`specifications                   ${specifications}`);
 console.log(`  refused whole                  ${refusedSpecifications}`);
 console.log(`  facets passed through verbatim ${passThroughFacets}`);
 console.log(`schema-invalid in / out          ${violationsIn} / ${violationsOut}`);
+console.log(`files losing a requirement facet ${facetsLost}`);
 const rank = (map) =>
   [...map.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => `  ${String(count).padStart(6)}  ${key}`);
 console.log(`\nwhy a specification was refused (reasons, not specifications):\n${rank(refusalReasons).join("\n")}`);
 console.log(`\nfacets passed through verbatim, by construct:\n${rank(passThroughConstructs).join("\n")}`);
 if (driftExamples.length) console.log(`\nfirst drifted files:\n  ${driftExamples.join("\n  ")}`);
+if (facetLossExamples.length) {
+  console.log(`\nfirst files losing a facet:\n  ${facetLossExamples.join("\n  ")}`);
+}

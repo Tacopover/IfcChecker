@@ -1,10 +1,14 @@
-import type { ParsedRestriction } from "./parse-ids.js";
-import type { ConditionDraft, PassThrough, RuleDraft } from "./rule-draft.js";
+import type {
+  BoundDraft,
+  FacetDraft,
+  PassThrough,
+  RuleDraft,
+  ValueDraft,
+} from "./rule-draft.js";
 import {
   BUILDER_PROPERTY_DATA_TYPE,
+  affixPatternSource,
   applicabilityEntityNamesOf,
-  cardinalityForCondition,
-  restrictionForCondition,
 } from "./rule-draft.js";
 
 export interface IdsDocumentInfo {
@@ -28,60 +32,143 @@ function escapeXml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => XML_ESCAPES[character]);
 }
 
-function restrictionXml(restriction: ParsedRestriction | null): string {
-  if (!restriction) return "";
-  if (restriction.kind === "exact") {
-    return `\n        <value><simpleValue>${escapeXml(restriction.value)}</simpleValue></value>`;
-  }
-  // A range is the one restriction whose base is not a string, so it carries its own.
-  if (restriction.kind === "bounds") {
-    const edges = [
-      restriction.min && `min${restriction.min.inclusive ? "Inclusive" : "Exclusive"}`,
-      restriction.max && `max${restriction.max.inclusive ? "Inclusive" : "Exclusive"}`,
-    ];
-    const values = [restriction.min?.value, restriction.max?.value];
-    const body = edges
-      .map((facet, index) => (facet ? `\n            <xs:${facet} value="${values[index]}" />` : ""))
-      .join("");
-    return `\n        <value>\n          <xs:restriction base="xs:double">${body}\n          </xs:restriction>\n        </value>`;
-  }
+/** Every `ValueDraft` but the one that needs no `<xs:restriction>` around it. */
+type RestrictionDraft = Exclude<ValueDraft, { kind: "simple" }>;
 
-  const body =
-    restriction.kind === "enum"
-      ? restriction.values
-          .map((value) => `\n            <xs:enumeration value="${escapeXml(value)}" />`)
-          .join("")
-      : `\n            <xs:pattern value="${escapeXml(restriction.source)}" />`;
-  return `\n        <value>\n          <xs:restriction base="xs:string">${body}\n          </xs:restriction>\n        </value>`;
+/** The base an `<xs:restriction>` states and the facets inside it, each line already indented. */
+function restrictionPartsOf(
+  value: RestrictionDraft,
+  itemIndent: string
+): { base: string; body: string } {
+  switch (value.kind) {
+    case "enum":
+      return {
+        base: "xs:string",
+        body: value.values
+          .map((entry) => `\n${itemIndent}<xs:enumeration value="${escapeXml(entry)}" />`)
+          .join(""),
+      };
+    case "pattern":
+      return {
+        base: "xs:string",
+        body: `\n${itemIndent}<xs:pattern value="${escapeXml(value.source)}" />`,
+      };
+    case "affix":
+      return {
+        base: "xs:string",
+        body: `\n${itemIndent}<xs:pattern value="${escapeXml(affixPatternSource(value.operator, value.literal))}" />`,
+      };
+    // A range is the one value whose base is not a string, so it carries its own.
+    case "bounds": {
+      const edges: Array<[string, BoundDraft] | null> = [
+        value.min && [`min${value.min.inclusive ? "Inclusive" : "Exclusive"}`, value.min],
+        value.max && [`max${value.max.inclusive ? "Inclusive" : "Exclusive"}`, value.max],
+      ];
+      return {
+        base: escapeXml(value.base),
+        body: edges
+          .map((edge) => (edge ? `\n${itemIndent}<xs:${edge[0]} value="${escapeXml(edge[1].value)}" />` : ""))
+          .join(""),
+      };
+    }
+  }
 }
 
-function facetXml(condition: ConditionDraft): string {
-  const restriction = restrictionXml(restrictionForCondition(condition));
-  const value = cardinalityForCondition(condition);
-  // `required` is the IDS default, so it is written out only for a file that wrote it out itself.
-  const cardinality =
-    value === "prohibited" || condition.explicitCardinality ? ` cardinality="${value}"` : "";
-
-  if (condition.kind === "attribute") {
-    return [
-      `      <attribute${cardinality}>`,
-      `        <name><simpleValue>${escapeXml(condition.name)}</simpleValue></name>${restriction}`,
-      `      </attribute>`,
-    ].join("\n");
+/**
+ * One `idsValue` under the tag that holds it — `<value>`, but also `<name>`, `<system>` and
+ * `<predefinedType>`, which the schema types identically.
+ *
+ * Written from the draft rather than from the compiled restriction. The draft holds what the author
+ * wrote — a bound's `"1.50"`, a pattern's exact source — and compiling first would round those
+ * through a `number` and a `RegExp` and hand back a document that differs from the one that came in.
+ */
+function idsValueXml(tag: string, value: ValueDraft | null, indent = "        "): string {
+  if (value === null) return "";
+  if (value.kind === "simple") {
+    return `\n${indent}<${tag}><simpleValue>${escapeXml(value.value)}</simpleValue></${tag}>`;
   }
+  const { base, body } = restrictionPartsOf(value, `${indent}    `);
+  return (
+    `\n${indent}<${tag}>` +
+    `\n${indent}  <xs:restriction base="${base}">${body}` +
+    `\n${indent}  </xs:restriction>` +
+    `\n${indent}</${tag}>`
+  );
+}
 
-  // `undefined` is a builder-authored condition; `null` is an import whose source omitted the
-  // attribute, and re-adding a default there would retype a property the file left untyped.
-  const dataType =
-    condition.dataType === undefined ? BUILDER_PROPERTY_DATA_TYPE : condition.dataType;
-  const dataTypeAttribute = dataType === null ? "" : ` dataType="${escapeXml(dataType)}"`;
+/**
+ * `required` is the IDS default, so it is written out only where it is not the default or for a
+ * file that wrote it out itself. The requirements-side `<entity>` has none at all.
+ */
+function cardinalityXml(facet: Exclude<FacetDraft, { kind: "entity" }>): string {
+  const value = facet.cardinality;
+  return value !== "required" || facet.explicitCardinality ? ` cardinality="${value}"` : "";
+}
 
-  return [
-    `      <property${dataTypeAttribute}${cardinality}>`,
-    `        <propertySet><simpleValue>${escapeXml(condition.propertySet ?? "")}</simpleValue></propertySet>`,
-    `        <baseName><simpleValue>${escapeXml(condition.name)}</simpleValue></baseName>${restriction}`,
-    `      </property>`,
-  ].join("\n");
+/** One requirement facet. Total over all six kinds `ids.xsd` allows. */
+function facetXml(facet: FacetDraft): string {
+  const instructions = attributeXml("instructions", facet.instructions);
+
+  switch (facet.kind) {
+    // No `uri` on an attribute: ids.xsd gives it to classification, property and material alone,
+    // and emitting one here would produce a document no conforming checker reads.
+    case "attribute":
+      return (
+        `      <attribute${cardinalityXml(facet)}${instructions}>` +
+        `\n        <name><simpleValue>${escapeXml(facet.name)}</simpleValue></name>` +
+        idsValueXml("value", facet.value) +
+        `\n      </attribute>`
+      );
+
+    case "property": {
+      // `undefined` is a builder-authored condition; `null` is an import whose source omitted the
+      // attribute, and re-adding a default there would retype a property the file left untyped.
+      const dataType = facet.dataType === undefined ? BUILDER_PROPERTY_DATA_TYPE : facet.dataType;
+      const dataTypeAttribute = dataType === null ? "" : ` dataType="${escapeXml(dataType)}"`;
+      return (
+        `      <property${dataTypeAttribute}${attributeXml("uri", facet.uri)}${cardinalityXml(facet)}${instructions}>` +
+        `\n        <propertySet><simpleValue>${escapeXml(facet.propertySet ?? "")}</simpleValue></propertySet>` +
+        `\n        <baseName><simpleValue>${escapeXml(facet.name)}</simpleValue></baseName>` +
+        idsValueXml("value", facet.value) +
+        `\n      </property>`
+      );
+    }
+
+    case "entity":
+      return (
+        `      <entity${instructions}>` +
+        idsValueXml("name", facet.name) +
+        idsValueXml("predefinedType", facet.predefinedType) +
+        `\n      </entity>`
+      );
+
+    // `<value>` before `<system>`: ids.xsd fixes that order, and a reader validating against the
+    // schema rejects the pair the other way round.
+    case "classification":
+      return (
+        `      <classification${attributeXml("uri", facet.uri)}${cardinalityXml(facet)}${instructions}>` +
+        idsValueXml("value", facet.value) +
+        idsValueXml("system", facet.system) +
+        `\n      </classification>`
+      );
+
+    case "material":
+      return (
+        `      <material${attributeXml("uri", facet.uri)}${cardinalityXml(facet)}${instructions}>` +
+        idsValueXml("value", facet.value) +
+        `\n      </material>`
+      );
+
+    case "partOf":
+      return (
+        `      <partOf${attributeXml("relation", facet.relation)}${cardinalityXml(facet)}${instructions}>` +
+        `\n        <entity>` +
+        idsValueXml("name", facet.entityName, "          ") +
+        idsValueXml("predefinedType", facet.predefinedType, "          ") +
+        `\n        </entity>` +
+        `\n      </partOf>`
+      );
+  }
 }
 
 function attributeXml(name: string, value: string | null | undefined): string {

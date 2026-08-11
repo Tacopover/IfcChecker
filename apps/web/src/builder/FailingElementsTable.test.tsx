@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ConditionDraft } from "@ifc-qa/ids-validator";
 import { FailingElementsTable, readConditionValue } from "./FailingElementsTable";
+import { stating } from "../test/conditions";
 
 function element(overrides: Partial<NormalizedElement> = {}): NormalizedElement {
   return {
@@ -22,9 +23,7 @@ const CONDITIONS: ConditionDraft[] = [
     kind: "property",
     propertySet: "Pset_WallCommon",
     name: "FireRating",
-    operator: "exists",
-    values: [],
-    text: "",
+    ...stating("exists"),
   },
 ];
 

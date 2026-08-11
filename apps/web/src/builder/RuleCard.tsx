@@ -1,11 +1,13 @@
 import { useMemo } from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import type { ConditionDraft, RuleDraft } from "@ifc-qa/ids-validator";
+import type { FacetDraft, RuleDraft } from "@ifc-qa/ids-validator";
+import { isConditionFacet } from "@ifc-qa/ids-validator";
 import type { ModelIntrospection } from "./introspect.js";
 import { evaluateRuleDraft } from "./evaluateDraft.js";
 import { ConditionRow, defaultConditionFor } from "./ConditionRow.js";
 import { ruleProblems } from "./completeness.js";
 import { FailingElementsTable } from "./FailingElementsTable.js";
+import { UnshownFacetRow } from "./UnshownFacetRow.js";
 import { nextDraftId } from "./draftIds.js";
 
 export interface RuleCardProps {
@@ -61,7 +63,7 @@ export function RuleCard({
   const countByType = new Map(introspection.entityTypes.map((entry) => [entry.name, entry.count]));
   const usedTypes = new Set(rule.entityTypes);
 
-  function updateConditions(conditions: ConditionDraft[]) {
+  function updateConditions(conditions: FacetDraft[]) {
     onChange({ ...rule, conditions });
   }
 
@@ -210,30 +212,42 @@ export function RuleCard({
                 {problems.conditions} Click a field in the left panel, or add one.
               </p>
             ) : (
-              rule.conditions.map((condition, index) => (
-                <ConditionRow
-                  key={condition.id}
-                  condition={condition}
-                  source={source}
-                  hits={perCondition[index] ?? 0}
-                  matched={matched}
-                  onChange={(next) =>
-                    updateConditions(
-                      rule.conditions.map((entry) => (entry.id === condition.id ? next : entry))
-                    )
-                  }
-                  onDuplicate={() =>
-                    updateConditions([
-                      ...rule.conditions.slice(0, index + 1),
-                      { ...condition, id: nextDraftId("c"), values: [...condition.values] },
-                      ...rule.conditions.slice(index + 1),
-                    ])
-                  }
-                  onDelete={() =>
-                    updateConditions(rule.conditions.filter((entry) => entry.id !== condition.id))
-                  }
-                />
-              ))
+              rule.conditions.map((condition, index) =>
+                isConditionFacet(condition) ? (
+                  <ConditionRow
+                    key={condition.id}
+                    condition={condition}
+                    source={source}
+                    hits={perCondition[index] ?? 0}
+                    matched={matched}
+                    onChange={(next) =>
+                      updateConditions(
+                        rule.conditions.map((entry) => (entry.id === condition.id ? next : entry))
+                      )
+                    }
+                    onDuplicate={() =>
+                      updateConditions([
+                        ...rule.conditions.slice(0, index + 1),
+                        { ...condition, id: nextDraftId("c") },
+                        ...rule.conditions.slice(index + 1),
+                      ])
+                    }
+                    onDelete={() =>
+                      updateConditions(rule.conditions.filter((entry) => entry.id !== condition.id))
+                    }
+                  />
+                ) : (
+                  <UnshownFacetRow
+                    key={condition.id}
+                    facet={condition}
+                    hits={perCondition[index] ?? 0}
+                    matched={matched}
+                    onDelete={() =>
+                      updateConditions(rule.conditions.filter((entry) => entry.id !== condition.id))
+                    }
+                  />
+                )
+              )
             )}
             <button
               type="button"

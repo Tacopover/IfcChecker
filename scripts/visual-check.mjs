@@ -316,6 +316,17 @@ const SCENARIOS = {
       throw new Error("imported specifications lost their document order: " + JSON.stringify(cards));
     }
 
+    // The operator is a reading of the stored value, not a field on it. A facet the file wrote
+    // with no <value> has to arrive on screen as "must be filled in" rather than as a blank
+    // select — which is what a row would show if the reading were dropped somewhere in between.
+    var operators = h.all("article.rule .cond select[aria-label=Operator]").map(function (select) {
+      return select.value;
+    });
+    if (operators.length === 0) throw new Error("no imported requirement rendered an operator");
+    if (operators.some(function (value) { return value !== "exists"; })) {
+      throw new Error("an imported requirement lost its operator: " + JSON.stringify(operators));
+    }
+
     // The refused one must be visibly inert, not quietly missing from the list.
     var refusedCard = document.querySelector("article.rule.refused");
     if (!refusedCard) throw new Error("a specification that cannot be edited was not marked as such");

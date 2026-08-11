@@ -2,6 +2,7 @@ import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ConditionDraft, ConditionOperator, RuleDraft } from "@ifc-qa/ids-validator";
 import { describe, expect, it } from "vitest";
 import { MAX_COLLECTED_FAILURES, evaluateRuleDraft } from "./evaluateDraft.js";
+import { stating } from "../test/conditions";
 
 let nextId = 0;
 type Overrides = Partial<Omit<NormalizedElement, "ifcType">>;
@@ -19,18 +20,25 @@ function element(ifcType: string, overrides: Overrides = {}): NormalizedElement 
   };
 }
 
-function condition(overrides: Partial<ConditionDraft> = {}): ConditionDraft {
+function condition(
+  overrides: Partial<ConditionDraft> & {
+    operator?: ConditionOperator;
+    text?: string;
+    values?: string[];
+  } = {}
+): ConditionDraft {
   nextId += 1;
+  const { operator = "exists", text = "", values = [], ...rest } = overrides;
   return {
     id: `c${nextId}`,
     kind: "attribute",
     propertySet: null,
     name: "Name",
-    operator: "exists",
-    values: [],
-    text: "",
-    ...overrides,
-  };
+    ...stating(operator, text, values),
+    ...rest,
+    // `kind` widens back to the union through the spread, and a partial of a discriminated union
+    // cannot narrow it again. Asserted here so the call sites stay one line each.
+  } as ConditionDraft;
 }
 
 function rule(overrides: Partial<RuleDraft> = {}): RuleDraft {
@@ -47,14 +55,14 @@ const NAMED_WALLS: NormalizedElement[] = [
 
 describe("evaluateRuleDraft — operators", () => {
   const cases: Array<[ConditionOperator, Partial<ConditionDraft>, number]> = [
-    ["exists", {}, 3],
-    ["equals", { text: "EXT-Brick-100" }, 1],
-    ["oneOf", { values: ["EXT-Brick-100", "INT-Gypsum-050"] }, 2],
-    ["contains", { text: "Brick" }, 1],
-    ["startsWith", { text: "EXT" }, 2],
-    ["endsWith", { text: "100" }, 2],
-    ["matches", { text: "EXT-.*" }, 2],
-    ["notExists", {}, 1],
+    ["exists", stating("exists"), 3],
+    ["equals", stating("equals", "EXT-Brick-100"), 1],
+    ["oneOf", stating("oneOf", "", ["EXT-Brick-100", "INT-Gypsum-050"]), 2],
+    ["contains", stating("contains", "Brick"), 1],
+    ["startsWith", stating("startsWith", "EXT"), 2],
+    ["endsWith", stating("endsWith", "100"), 2],
+    ["matches", stating("matches", "EXT-.*"), 2],
+    ["notExists", stating("notExists"), 1],
   ];
 
   for (const [operator, extra, expected] of cases) {

@@ -1,5 +1,6 @@
 import type {
   FacetCardinality,
+  ParsedBound,
   ParsedRequirementFacet,
   ParsedRestriction,
   ParsedSpecification,
@@ -17,14 +18,87 @@ export type ConditionOperator =
   | "matches"
   | "notExists";
 
-export interface ConditionDraft {
+/**
+ * The cardinalities `ids.xsd` gives an attribute or a property (`conditionalCardinality`).
+ *
+ * Separate from the value: IDS treats "must it be there" and "what may it say" as orthogonal, so a
+ * facet can be `prohibited` *with* a value — "must not be Steel". The old `operator` field
+ * conflated the two, which is why the importer had to pass those facets through.
+ */
+export type ConditionalCardinality = "required" | "optional" | "prohibited";
+
+/** What `ids.xsd` gives `partOf` — `simpleCardinality`, which has no `optional`. */
+export type SimpleCardinality = "required" | "prohibited";
+
+/** One edge of a numeric range, holding the author's literal so `"1.50"` re-exports as written. */
+export interface BoundDraft {
+  value: string;
+  inclusive: boolean;
+}
+
+/** The friendly operators that are a pattern underneath. */
+export type AffixOperator = "contains" | "startsWith" | "endsWith";
+
+/**
+ * What a facet parameter may say — the draft form of `idsValue`.
+ *
+ * `affix` is the one variant with no counterpart in `ids.xsd`, and it is what keeps the friendly
+ * operators a shortcut layer rather than the storage. "contains X" is a pattern once it reaches a
+ * file, but it is *authored* as an operator and a literal, and storing it that way is what lets the
+ * operator stay on screen while the box beside it is still empty. It compiles to a pattern and is
+ * written to XML as nothing else.
+ *
+ * The compiled source is rebuilt from the literal rather than carried, which is safe because
+ * `affixReadingOf` only reads a literal back out when re-escaping it reproduces the source exactly.
+ *
+ * `bounds` carries its own `base` because a range is the one value whose base is not a string, and
+ * real files do not agree on which type it is: over the corpus, 63 ranges are written `xs:double`,
+ * 4 `xs:integer`, and 6 with a capitalised spelling `xs:Decimal` or `xs:Integer` that no XSD type
+ * has. Assuming `xs:double` would hand 8 authors back a file they did not write.
+ */
+export type ValueDraft =
+  | { kind: "simple"; value: string }
+  | { kind: "enum"; values: string[] }
+  | { kind: "pattern"; source: string }
+  | { kind: "affix"; operator: AffixOperator; literal: string }
+  | { kind: "bounds"; base: string; min: BoundDraft | null; max: BoundDraft | null };
+
+/**
+ * What every facet in `<requirements>` carries. `instructions` is the only field `ids.xsd` gives
+ * all six — everything else, including `cardinality` and `uri`, belongs to some of them and not
+ * others, and the variants below state which.
+ */
+interface FacetDraftCommon {
   id: string;
-  kind: "attribute" | "property";
-  propertySet: string | null; // required when kind === "property"
+  /**
+   * The author's prose for whoever runs the check. It constrains nothing, so it never reaches the
+   * compiled requirement; losing it would still be losing the sentence that says why the rule is
+   * there.
+   */
+  instructions?: string | null;
+  /**
+   * Whether the source wrote `cardinality` out. IDS defaults it to `required`, so this changes no
+   * meaning — but a file the user only opened should come back out as it went in.
+   */
+  explicitCardinality?: boolean;
+}
+
+export interface AttributeFacetDraft extends FacetDraftCommon {
+  kind: "attribute";
+  /** Always `null`. Present so the two editable kinds share one shape for the builder's rows. */
+  propertySet: null;
   name: string;
-  operator: ConditionOperator;
-  values: string[]; // used by oneOf
-  text: string; // used by equals/contains/startsWith/endsWith/matches
+  /** What the value must be, or `null` for no restriction at all — "whatever it says is fine". */
+  value: ValueDraft | null;
+  cardinality: ConditionalCardinality;
+}
+
+export interface PropertyFacetDraft extends FacetDraftCommon {
+  kind: "property";
+  propertySet: string | null;
+  name: string;
+  value: ValueDraft | null;
+  cardinality: ConditionalCardinality;
   /**
    * The IFC data type the property must be stored as, e.g. `IFCTEXT`. `null` declares none, which
    * IDS reads as "do not check the stored type"; `undefined` means nothing was chosen and
@@ -32,11 +106,80 @@ export interface ConditionDraft {
    * so an omission in the source comes back out as an omission.
    */
   dataType?: string | null;
+  /** A reference to whatever defines this requirement outside the file. */
+  uri?: string | null;
+}
+
+/**
+ * The IFC class the element must be.
+ *
+ * No cardinality: `ids.xsd` gives the requirements-side entity none, and says why in a comment —
+ * the list of classes is finite and mandated by IFC, so a prohibited form would be superfluous.
+ */
+export interface EntityFacetDraft extends FacetDraftCommon {
+  kind: "entity";
+  name: ValueDraft;
+  predefinedType: ValueDraft | null;
+}
+
+export interface ClassificationFacetDraft extends FacetDraftCommon {
+  kind: "classification";
   /**
-   * Whether the source wrote `cardinality` out. IDS defaults it to `required`, so this changes no
-   * meaning — but a file the user only opened should come back out as it went in.
+   * Required, unlike the parsed form's nullable `system`. `ids.xsd` makes `<system>` a mandatory
+   * element whose content must be one `<simpleValue>` or one `<xs:restriction>`, so a draft that
+   * could state none would export a document no conforming checker reads.
    */
-  explicitCardinality?: boolean;
+  system: ValueDraft;
+  value: ValueDraft | null;
+  uri?: string | null;
+  cardinality: ConditionalCardinality;
+}
+
+export interface MaterialFacetDraft extends FacetDraftCommon {
+  kind: "material";
+  /** `null` asks only whether the element has a material at all. */
+  value: ValueDraft | null;
+  uri?: string | null;
+  cardinality: ConditionalCardinality;
+}
+
+/**
+ * A whole the element must be a part of.
+ *
+ * `relation` holds the source attribute verbatim rather than a split list, because one member of
+ * the schema's enumeration is two relationship names in a single value —
+ * `"IFCRELVOIDSELEMENT IFCRELFILLSELEMENT"`. Splitting on storage would leave the exporter guessing
+ * how to join them back. `compileFacet` splits; `build-ids` writes what the author wrote.
+ */
+export interface PartOfFacetDraft extends FacetDraftCommon {
+  kind: "partOf";
+  relation: string | null;
+  entityName: ValueDraft;
+  predefinedType: ValueDraft | null;
+  /** `ids.xsd` gives partOf `simpleCardinality` — two values, not the conditional three. */
+  cardinality: SimpleCardinality;
+}
+
+/** Every facet `ids.xsd` allows in `<requirements>`. */
+export type FacetDraft =
+  | AttributeFacetDraft
+  | PropertyFacetDraft
+  | EntityFacetDraft
+  | ClassificationFacetDraft
+  | MaterialFacetDraft
+  | PartOfFacetDraft;
+
+/**
+ * The two facets the builder's rows can edit, and the two the importer produces.
+ *
+ * A separate name rather than a comment, because it is what the whole authoring UI is typed
+ * against: a row shows a field and an operator, and neither exists on a material or a partOf.
+ */
+export type ConditionDraft = AttributeFacetDraft | PropertyFacetDraft;
+
+/** Whether this facet is one of the two a condition row can show. */
+export function isConditionFacet(facet: FacetDraft): facet is ConditionDraft {
+  return facet.kind === "attribute" || facet.kind === "property";
 }
 
 /** Source XML we cannot represent, re-emitted verbatim so importing a file never destroys it. */
@@ -86,7 +229,14 @@ export interface RuleDraft {
   id: string;
   name: string;
   entityTypes: string[];
-  conditions: ConditionDraft[];
+  /**
+   * Every facet the rule requires, in document order.
+   *
+   * Widened to all six ahead of the importer, which still keeps the other four verbatim. What that
+   * buys is that `compileFacet` and `build-ids` are already total over them: when the importer
+   * starts reading a `<material>`, nothing downstream has to be taught what one is.
+   */
+  conditions: FacetDraft[];
   imported?: ImportedRuleSource;
 }
 
@@ -125,47 +275,208 @@ export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function cardinalityForCondition(condition: ConditionDraft): FacetCardinality {
-  return condition.operator === "notExists" ? "prohibited" : "required";
+const ANY = ".*";
+
+/** The regex an affix operator stands for. The literal is escaped, so "A.B" cannot over-match. */
+export function affixPatternSource(operator: AffixOperator, literal: string): string {
+  const escaped = escapeRegExp(literal);
+  if (operator === "contains") return `${ANY}${escaped}${ANY}`;
+  if (operator === "startsWith") return `${escaped}${ANY}`;
+  return `${ANY}${escaped}`;
 }
 
-export function restrictionForCondition(condition: ConditionDraft): ParsedRestriction | null {
-  switch (condition.operator) {
-    case "equals":
-      return { kind: "exact", value: condition.text };
-    case "oneOf":
-      return { kind: "enum", values: [...condition.values] };
-    // The user's text is literal here, so it must be escaped before it becomes a pattern —
-    // otherwise "A.B" or "(" would over-match or produce an invalid expression.
-    case "contains":
-      return patternRestriction(`.*${escapeRegExp(condition.text)}.*`);
-    case "startsWith":
-      return patternRestriction(`${escapeRegExp(condition.text)}.*`);
-    case "endsWith":
-      return patternRestriction(`.*${escapeRegExp(condition.text)}`);
-    case "matches":
-      return patternRestriction(condition.text);
-    default:
+/** The literal `escapeRegExp` was given, or `null` when the body is not an escaped literal. */
+function unescapeRegExp(body: string): string | null {
+  const literal = body.replace(/\\([.*+?^${}()|[\]\\])/g, "$1");
+  return escapeRegExp(literal) === body ? literal : null;
+}
+
+/**
+ * The affix operator a pattern was written as, or `null` when it was not written as one.
+ *
+ * Only claims a source that `affixPatternSource` would reproduce character for character, so
+ * reading a file and writing it back cannot change the author's regex. Anything else stays a
+ * pattern, which is stored verbatim.
+ */
+export function affixReadingOf(
+  source: string
+): { operator: AffixOperator; literal: string } | null {
+  const attempts: [AffixOperator, string][] = [
+    ["contains", source.startsWith(ANY) && source.endsWith(ANY) ? source.slice(2, -2) : ""],
+    ["startsWith", source.endsWith(ANY) ? source.slice(0, -2) : ""],
+    ["endsWith", source.startsWith(ANY) ? source.slice(2) : ""],
+  ];
+
+  for (const [operator, body] of attempts) {
+    if (body === "") continue;
+    const literal = unescapeRegExp(body);
+    if (literal !== null) return { operator, literal };
+  }
+  return null;
+}
+
+/** A pattern read from a file, as the operator it was written as where that is what it says. */
+export function patternValueDraft(source: string): ValueDraft {
+  const affix = affixReadingOf(source);
+  return affix ? { kind: "affix", ...affix } : { kind: "pattern", source };
+}
+
+/**
+ * A bound the validator can compare, or `null` for an edge it cannot.
+ *
+ * A non-numeric edge is dropped rather than becoming `NaN`, which answers `false` to every
+ * comparison and would reject silently. `parseRestriction` applies the same rule to a file.
+ */
+function compileBound(bound: BoundDraft | null): ParsedBound | null {
+  if (bound === null) return null;
+  const value = Number(bound.value);
+  if (bound.value.trim() === "" || !Number.isFinite(value)) return null;
+  return { value, inclusive: bound.inclusive };
+}
+
+/** What the validator checks this value against. Total: every `ValueDraft` compiles. */
+export function compileValue(value: ValueDraft): ParsedRestriction;
+export function compileValue(value: ValueDraft | null): ParsedRestriction | null;
+export function compileValue(value: ValueDraft | null): ParsedRestriction | null {
+  if (value === null) return null;
+  switch (value.kind) {
+    case "simple":
+      return { kind: "exact", value: value.value };
+    case "enum":
+      return { kind: "enum", values: [...value.values] };
+    case "pattern":
+      return patternRestriction(value.source);
+    case "affix":
+      return patternRestriction(affixPatternSource(value.operator, value.literal));
+    case "bounds": {
+      const min = compileBound(value.min);
+      const max = compileBound(value.max);
+      return { kind: "bounds", min, max };
+    }
+  }
+}
+
+/** How a condition reads as one of the eight friendly operators, with the text or values it needs. */
+export interface FriendlyReading {
+  operator: ConditionOperator;
+  /** The literal in the text box. Empty for operators that need none. */
+  text: string;
+  /** The ticked values. Empty for operators that need none. */
+  values: string[];
+}
+
+/**
+ * The friendly reading of a condition, or `null` when no operator states what it says.
+ *
+ * `null` is not a fault — it is the honest answer for the things the eight operators cannot
+ * express: a numeric range, an optional facet, and a prohibited value ("must not be Steel", which
+ * `notExists` would widen into "must not be present at all"). The row shows those rather than
+ * mislabelling them.
+ */
+export function friendlyReadingOf(condition: ConditionDraft): FriendlyReading | null {
+  const none = { text: "", values: [] };
+
+  if (condition.cardinality === "prohibited") {
+    return condition.value === null ? { operator: "notExists", ...none } : null;
+  }
+  if (condition.cardinality === "optional") return null;
+  if (condition.value === null) return { operator: "exists", ...none };
+
+  switch (condition.value.kind) {
+    case "simple":
+      return { operator: "equals", text: condition.value.value, values: [] };
+    case "enum":
+      return { operator: "oneOf", text: "", values: [...condition.value.values] };
+    case "affix":
+      return { operator: condition.value.operator, text: condition.value.literal, values: [] };
+    case "pattern":
+      return { operator: "matches", text: condition.value.source, values: [] };
+    case "bounds":
       return null;
   }
 }
 
-function compileCondition(condition: ConditionDraft): ParsedRequirementFacet {
-  const restriction = restrictionForCondition(condition);
-  const cardinality = cardinalityForCondition(condition);
-
-  if (condition.kind === "attribute") {
-    return { kind: "attribute", name: condition.name, restriction, cardinality };
+/** The value an operator states, given whatever text and ticked values the row is holding. */
+export function valueDraftForOperator(
+  operator: ConditionOperator,
+  text: string,
+  values: string[]
+): ValueDraft | null {
+  switch (operator) {
+    case "exists":
+    case "notExists":
+      return null;
+    case "equals":
+      return { kind: "simple", value: text };
+    case "oneOf":
+      return { kind: "enum", values: [...values] };
+    case "matches":
+      return { kind: "pattern", source: text };
+    default:
+      return { kind: "affix", operator, literal: text };
   }
+}
 
-  return {
-    kind: "property",
-    propertySet: condition.propertySet ?? "",
-    baseName: condition.name,
-    dataType: condition.dataType === undefined ? BUILDER_PROPERTY_DATA_TYPE : condition.dataType,
-    restriction,
-    cardinality,
-  };
+export function cardinalityForOperator(operator: ConditionOperator): ConditionalCardinality {
+  return operator === "notExists" ? "prohibited" : "required";
+}
+
+/**
+ * What the validator checks a facet against. Total over all six kinds, and it throws nothing.
+ *
+ * Nothing about *how the file was written* survives the crossing: `explicitCardinality`, the
+ * author's literal `"1.50"`, the base a range was written with, the prose in `instructions`. The
+ * draft carries those so the exporter can hand the file back; the validator has no use for them,
+ * and a compile that let them through would be the draft model leaking into the engine.
+ */
+export function compileFacet(facet: FacetDraft): ParsedRequirementFacet {
+  switch (facet.kind) {
+    case "attribute":
+      return {
+        kind: "attribute",
+        name: facet.name,
+        restriction: compileValue(facet.value),
+        cardinality: facet.cardinality satisfies FacetCardinality,
+      };
+    case "property":
+      return {
+        kind: "property",
+        propertySet: facet.propertySet ?? "",
+        baseName: facet.name,
+        dataType: facet.dataType === undefined ? BUILDER_PROPERTY_DATA_TYPE : facet.dataType,
+        restriction: compileValue(facet.value),
+        cardinality: facet.cardinality,
+      };
+    case "entity":
+      return {
+        kind: "entity",
+        name: compileValue(facet.name),
+        predefinedType: compileValue(facet.predefinedType),
+      };
+    case "classification":
+      return {
+        kind: "classification",
+        system: compileValue(facet.system),
+        value: compileValue(facet.value),
+        cardinality: facet.cardinality,
+      };
+    case "material":
+      return {
+        kind: "material",
+        value: compileValue(facet.value),
+        cardinality: facet.cardinality,
+      };
+    case "partOf":
+      return {
+        kind: "partOf",
+        // An absent attribute accepts any relationship, which is not the same as an empty list of
+        // accepted ones — `parseIdsXml` reads it the same way, and both mean "any" as `[]`.
+        relations: facet.relation === null ? [] : facet.relation.trim().split(/\s+/).filter(Boolean),
+        entityName: compileValue(facet.entityName),
+        predefinedType: compileValue(facet.predefinedType),
+        cardinality: facet.cardinality,
+      };
+  }
 }
 
 /**
@@ -173,9 +484,7 @@ function compileCondition(condition: ConditionDraft): ParsedRequirementFacet {
  * serialise and re-parse per keystroke. The round-trip test keeps the two in step.
  *
  * Imported rules are the one place the two can differ: a passed-through facet is reported here
- * under the importer's own label, and `parseIdsXml` may describe the same XML differently — or,
- * for `cardinality="optional"`, check it as required rather than skip it. The requirements the
- * builder *can* show, and the applicability, match either way.
+ * under the importer's own label, and `parseIdsXml` may describe the same XML differently.
  */
 export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
   return rules.map((rule) => ({
@@ -187,7 +496,7 @@ export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
       rule.imported?.applicabilityAttributes.maxOccurs
     ),
     applicabilityEntityNames: applicabilityEntityNamesOf(rule),
-    requirements: rule.conditions.map(compileCondition),
+    requirements: rule.conditions.map(compileFacet),
     // Authored rules can say nothing the builder cannot; imported ones carry what it could not read.
     unsupported: (rule.imported?.passThrough ?? []).map((entry) => ({
       section: "requirements" as const,

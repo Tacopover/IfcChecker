@@ -1,5 +1,6 @@
 import type { NormalizedElement, PropertyValue } from "@ifc-qa/shared-types";
-import type { ConditionDraft } from "@ifc-qa/ids-validator";
+import type { ConditionDraft, FacetDraft } from "@ifc-qa/ids-validator";
+import { isConditionFacet } from "@ifc-qa/ids-validator";
 
 const TOP_LEVEL_READERS: Record<string, (element: NormalizedElement) => PropertyValue | null> = {
   GLOBALID: (element) => element.globalId,
@@ -26,7 +27,7 @@ export function readConditionValue(
 
 export interface FailingElementsTableProps {
   failures: Array<{ element: NormalizedElement; conditionIndex: number; message?: string }>;
-  conditions: ConditionDraft[];
+  conditions: FacetDraft[];
   limit?: number;
 }
 
@@ -48,7 +49,10 @@ export function FailingElementsTable({ failures, conditions, limit = 12 }: Faili
         </thead>
         <tbody>
           {shown.map((failure, index) => {
-            const condition = conditions[failure.conditionIndex];
+            const facet = conditions[failure.conditionIndex];
+            // The "actual" column reads one field off the element, which only the two facets a
+            // row can show name. The other four are reported by the validator's own message.
+            const condition = facet && isConditionFacet(facet) ? facet : null;
             const value = condition ? readConditionValue(failure.element, condition) : null;
             return (
               <tr key={`${failure.element.globalId}:${failure.conditionIndex}:${index}`}>
@@ -58,7 +62,7 @@ export function FailingElementsTable({ failures, conditions, limit = 12 }: Faili
                 <td>
                   {condition
                     ? `${condition.kind === "property" ? `${condition.propertySet}.` : ""}${condition.name}`
-                    : ""}
+                    : (facet?.kind ?? "")}
                 </td>
                 <td>
                   {value === null || value === undefined || String(value) === "" ? (

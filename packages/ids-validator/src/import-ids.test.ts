@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { idsXmlToDrafts } from "./import-ids.js";
 import type { IdsImportResult } from "./import-ids.js";
 import type { ConditionDraft, RuleDraft } from "./rule-draft.js";
+import { friendlyReadingOf, isConditionFacet } from "./rule-draft.js";
 
 function document(specifications: string): string {
   return [
@@ -33,7 +34,11 @@ function onlyCondition(xml: string): ConditionDraft {
   const rule = onlyRule(idsXmlToDrafts(xml));
   expect(rule.imported?.passThrough).toEqual([]);
   expect(rule.conditions).toHaveLength(1);
-  return rule.conditions[0];
+  const [facet] = rule.conditions;
+  // The draft model holds all six facets; the importer reads two of them and keeps the rest
+  // verbatim. An assertion rather than a cast, so that stops being true loudly.
+  if (!isConditionFacet(facet)) throw new Error(`imported a <${facet.kind}>, which it should not`);
+  return facet;
 }
 
 const MIXED = readFileSync(new URL("../fixtures/ids/mixed-fidelity.ids", import.meta.url), "utf8");
@@ -94,57 +99,170 @@ describe("idsXmlToDrafts applicability", () => {
   });
 });
 
-describe("idsXmlToDrafts operators", () => {
-  it("reads a facet with no value as exists", () => {
-    expect(onlyCondition(withRequirements(`<attribute><name><simpleValue>Name</simpleValue></name></attribute>`)))
-      .toMatchObject({ kind: "attribute", name: "Name", operator: "exists" });
+describe("idsXmlToDrafts values", () => {
+  /** An attribute facet on `Name` carrying whatever `<value>` the case is about. */
+  function attributeValue(value: string): ConditionDraft {
+    return onlyCondition(
+      withRequirements(`<attribute><name><simpleValue>Name</simpleValue></name>${value}</attribute>`)
+    );
+  }
+
+  it("reads a facet with no value as no restriction at all", () => {
+    expect(attributeValue("")).toMatchObject({
+      kind: "attribute",
+      name: "Name",
+      value: null,
+      cardinality: "required",
+    });
   });
 
-  it("reads a simpleValue as equals and an enumeration as oneOf", () => {
-    expect(
-      onlyCondition(
-        withRequirements(
-          `<attribute><name><simpleValue>Name</simpleValue></name><value><simpleValue>W-1</simpleValue></value></attribute>`
-        )
-      )
-    ).toMatchObject({ operator: "equals", text: "W-1" });
+  it("reads a simpleValue and an enumeration into the value they state", () => {
+    expect(attributeValue(`<value><simpleValue>W-1</simpleValue></value>`).value).toEqual({
+      kind: "simple",
+      value: "W-1",
+    });
 
     expect(
-      onlyCondition(
-        withRequirements(
-          `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:enumeration value="A" /><xs:enumeration value="B" /></xs:restriction></value></attribute>`
-        )
-      )
-    ).toMatchObject({ operator: "oneOf", values: ["A", "B"] });
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:enumeration value="A" /><xs:enumeration value="B" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "enum", values: ["A", "B"] });
   });
 
   it.each([
-    [".*A\\.B.*", "contains", "A.B"],
-    ["W-.*", "startsWith", "W-"],
-    [".*-01", "endsWith", "-01"],
+    [".*A\\.B.*", { kind: "affix", operator: "contains", literal: "A.B" }],
+    ["W-.*", { kind: "affix", operator: "startsWith", literal: "W-" }],
+    [".*-01", { kind: "affix", operator: "endsWith", literal: "-01" }],
     // Not something escapeRegExp would ever produce, so reading it as startsWith("W-") would
     // re-export the author's `W\-.*` as `W-.*` — the same matches, rewritten behind their back.
-    ["W\\-.*", "matches", "W\\-.*"],
-    ["W-\\d+", "matches", "W-\\d+"],
-    [".*[AB].*", "matches", ".*[AB].*"],
-  ])("reads the pattern %s as %s", (pattern, operator, text) => {
+    ["W\\-.*", { kind: "pattern", source: "W\\-.*" }],
+    ["W-\\d+", { kind: "pattern", source: "W-\\d+" }],
+    [".*[AB].*", { kind: "pattern", source: ".*[AB].*" }],
+  ])("stores the pattern %s as %o", (pattern, value) => {
     expect(
-      onlyCondition(
-        withRequirements(
-          `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="${pattern}" /></xs:restriction></value></attribute>`
-        )
-      )
-    ).toMatchObject({ operator, text });
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:pattern value="${pattern}" /></xs:restriction></value>`
+      ).value
+    ).toEqual(value);
   });
 
-  it("reads a prohibited facet with no value as notExists", () => {
+  // What the row shows is derived from the value, so the two have to agree on a real file.
+  it("reads every imported value back as the operator the file was written with", () => {
+    const readings = [
+      [``, "exists"],
+      [`<value><simpleValue>W-1</simpleValue></value>`, "equals"],
+      [
+        `<value><xs:restriction base="xs:string"><xs:enumeration value="A" /></xs:restriction></value>`,
+        "oneOf",
+      ],
+      [
+        `<value><xs:restriction base="xs:string"><xs:pattern value=".*A.*" /></xs:restriction></value>`,
+        "contains",
+      ],
+      [
+        `<value><xs:restriction base="xs:string"><xs:pattern value="W-\\d+" /></xs:restriction></value>`,
+        "matches",
+      ],
+    ] as const;
+
+    for (const [value, operator] of readings) {
+      expect(friendlyReadingOf(attributeValue(value))?.operator).toBe(operator);
+    }
+  });
+
+  it("reads a prohibited facet with no value as a prohibited condition", () => {
     expect(
       onlyCondition(
         withRequirements(
           `<attribute cardinality="prohibited"><name><simpleValue>Tag</simpleValue></name></attribute>`
         )
       )
-    ).toMatchObject({ operator: "notExists", explicitCardinality: true });
+    ).toMatchObject({ cardinality: "prohibited", value: null, explicitCardinality: true });
+  });
+
+  // IDS asks "must it be there" and "what may it say" separately, so every cardinality is read
+  // whatever value stands beside it. Both of these used to be kept verbatim, because the draft
+  // stored one friendly operator in place of the two answers.
+  it("reads an optional facet rather than choosing required or prohibited for the author", () => {
+    expect(
+      onlyCondition(
+        withRequirements(
+          `<property cardinality="optional"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`
+        )
+      )
+    ).toMatchObject({ cardinality: "optional", value: null, explicitCardinality: true });
+  });
+
+  it("reads a prohibited facet that names the one value it forbids", () => {
+    expect(
+      onlyCondition(
+        withRequirements(
+          `<attribute cardinality="prohibited"><name><simpleValue>Tag</simpleValue></name><value><simpleValue>TODO</simpleValue></value></attribute>`
+        )
+      )
+    ).toMatchObject({
+      cardinality: "prohibited",
+      value: { kind: "simple", value: "TODO" },
+    });
+  });
+
+  it("reads a numeric range, keeping each edge as the author wrote it", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:double"><xs:minInclusive value="0" /><xs:maxExclusive value="1.50" /></xs:restriction></value>`
+      ).value
+    ).toEqual({
+      kind: "bounds",
+      base: "xs:double",
+      // "1.50" rather than 1.5: the draft holds the literal, so the export is the file that came in.
+      min: { value: "0", inclusive: true },
+      max: { value: "1.50", inclusive: false },
+    });
+  });
+
+  // 63 ranges in the corpus are xs:double, 4 xs:integer, and 6 use a capitalised spelling no XSD
+  // type has. Assuming one would hand 8 authors back a file they did not write.
+  it("carries whatever base the range was written with", () => {
+    const value = attributeValue(
+      `<value><xs:restriction base="xs:Decimal"><xs:minInclusive value="1" /></xs:restriction></value>`
+    ).value;
+
+    expect(value).toMatchObject({ kind: "bounds", base: "xs:Decimal" });
+  });
+
+  // Prose that constrains nothing, and so reaches no compiled requirement. It is still the sentence
+  // saying why the rule is there, and an import that dropped it would hand back a poorer file.
+  it("carries the author's instructions on either kind of facet", () => {
+    expect(
+      onlyCondition(
+        withRequirements(
+          `<attribute instructions="Ask the architect."><name><simpleValue>Name</simpleValue></name></attribute>`
+        )
+      ).instructions
+    ).toBe("Ask the architect.");
+    expect(
+      onlyCondition(
+        withRequirements(
+          `<property instructions="From the wall schedule."><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`
+        )
+      ).instructions
+    ).toBe("From the wall schedule.");
+  });
+
+  it("carries a property uri, and states nothing where the source stated nothing", () => {
+    const withUri = onlyCondition(
+      withRequirements(
+        `<property uri="https://example.org/rule"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`
+      )
+    );
+    const without = onlyCondition(
+      withRequirements(
+        `<property><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`
+      )
+    );
+
+    expect(withUri).toMatchObject({ kind: "property", uri: "https://example.org/rule" });
+    expect(without).toMatchObject({ kind: "property", uri: null, instructions: null });
   });
 
   it("carries the property data type, and its absence, rather than assuming a default", () => {
@@ -159,8 +277,8 @@ describe("idsXmlToDrafts operators", () => {
       )
     );
 
-    expect(typed.dataType).toBe("IFCREAL");
-    expect(untyped.dataType).toBeNull();
+    expect(typed).toMatchObject({ kind: "property", dataType: "IFCREAL" });
+    expect(untyped).toMatchObject({ kind: "property", dataType: null });
   });
 });
 
@@ -172,28 +290,25 @@ describe("idsXmlToDrafts pass-through", () => {
       "classification",
     ],
     [
-      "a bound the builder cannot read",
-      `<property dataType="IFCREAL"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName><value><xs:restriction base="xs:double"><xs:maxInclusive value="0.24" /></xs:restriction></value></property>`,
-      "property",
-    ],
-    [
-      "an optional cardinality, which would otherwise export as stricter than it came in",
-      `<property cardinality="optional"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
-      "property",
-    ],
-    [
-      "a prohibited value, which notExists would widen to prohibiting the property entirely",
-      `<attribute cardinality="prohibited"><name><simpleValue>Tag</simpleValue></name><value><simpleValue>TODO</simpleValue></value></attribute>`,
+      "a length, which no parsed restriction can hold",
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="3" /></xs:restriction></value></attribute>`,
       "attribute",
+    ],
+    [
+      "a cardinality ids.xsd does not allow, rather than picking one of the three",
+      `<property cardinality="mandatory"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
+      "property",
     ],
     [
       "an author's annotation, which the builder has nowhere to show",
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
       "attribute",
     ],
+    // ids.xsd gives uri to classification, property and material alone, so one on an attribute is
+    // a document the schema does not describe.
     [
       "an attribute the builder does not model",
-      `<attribute instructions="Ask the architect."><name><simpleValue>Name</simpleValue></name></attribute>`,
+      `<attribute uri="https://example.org/rule"><name><simpleValue>Name</simpleValue></name></attribute>`,
       "attribute",
     ],
   ])("keeps %s verbatim instead of importing a weakened copy", (_label, facet, construct) => {
@@ -211,21 +326,42 @@ describe("idsXmlToDrafts pass-through", () => {
       `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
       /attribute or a property; <classification> is neither/,
     ],
+    // One sentence used to cover all of these. Over the corpus it was wrong about 8 of the facets
+    // it refused, and the message is what tells the user which piece of work their file waits on.
     [
-      `<property dataType="IFCREAL"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName><value><xs:restriction base="xs:double"><xs:maxInclusive value="0.24" /></xs:restriction></value></property>`,
-      /a range or a length/,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="3" /></xs:restriction></value></attribute>`,
+      /length of its value/,
     ],
     [
-      `<property cardinality="optional"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
-      /cardinality="optional"/,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
+      /xs:annotation/,
     ],
     [
-      `<attribute cardinality="prohibited"><name><simpleValue>Tag</simpleValue></name><value><simpleValue>TODO</simpleValue></value></attribute>`,
-      /prohibited value/,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:enumeration value="42" /></xs:restriction></value></attribute>`,
+      /base="xs:double"/,
     ],
     [
-      `<attribute instructions="Ask the architect."><name><simpleValue>Name</simpleValue></name></attribute>`,
-      /Carries instructions/,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="[a-z]{2}" /><xs:pattern value="[A-Z]{2}" /></xs:restriction></value></attribute>`,
+      /Combines several restrictions/,
+    ],
+    // XSD intersects a range with an enumeration; a ValueDraft states one of the two, so importing
+    // it would export a rule that checks less than the file asks for.
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minInclusive value="0" /><xs:enumeration value="1" /></xs:restriction></value></attribute>`,
+      /Combines several restrictions/,
+    ],
+    // One bound per edge is all a draft holds, so keeping the first would drop the other silently.
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minInclusive value="0" /><xs:minExclusive value="1" /></xs:restriction></value></attribute>`,
+      /lower bound twice/,
+    ],
+    [
+      `<property cardinality="mandatory"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
+      /ids\.xsd does not give this facet/,
+    ],
+    [
+      `<attribute uri="https://example.org/rule"><name><simpleValue>Name</simpleValue></name></attribute>`,
+      /Carries uri/,
     ],
     [
       `<attribute><name><xs:restriction base="xs:string"><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`,
@@ -240,17 +376,17 @@ describe("idsXmlToDrafts pass-through", () => {
   it("records how many conditions preceded each passed-through facet", () => {
     const [rule] = idsXmlToDrafts(MIXED).rules;
 
-    expect(rule.conditions.map((condition) => condition.name)).toEqual([
+    expect(rule.conditions.filter(isConditionFacet).map((condition) => condition.name)).toEqual([
       "Name",
       "Reference",
       "Status",
+      "ThermalTransmittance",
+      "AcousticRating",
       "Description",
     ]);
     expect(rule.imported?.passThrough.map((entry) => [entry.construct, entry.afterIndex])).toEqual([
       ["classification", 3],
-      ["property", 3],
-      ["property", 3],
-      ["material", 4],
+      ["material", 6],
     ]);
   });
 });

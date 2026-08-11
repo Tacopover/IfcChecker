@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildIdsXml } from "./build-ids.js";
+import { EVERY_FACET } from "./every-facet.fixture.js";
 import { parseIdsXml } from "./parse-ids.js";
 import type { ParsedRequirementFacet, ParsedRestriction, ParsedSpecification } from "./parse-ids.js";
 
@@ -16,20 +17,33 @@ function slotRestriction(facet: ParsedRequirementFacet): ParsedRestriction | nul
   return facet.restriction;
 }
 
-import type { ConditionDraft, RuleDraft } from "./rule-draft.js";
-import { compileDraft } from "./rule-draft.js";
+import type { ConditionDraft, ConditionOperator, RuleDraft } from "./rule-draft.js";
+import { cardinalityForOperator, compileDraft, valueDraftForOperator } from "./rule-draft.js";
 
-function condition(overrides: Partial<ConditionDraft> = {}): ConditionDraft {
+/**
+ * A condition written the way the builder's rows are: an operator plus whatever it needs. The two
+ * fields it sets are derived by the same functions the page uses, so these cases stay a test of
+ * what the exporter writes rather than of how the draft happens to be shaped.
+ */
+function condition(
+  overrides: Partial<ConditionDraft> & {
+    operator?: ConditionOperator;
+    text?: string;
+    values?: string[];
+  } = {}
+): ConditionDraft {
+  const { operator = "exists", text = "", values = [], ...rest } = overrides;
   return {
     id: "c1",
     kind: "attribute",
     propertySet: null,
     name: "Name",
-    operator: "exists",
-    values: [],
-    text: "",
-    ...overrides,
-  };
+    value: valueDraftForOperator(operator, text, values),
+    cardinality: cardinalityForOperator(operator),
+    ...rest,
+    // `kind` widens back to the union through the spread, and a partial of a discriminated union
+    // cannot narrow it again. Asserted here so the call sites stay one line each.
+  } as ConditionDraft;
 }
 
 /** RegExp instances never compare equal, so compare their sources instead. */
@@ -128,6 +142,67 @@ describe("buildIdsXml", () => {
     expect(xml.match(/cardinality="prohibited"/g)).toHaveLength(2);
   });
 
+  // ids.xsd gives uri to classification, property and material alone. A uri on an attribute would
+  // be a document no conforming checker reads, so the exporter writes it from the property branch.
+  it("writes instructions on either kind of facet and a uri only on a property", () => {
+    const xml = buildIdsXml([
+      {
+        id: "r1",
+        name: "Carried prose",
+        entityTypes: ["IfcWall"],
+        conditions: [
+          condition({ id: "c1", name: "Tag", instructions: "Ask the architect." }),
+          condition({
+            id: "c2",
+            kind: "property",
+            propertySet: "Pset_WallCommon",
+            name: "FireRating",
+            instructions: "From the wall schedule.",
+            uri: "https://example.org/rule",
+          }),
+        ],
+      },
+    ]);
+
+    expect(xml).toContain('<attribute instructions="Ask the architect.">');
+    expect(xml).toContain('uri="https://example.org/rule"');
+    expect(xml).toContain('instructions="From the wall schedule."');
+  });
+
+  it("states neither attribute for a condition that carries neither", () => {
+    const xml = buildIdsXml(DRAFTS);
+
+    expect(xml).not.toContain("instructions=");
+    expect(xml).not.toContain("uri=");
+  });
+
+  // Cardinality and value are two separate statements in IDS, so the exporter writes each from its
+  // own field. A prohibited facet keeping its value is "must not be TODO", not "must not be there".
+  it("writes a cardinality and a value independently of each other", () => {
+    const xml = buildIdsXml([
+      {
+        id: "r1",
+        name: "Both halves",
+        entityTypes: ["IfcWall"],
+        conditions: [
+          { id: "c1", kind: "attribute", propertySet: null, name: "Tag", value: null, cardinality: "optional" },
+          {
+            id: "c2",
+            kind: "attribute",
+            propertySet: null,
+            name: "Description",
+            value: { kind: "simple", value: "TODO" },
+            cardinality: "prohibited",
+          },
+        ],
+      },
+    ]);
+
+    expect(xml).toContain('<attribute cardinality="optional">');
+    expect(xml).toContain('<attribute cardinality="prohibited">');
+    expect(xml).toContain("<value><simpleValue>TODO</simpleValue></value>");
+  });
+
   it("uppercases applicability entity names", () => {
     const xml = buildIdsXml(DRAFTS);
     expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
@@ -156,15 +231,7 @@ describe("buildIdsXml", () => {
         name: "Codes",
         entityTypes: ["IfcSanitaryTerminal"],
         conditions: [
-          {
-            id: "c",
-            kind: "property",
-            propertySet: "ASML",
-            name: "3.6 NL-SfB code",
-            operator: "exists",
-            values: [],
-            text: "",
-          },
+          condition({ id: "c", kind: "property", propertySet: "ASML", name: "3.6 NL-SfB code" }),
         ],
       },
     ]);
@@ -181,16 +248,13 @@ describe("buildIdsXml", () => {
           name: "Codes",
           entityTypes: ["IfcSanitaryTerminal"],
           conditions: [
-            {
+            condition({
               id: "c",
               kind: "property",
               propertySet: "ASML",
               name: "3.6 NL-SfB code",
-              operator: "exists",
-              values: [],
-              text: "",
               dataType,
-            },
+            }),
           ],
         },
       ]);
@@ -244,6 +308,35 @@ describe("buildIdsXml / compileDraft round-trip", () => {
       },
     ];
     expect(comparable(parseIdsXml(buildIdsXml(drafts)))).toEqual(comparable(compileDraft(drafts)));
+  });
+
+  // The importer reads two of the six kinds and keeps the rest verbatim, so nothing here is
+  // reachable from a file yet. That is the point: the exporter and the compile are total over all
+  // six before the importer starts producing them, which is what makes reading them additive.
+  it("writes and compiles all six facet kinds, and the two agree", () => {
+    const parsed = parseIdsXml(buildIdsXml(EVERY_FACET));
+
+    expect(comparable(parsed)).toEqual(comparable(compileDraft(EVERY_FACET)));
+    expect(parsed[0].requirements.map((facet) => facet.kind)).toEqual([
+      "attribute",
+      "property",
+      "entity",
+      "classification",
+      "material",
+      "partOf",
+    ]);
+  });
+
+  // One member of the schema's relations enumeration is two names in a single attribute value.
+  it("splits a two-name relation on the way in and writes it back as one attribute", () => {
+    const [compiled] = compileDraft(EVERY_FACET);
+    const partOf = compiled.requirements[5];
+    if (partOf.kind !== "partOf") throw new Error("expected a partOf facet");
+
+    expect(partOf.relations).toEqual(["IFCRELVOIDSELEMENT", "IFCRELFILLSELEMENT"]);
+    expect(buildIdsXml(EVERY_FACET)).toContain(
+      'relation="IFCRELVOIDSELEMENT IFCRELFILLSELEMENT"'
+    );
   });
 
   it("keeps the compiled and exported regexes behaviourally identical", () => {

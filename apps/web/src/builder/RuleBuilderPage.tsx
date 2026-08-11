@@ -210,15 +210,11 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     name: string;
   }) {
     if (!selectionName) return;
-    const condition: ConditionDraft = {
-      id: nextDraftId("c"),
-      kind: field.kind,
-      propertySet: field.propertySet,
-      name: field.name,
-      operator: "exists",
-      values: [],
-      text: "",
-    };
+    const common = { id: nextDraftId("c"), name: field.name, value: null, cardinality: "required" } as const;
+    const condition: ConditionDraft =
+      field.kind === "attribute"
+        ? { ...common, kind: "attribute", propertySet: null }
+        : { ...common, kind: "property", propertySet: field.propertySet };
     const target = rules.find((rule) => rule.id === activeRuleId) ?? rules[0] ?? null;
 
     if (!target) {
@@ -267,11 +263,8 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
       id: nextDraftId("r"),
       name: `${rule.name} (copy)`,
       entityTypes: [...rule.entityTypes],
-      conditions: rule.conditions.map((condition) => ({
-        ...condition,
-        id: nextDraftId("c"),
-        values: [...condition.values],
-      })),
+      // A ValueDraft is only ever replaced, never edited in place, so the copy can share it.
+      conditions: rule.conditions.map((condition) => ({ ...condition, id: nextDraftId("c") })),
     };
     const index = rules.indexOf(rule);
     setRules([...rules.slice(0, index + 1), copy, ...rules.slice(index + 1)]);

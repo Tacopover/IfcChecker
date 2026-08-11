@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import type { ConditionDraft } from "@ifc-qa/ids-validator";
 import { ConditionRow, defaultConditionFor } from "./ConditionRow";
 import type { FieldsForResult } from "./introspect";
+import { stating } from "../test/conditions";
 
 const SOURCE: FieldsForResult = {
   total: 10,
@@ -62,9 +63,7 @@ const CONDITION: ConditionDraft = {
   kind: "property",
   propertySet: "Pset_WallCommon",
   name: "FireRating",
-  operator: "exists",
-  values: [],
-  text: "",
+  ...stating("exists"),
   // What the builder now writes when the field is picked: the type the model reports.
   dataType: "IFCLABEL",
 };
@@ -152,7 +151,7 @@ describe("ConditionRow", () => {
 
   it("edits free text without losing focus between keystrokes", async () => {
     const user = userEvent.setup();
-    render(<Harness initial={{ ...CONDITION, operator: "contains" }} />);
+    render(<Harness initial={{ ...CONDITION, ...stating("contains") }} />);
 
     const input = screen.getByLabelText("Value");
     await user.type(input, "REI");
@@ -174,7 +173,7 @@ describe("ConditionRow", () => {
 
   it("explains an invalid pattern instead of silently failing every element", async () => {
     const user = userEvent.setup();
-    render(<Harness initial={{ ...CONDITION, operator: "matches" }} />);
+    render(<Harness initial={{ ...CONDITION, ...stating("matches") }} />);
 
     const input = screen.getByLabelText("Value");
     // paste, not type: user-event reads {} and [] in typed text as key descriptors.
@@ -202,7 +201,7 @@ describe("ConditionRow", () => {
 
   it("says so when an operator that needs text has an empty box", async () => {
     const user = userEvent.setup();
-    render(<Harness initial={{ ...CONDITION, operator: "contains" }} />);
+    render(<Harness initial={{ ...CONDITION, ...stating("contains") }} />);
 
     const input = screen.getByLabelText("Value");
     expect(input).toHaveAttribute("aria-invalid", "true");
@@ -213,10 +212,59 @@ describe("ConditionRow", () => {
   });
 
   it("leaves an operator that needs no value unmarked", () => {
-    render(<Harness initial={{ ...CONDITION, operator: "notExists" }} />);
+    render(<Harness initial={{ ...CONDITION, ...stating("notExists") }} />);
 
     expect(screen.queryByText(/Enter a value/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Tick at least one value/)).not.toBeInTheDocument();
+  });
+
+  // The draft model can hold values the eight operators cannot state. None is reachable from these
+  // controls yet, but a row that quietly showed one as "must be filled in" would be editing it.
+  it.each([
+    [
+      "a numeric range",
+      { value: { kind: "bounds", base: "xs:double", min: { value: "10", inclusive: true }, max: null } },
+      /numeric range/,
+    ],
+    [
+      "a prohibited value",
+      { cardinality: "prohibited", value: { kind: "simple", value: "Steel" } },
+      /Must not hold this particular value/,
+    ],
+    ["an optional facet", { cardinality: "optional" }, /Optional/],
+  ] as const)("says what it is holding rather than mislabelling %s", (_label, overrides, expected) => {
+    render(<Harness initial={{ ...CONDITION, ...overrides }} />);
+
+    expect(screen.queryByLabelText("Operator")).toBeNull();
+    expect(screen.queryByLabelText("Value")).toBeNull();
+    expect(screen.getByText(expected)).toBeInTheDocument();
+    // The field it is about is still readable and still retargetable.
+    expect(screen.getByLabelText("Field name")).toHaveValue("FireRating");
+  });
+
+  // Before the importer read these, a facet carrying them stayed in the kept-but-not-shown list,
+  // where the user could at least see something was there. Importing it must not make it invisible.
+  it("shows the author's instructions and the uri the requirement is defined at", () => {
+    render(
+      <Harness
+        initial={{
+          ...CONDITION,
+          instructions: "Ask the architect.",
+          uri: "https://example.org/rule",
+        }}
+      />
+    );
+
+    expect(screen.getByText("Ask the architect.")).toBeInTheDocument();
+    expect(screen.getByText("https://example.org/rule")).toBeInTheDocument();
+    // Text, not a link: the address comes from a file someone else wrote.
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("shows no note for a condition carrying neither", () => {
+    const { container } = render(<Harness />);
+
+    expect(container.querySelector(".cond-note")).toBeNull();
   });
 
   it("duplicates and deletes itself", async () => {
@@ -304,7 +352,8 @@ describe("defaultConditionFor", () => {
       kind: "property",
       propertySet: "Pset_WallCommon",
       name: "FireRating",
-      operator: "exists",
+      value: null,
+      cardinality: "required",
       dataType: "IFCLABEL",
     });
   });

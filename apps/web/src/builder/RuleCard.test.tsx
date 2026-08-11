@@ -6,6 +6,7 @@ import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { RuleDraft } from "@ifc-qa/ids-validator";
 import { RuleCard } from "./RuleCard";
 import { introspectModel } from "./introspect";
+import { stating } from "../test/conditions";
 
 function wall(index: number, fireRating: string | null): NormalizedElement {
   return {
@@ -47,9 +48,7 @@ const RULE: RuleDraft = {
       kind: "property",
       propertySet: "Pset_WallCommon",
       name: "FireRating",
-      operator: "exists",
-      values: [],
-      text: "",
+      ...stating("exists"),
     },
   ],
 };
@@ -204,6 +203,33 @@ describe("RuleCard", () => {
     await user.click(screen.getByRole("button", { name: "Remove condition" }));
 
     expect(screen.getByText(/No conditions/)).toHaveClass("rule-error");
+  });
+
+  // The importer keeps the other four kinds verbatim, so nothing puts one in a rule yet. When it
+  // starts reading them, the facet has to appear in the rule it belongs to rather than thinning
+  // the list — and it has to say it is checked, because it is.
+  it("shows a facet no condition row can edit, rather than dropping it from the rule", () => {
+    render(
+      <Harness
+        initial={{
+          ...RULE,
+          conditions: [
+            ...RULE.conditions,
+            {
+              id: "m1",
+              kind: "material",
+              value: { kind: "simple", value: "Concrete" },
+              cardinality: "required",
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(screen.getByText("material")).toBeInTheDocument();
+    expect(screen.getByText(/Must be made of a material.*not editable here yet/)).toBeInTheDocument();
+    // One operator select, from the property row — the material facet offers no controls.
+    expect(screen.getAllByLabelText("Operator")).toHaveLength(1);
   });
 
   // "classification" alone says a facet was kept. It does not say the rule in front of the user
