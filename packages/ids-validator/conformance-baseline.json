@@ -2,8 +2,8 @@
   "generated": "2026-08-11",
   "totals": {
     "cases": 334,
-    "agreed": 299,
-    "wrong": 21,
+    "agreed": 300,
+    "wrong": 20,
     "refused": 14,
     "errored": 0
   },
@@ -24,8 +24,8 @@
     },
     "entity": {
       "total": 33,
-      "agreed": 26,
-      "wrong": 7,
+      "agreed": 27,
+      "wrong": 6,
       "refused": 0,
       "errored": 0
     },
@@ -165,6 +165,7 @@
     "entity/pass-a_matching_predefined_type_should_pass",
     "entity/pass-a_predefined_type_may_specify_a_user_defined_element_type",
     "entity/pass-a_predefined_type_may_specify_a_user_defined_object_type",
+    "entity/pass-a_predefined_type_may_specify_a_user_defined_process_type",
     "entity/pass-an_matching_entity_should_pass_regardless_of_predefined_type",
     "entity/pass-entities_can_be_specified_as_a_xsd_regex_pattern_2_2",
     "entity/pass-entities_can_be_specified_as_an_enumeration_1_3",
@@ -430,12 +431,6 @@
     },
     {
       "case": "classification/pass-non_rooted_resources_that_have_external_classification_references_should_also_pass",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "entity/pass-a_predefined_type_may_specify_a_user_defined_process_type",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"

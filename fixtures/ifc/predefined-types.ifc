@@ -1,0 +1,54 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('fixture-predefined-types.ifc','2026-08-11T00:00:00',(''),(''),'IFC QA Tool fixture','','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCPROJECT('0FMxV72Kn2gQBLPeGefPXc',$,'PredefinedType Fixture',$,$,$,$,(#8),#5);
+#5=IFCUNITASSIGNMENT((#6,#7));
+#6=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#7=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#8=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.0E-5,#9,$);
+#9=IFCAXIS2PLACEMENT3D(#10,$,$);
+#10=IFCCARTESIANPOINT((0.0,0.0,0.0));
+#11=IFCSITE('1PPvKvz85AqQI7$4o09XlU',$,'Fixture Site',$,$,#12,$,$,.ELEMENT.,$,$,$,$,$);
+#12=IFCLOCALPLACEMENT($,#9);
+#13=IFCBUILDING('2Rf9ce5uz1qOB7WEOWMYye',$,'Fixture Building',$,$,#12,$,$,.ELEMENT.,$,$,$);
+#14=IFCBUILDINGSTOREY('3Kf5r2t7D6UwlEDlNjJKq1',$,'Level 1',$,$,#12,$,$,.ELEMENT.,0.0);
+
+/* Every entity line below is copied from an entity conformance case rather than
+   counted by hand: IfcWall has 9 attributes with ObjectType 5th and
+   PredefinedType 9th, IfcWallType has 10 with ElementType 9th, and IfcTaskType
+   has 11 with ProcessType 9th. A predefined type written one slot off lands
+   silently in the wrong field and reads as null. */
+
+/* W-PLAIN states an ordinary enumeration value, so nothing is resolved. */
+#20=IFCWALL('1abc2defGHI3jkl4mno5pq',$,'W-PLAIN',$,$,#12,$,'TAG-PLAIN',.SOLIDWALL.);
+
+/* W-OBJECTTYPE names its own user-defined type in ObjectType. */
+#21=IFCWALL('2bcd3efgHIJ4klm5nop6qr',$,'W-OBJECTTYPE',$,'WALDO',#12,$,'TAG-OBJ',.USERDEFINED.);
+
+/* W-INHERITED states no predefined type at all; its type object does, as
+   USERDEFINED plus an ElementType, so the occurrence inherits 'X'. */
+#22=IFCWALL('3cde4fghIJK5lmn6opq7rs',$,'W-INHERITED',$,$,#12,$,'TAG-INH',$);
+#23=IFCWALLTYPE('4def5ghiJKL6mno7pqr8st',$,'Inheriting Wall Type',$,$,$,$,'TYPE-INH','X',.USERDEFINED.);
+#24=IFCRELDEFINESBYTYPE('5efg6hijKLM7nop8qrs9tu',$,$,$,(#22),#23);
+
+/* W-OVERRIDDEN states its own, and its type says NOTDEFINED — which defines
+   nothing, so the occurrence's value wins rather than being overwritten. */
+#25=IFCWALL('6fgh7ijkLMN8opq9rst0uv',$,'W-OVERRIDDEN',$,'Y',#12,$,'TAG-OVR',.USERDEFINED.);
+#26=IFCWALLTYPE('7ghi8jklMNO9pqr0stu1vw',$,'Undefined Wall Type',$,$,$,$,'TYPE-OVR',$,.NOTDEFINED.);
+#27=IFCRELDEFINESBYTYPE('8hij9klmNOP0qrs1tuv2wx',$,$,$,(#25),#26);
+
+/* A type object states its own user-defined name in ElementType, and an
+   IfcTypeProcess states it in ProcessType — the same idea under a third name. */
+#28=IFCWALLTYPE('9ijk0lmnOPQ1rst2uvw3xy',$,'Standalone Wall Type',$,$,$,$,'TYPE-STD','WALDO',.USERDEFINED.);
+#29=IFCTASKTYPE('Ajkl1mnoPQR2stu3vwx4yz',$,'Task Type',$,$,$,$,$,'TASKY',.USERDEFINED.,$);
+
+#50=IFCRELAGGREGATES('3zR8O0xG71Ly6sNMtXgUVw',$,$,$,#1,(#11));
+#51=IFCRELAGGREGATES('4aS9P1yH82Mz7tONuYhVWx',$,$,$,#11,(#13));
+#52=IFCRELAGGREGATES('5bT0Q2zI93Na8uPOvZiWXy',$,$,$,#13,(#14));
+#53=IFCRELCONTAINEDINSPATIALSTRUCTURE('6cU1R3AJ04Ob9vQPwAjXYz',$,$,$,(#20,#21,#22,#25),#14);
+ENDSEC;
+END-ISO-10303-21;

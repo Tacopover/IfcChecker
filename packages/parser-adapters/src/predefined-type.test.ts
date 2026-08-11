@@ -17,6 +17,12 @@ describe("effectivePredefinedType", () => {
     expect(effectivePredefinedType("USERDEFINED", null, "BESPOKE_PANEL")).toBe("BESPOKE_PANEL");
   });
 
+  // IfcTypeProcess declares the same idea under a third name, so an IfcTaskType states its
+  // user-defined type in neither of the two fields an element or an element type uses.
+  it("falls back to ProcessType, which is where a type process states it", () => {
+    expect(effectivePredefinedType("USERDEFINED", null, null, "TASKY")).toBe("TASKY");
+  });
+
   // Keeping the stored value is the honest answer: the model says the type is user-defined and
   // then fails to define it. Reporting null would let "is a predefined type stated" pass.
   it("keeps USERDEFINED when neither field names anything", () => {

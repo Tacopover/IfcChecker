@@ -252,7 +252,8 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
         predefinedType: effectivePredefinedType(
           stripEnumDots(findAttr("PredefinedType")),
           findAttr("ObjectType"),
-          findAttr("ElementType")
+          findAttr("ElementType"),
+          findAttr("ProcessType")
         ),
         name: typeof name === "string" ? name : null,
         attributes,

@@ -325,6 +325,31 @@ describe("adapter parity", () => {
     }
   });
 
+  // IFC states a user-defined predefined type under three different attribute names, one per
+  // branch of the hierarchy: ObjectType on an occurrence, ElementType on an element type,
+  // ProcessType on a type process. Missing one reads as the literal "USERDEFINED", which is not
+  // what any rule compares against.
+  it("both engines resolve a user-defined predefined type from all three fields", async () => {
+    const path = fixturePath("predefined-types.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byName = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope
+          .filter((entity) => entity.name !== null)
+          .map((entity) => [entity.name, entity.predefinedType])
+      );
+
+    const fromIfcLite = byName(ifcLiteResult);
+    expect(fromIfcLite["W-PLAIN"]).toBe("SOLIDWALL");
+    expect(fromIfcLite["W-OBJECTTYPE"]).toBe("WALDO");
+    expect(fromIfcLite["Standalone Wall Type"]).toBe("WALDO");
+    expect(fromIfcLite["Task Type"]).toBe("TASKY");
+
+    expect(byName(webIfcResult)).toEqual(fromIfcLite);
+  });
+
   it("both engines flatten every material shape to the same matchable strings", async () => {
     const path = fixturePath("material-shapes.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);

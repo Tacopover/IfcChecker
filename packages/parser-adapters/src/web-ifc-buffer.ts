@@ -596,7 +596,8 @@ export async function parseWebIfcBuffer(
           predefinedType: effectivePredefinedType(
             stripEnumDots(line.PredefinedType),
             line.ObjectType,
-            line.ElementType
+            line.ElementType,
+            line.ProcessType
           ),
           name: typeof name === "string" ? name : null,
           attributes,
