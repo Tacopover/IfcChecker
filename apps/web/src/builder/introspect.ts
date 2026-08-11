@@ -7,6 +7,14 @@ export interface FieldSummary {
   hits: number;
   coverage: number;
   values: Array<{ value: string; count: number }>;
+  /**
+   * The IFC data types the model stores this field as, commonest first.
+   *
+   * Only a property has one — IDS declares `dataType` on `<property>` alone, and the parsers
+   * deliberately carry none on an attribute. Empty where the parser reported none, which is not
+   * the same as the field being absent: a rule must then declare no type rather than guess one.
+   */
+  dataTypes: Array<{ value: string; count: number }>;
 }
 
 export interface GroupSummary {
@@ -69,17 +77,25 @@ interface FieldAccumulator {
   propertySet: string | null;
   hits: number;
   values: Map<string, number>;
+  dataTypes: Map<string, number>;
 }
 
-function accumulate(bag: Map<string, FieldAccumulator>, name: string, propertySet: string | null, value: PropertyValue) {
+function accumulate(
+  bag: Map<string, FieldAccumulator>,
+  name: string,
+  propertySet: string | null,
+  value: PropertyValue,
+  dataType?: string | null
+) {
   let record = bag.get(name);
   if (!record) {
-    record = { name, propertySet, hits: 0, values: new Map() };
+    record = { name, propertySet, hits: 0, values: new Map(), dataTypes: new Map() };
     bag.set(name, record);
   }
   record.hits++;
   const key = String(value);
   record.values.set(key, (record.values.get(key) ?? 0) + 1);
+  if (dataType) record.dataTypes.set(dataType, (record.dataTypes.get(dataType) ?? 0) + 1);
 }
 
 function byCountThenName(a: { count: number; name: string }, b: { count: number; name: string }) {
@@ -204,7 +220,7 @@ export function introspectModel(elements: NormalizedElement[]): ModelIntrospecti
           propertySets.set(setName, bag);
         }
         for (const [name, slot] of Object.entries(fields)) {
-          if (isFilled(slot.value)) accumulate(bag, name, setName, slot.value);
+          if (isFilled(slot.value)) accumulate(bag, name, setName, slot.value, slot.dataType);
         }
       }
     }
@@ -216,6 +232,9 @@ export function introspectModel(elements: NormalizedElement[]): ModelIntrospecti
       hits: record.hits,
       coverage: record.hits / total,
       values: [...record.values.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+      dataTypes: [...record.dataTypes.entries()]
         .map(([value, count]) => ({ value, count }))
         .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
     });

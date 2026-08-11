@@ -197,12 +197,15 @@ describe("introspectModel — resolveTypes", () => {
 const FIELD_MODEL: NormalizedElement[] = [
   ...many("IFCDUCTSEGMENT", 4, (i) => ({
     attributes: { Tag: { value: `DS-${i}` }, Description: { value: i === 0 ? "Supply air" : null } },
-    propertySets: { MEP_Data: { SystemAbbreviation: { value: i < 3 ? "SA" : "RA" } } },
+    propertySets: {
+      MEP_Data: { SystemAbbreviation: { value: i < 3 ? "SA" : "RA", dataType: "IFCLABEL" } },
+    },
   })),
   ...many("IFCPIPESEGMENT", 2, (i) => ({
     attributes: { Tag: { value: i === 0 ? `PS-${i}` : null } },
     propertySets: {
-      MEP_Data: { SystemAbbreviation: { value: "CHWS" } },
+      // Stored as a different type from the ducts', which is what a rule over the group has to see.
+      MEP_Data: { SystemAbbreviation: { value: "CHWS", dataType: "IFCIDENTIFIER" } },
       Pset_PipeSegmentTypeCommon: { Status: { value: "New" } },
     },
   })),
@@ -244,6 +247,33 @@ describe("introspectModel — fieldsFor", () => {
       { value: "SA", count: 3 },
       { value: "RA", count: 1 },
     ]);
+  });
+
+  // A declared dataType the model does not hold fails every element, so the picker can only offer
+  // what the file reports — and has to show a field stored two ways as exactly that.
+  it("reports the data types a property is stored as, commonest first", () => {
+    const { fieldsFor } = introspectModel(FIELD_MODEL);
+    const fieldIn = (names: string[]) =>
+      fieldsFor(names)
+        .propertySets.find((p) => p.name === "MEP_Data")
+        ?.fields.find((f) => f.name === "SystemAbbreviation");
+
+    expect(fieldIn(["IfcDuctSegment"])?.dataTypes).toEqual([{ value: "IFCLABEL", count: 4 }]);
+    expect(fieldIn(["IfcFlowSegment"])?.dataTypes).toEqual([
+      { value: "IFCLABEL", count: 4 },
+      { value: "IFCIDENTIFIER", count: 2 },
+    ]);
+  });
+
+  it("reports no data type where the parser knows none", () => {
+    const { fieldsFor } = introspectModel(FIELD_MODEL);
+    const status = fieldsFor(["IfcPipeSegment"])
+      .propertySets.find((p) => p.name === "Pset_PipeSegmentTypeCommon")
+      ?.fields.find((f) => f.name === "Status");
+
+    expect(status?.dataTypes).toEqual([]);
+    // An attribute never carries one: IDS declares dataType on <property> alone.
+    expect(fieldsFor(["IfcDuctSegment"]).attributes.every((f) => f.dataTypes.length === 0)).toBe(true);
   });
 
   it("aggregates across every member type when a group is selected", () => {
