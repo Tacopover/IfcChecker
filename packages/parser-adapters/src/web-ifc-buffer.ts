@@ -13,7 +13,7 @@ import { assertWellFormedStepFile } from "./step-well-formed.js";
 import { normalizePropertyValue, normalizeValue } from "./normalize-property-value.js";
 import { UnitScaleCollector, siUnitScale } from "./unit-scales.js";
 import { resolvePartOf } from "./part-of.js";
-import { effectivePredefinedType } from "./predefined-type.js";
+import { resolvePredefinedType, type PredefinedTypeSource } from "./predefined-type.js";
 
 type WebIfcLine = Record<string, any>;
 
@@ -223,6 +223,24 @@ export async function parseWebIfcBuffer(
       for (const ref of rel.RelatedObjects ?? []) {
         if (typeof ref?.value === "number") typeIdByElement.set(ref.value, typeId);
       }
+    }
+
+    // What a type object says about its predefined type. IDS reads the type first and the
+    // occurrence only where the type defines nothing, so an IfcWall stating none still has one if
+    // its IfcWallType does. Cached per type object because one type defines many occurrences.
+    const typePredefinedTypeCache = new Map<number, PredefinedTypeSource>();
+    function readTypePredefinedType(typeId: number): PredefinedTypeSource {
+      const cached = typePredefinedTypeCache.get(typeId);
+      if (cached) return cached;
+
+      const typeLine = ifcApi.GetLine(modelID, typeId) as WebIfcLine;
+      const source: PredefinedTypeSource = {
+        predefinedType: stripEnumDots(typeLine.PredefinedType),
+        elementType: typeLine.ElementType,
+        processType: typeLine.ProcessType,
+      };
+      typePredefinedTypeCache.set(typeId, source);
+      return source;
     }
 
     // Element expressId -> the classification references associated with it, from every
@@ -593,10 +611,14 @@ export async function parseWebIfcBuffer(
         idsScope.push({
           globalId: identifyEntity(typeName, globalId, expressID),
           ifcType: typeName,
-          predefinedType: effectivePredefinedType(
-            stripEnumDots(line.PredefinedType),
-            line.ObjectType,
-            line.ElementType
+          ...resolvePredefinedType(
+            {
+              predefinedType: stripEnumDots(line.PredefinedType),
+              objectType: line.ObjectType,
+              elementType: line.ElementType,
+              processType: line.ProcessType,
+            },
+            typeId === undefined ? null : readTypePredefinedType(typeId)
           ),
           name: typeof name === "string" ? name : null,
           attributes,

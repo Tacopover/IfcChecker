@@ -325,6 +325,79 @@ describe("adapter parity", () => {
     }
   });
 
+  // IFC states a user-defined predefined type under three different attribute names, one per
+  // branch of the hierarchy: ObjectType on an occurrence, ElementType on an element type,
+  // ProcessType on a type process. Missing one reads as the literal "USERDEFINED", which is not
+  // what any rule compares against.
+  it("both engines resolve a user-defined predefined type from all three fields", async () => {
+    const path = fixturePath("predefined-types.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byName = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope
+          .filter((entity) => entity.name !== null)
+          .map((entity) => [entity.name, entity.predefinedType])
+      );
+
+    const fromIfcLite = byName(ifcLiteResult);
+    expect(fromIfcLite["W-PLAIN"]).toBe("SOLIDWALL");
+    expect(fromIfcLite["W-OBJECTTYPE"]).toBe("WALDO");
+    expect(fromIfcLite["Standalone Wall Type"]).toBe("WALDO");
+    expect(fromIfcLite["Task Type"]).toBe("TASKY");
+
+    expect(byName(webIfcResult)).toEqual(fromIfcLite);
+  });
+
+  // A rule may name either string, so both engines have to keep both. Carrying the literal on an
+  // element that never said USERDEFINED would be a second value nothing can match.
+  it("both engines keep the stored enumeration only where it differs from the resolved name", async () => {
+    const path = fixturePath("predefined-types.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byName = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope
+          .filter((entity) => entity.name !== null)
+          .map((entity) => [entity.name, entity.storedPredefinedType ?? null])
+      );
+
+    const fromIfcLite = byName(ifcLiteResult);
+    expect(fromIfcLite["W-OBJECTTYPE"]).toBe("USERDEFINED");
+    expect(fromIfcLite["Task Type"]).toBe("USERDEFINED");
+    expect(fromIfcLite["W-PLAIN"]).toBeNull();
+
+    expect(byName(webIfcResult)).toEqual(fromIfcLite);
+  });
+
+  // The type object is consulted first and the occurrence only where the type defines nothing.
+  // NOTDEFINED on a type defines nothing, so it must not overwrite what the occurrence states.
+  it("both engines inherit a predefined type from the type object, and let NOTDEFINED fall through", async () => {
+    const path = fixturePath("predefined-types.ifc");
+    const webIfcResult = await new WebIfcAdapter().parse(path);
+    const ifcLiteResult = await new IfcLiteAdapter().parse(path);
+
+    const byName = (result: typeof webIfcResult) =>
+      Object.fromEntries(
+        result.idsScope
+          .filter((entity) => entity.name !== null)
+          .map((entity) => [
+            entity.name,
+            `${entity.predefinedType}/${entity.storedPredefinedType ?? "-"}`,
+          ])
+      );
+
+    const fromIfcLite = byName(ifcLiteResult);
+    // W-INHERITED states none of its own; the type says USERDEFINED with an ElementType of X.
+    expect(fromIfcLite["W-INHERITED"]).toBe("X/USERDEFINED");
+    // W-OVERRIDDEN states USERDEFINED with an ObjectType of Y; the type says NOTDEFINED.
+    expect(fromIfcLite["W-OVERRIDDEN"]).toBe("Y/USERDEFINED");
+
+    expect(byName(webIfcResult)).toEqual(fromIfcLite);
+  });
+
   it("both engines flatten every material shape to the same matchable strings", async () => {
     const path = fixturePath("material-shapes.ifc");
     const webIfcResult = await new WebIfcAdapter().parse(path);

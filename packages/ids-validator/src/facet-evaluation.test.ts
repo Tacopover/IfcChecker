@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js";
+import { patternRestriction } from "./parse-ids.js";
 import type {
   ParsedAttributeFacet,
   ParsedClassificationFacet,
+  ParsedEntityFacet,
   ParsedMaterialFacet,
   ParsedPartOfFacet,
   ParsedPropertyFacet,
+  ParsedRestriction,
 } from "./parse-ids.js";
 
 function makeElement(overrides: Partial<NormalizedElement>): NormalizedElement {
@@ -861,5 +864,102 @@ describe("evaluateRequirement — partOf", () => {
     const facet = partOfFacet({ relations: ["IFCRELNESTS"], cardinality: "prohibited" });
     expect(evaluateRequirement(nestedInFurniture, facet).passed).toBe(false);
     expect(evaluateRequirement(makeElement({ partOf: [] }), facet).passed).toBe(true);
+  });
+});
+
+describe("evaluateRequirement — entity", () => {
+  function entityFacet(
+    name: ParsedRestriction,
+    predefinedType: ParsedRestriction | null = null
+  ): ParsedEntityFacet {
+    return { kind: "entity", name, predefinedType };
+  }
+
+  const exact = (value: string): ParsedRestriction => ({ kind: "exact", value });
+
+  it("matches the class name exactly rather than by subtype", () => {
+    // The opposite of an applicability entity name, and the same rule partOf follows: the User
+    // Manual says there is no automatic inheritance in the entity facet.
+    const standardCase = makeElement({ ifcType: "IFCWALLSTANDARDCASE" });
+    expect(evaluateRequirement(standardCase, entityFacet(exact("IFCWALL"))).passed).toBe(false);
+    expect(evaluateRequirement(standardCase, entityFacet(exact("IFCWALLSTANDARDCASE"))).passed).toBe(
+      true
+    );
+  });
+
+  it("rejects a class name that is not written in upper case", () => {
+    const wall = makeElement({ ifcType: "IFCWALL" });
+    expect(evaluateRequirement(wall, entityFacet(exact("IfcWall"))).passed).toBe(false);
+  });
+
+  it("reads a name given as an enumeration or as a pattern", () => {
+    const wallType = makeElement({ ifcType: "IFCWALLTYPE" });
+    expect(
+      evaluateRequirement(wallType, entityFacet({ kind: "enum", values: ["IFCWALL", "IFCWALLTYPE"] }))
+        .passed
+    ).toBe(true);
+    expect(
+      evaluateRequirement(wallType, entityFacet(patternRestriction("IFC.*TYPE"))).passed
+    ).toBe(true);
+    expect(
+      evaluateRequirement(makeElement({ ifcType: "IFCWALL" }), entityFacet(patternRestriction("IFC.*TYPE")))
+        .passed
+    ).toBe(false);
+  });
+
+  it("ignores the predefined type when the facet states none", () => {
+    const wall = makeElement({ ifcType: "IFCWALL", predefinedType: "SOLIDWALL" });
+    expect(evaluateRequirement(wall, entityFacet(exact("IFCWALL"))).passed).toBe(true);
+  });
+
+  it("fails an element with no predefined type against a stated one", () => {
+    const wall = makeElement({ ifcType: "IFCWALL", predefinedType: null });
+    expect(
+      evaluateRequirement(wall, entityFacet(exact("IFCWALL"), exact("SOLIDWALL"))).passed
+    ).toBe(false);
+  });
+
+  it("compares a predefined type case-sensitively", () => {
+    const named = makeElement({ ifcType: "IFCWALL", predefinedType: "waldo" });
+    expect(evaluateRequirement(named, entityFacet(exact("IFCWALL"), exact("WALDO"))).passed).toBe(
+      false
+    );
+    expect(evaluateRequirement(named, entityFacet(exact("IFCWALL"), exact("waldo"))).passed).toBe(
+      true
+    );
+  });
+
+  // entity-facet.md marks both rows as matches: IDS asking USERDEFINED against a stored
+  // USERDEFINED that names WALDO elsewhere, and IDS asking WALDO against the same element.
+  it("matches a user-defined element on both its resolved name and the stored enumeration", () => {
+    const waldo = makeElement({
+      ifcType: "IFCWALLTYPE",
+      predefinedType: "WALDO",
+      storedPredefinedType: "USERDEFINED",
+    });
+    expect(evaluateRequirement(waldo, entityFacet(exact("IFCWALLTYPE"), exact("WALDO"))).passed).toBe(
+      true
+    );
+    expect(
+      evaluateRequirement(waldo, entityFacet(exact("IFCWALLTYPE"), exact("USERDEFINED"))).passed
+    ).toBe(true);
+  });
+
+  it("does not let an ordinary enumeration value answer to USERDEFINED", () => {
+    const solid = makeElement({ ifcType: "IFCWALL", predefinedType: "SOLIDWALL" });
+    expect(
+      evaluateRequirement(solid, entityFacet(exact("IFCWALL"), exact("USERDEFINED"))).passed
+    ).toBe(false);
+  });
+
+  it("reads a predefined type given as a restriction", () => {
+    const foobar = makeElement({ ifcType: "IFCWALL", predefinedType: "FOOBAR" });
+    expect(
+      evaluateRequirement(foobar, entityFacet(exact("IFCWALL"), patternRestriction("FOO.*"))).passed
+    ).toBe(true);
+    const bazfoo = makeElement({ ifcType: "IFCWALL", predefinedType: "BAZFOO" });
+    expect(
+      evaluateRequirement(bazfoo, entityFacet(exact("IFCWALL"), patternRestriction("FOO.*"))).passed
+    ).toBe(false);
   });
 });

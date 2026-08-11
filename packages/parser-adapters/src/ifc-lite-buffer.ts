@@ -8,7 +8,7 @@ import {
   extractProjectUnits,
   type IfcDataStore,
 } from "@ifc-lite/parser";
-import { IfcTypeEnumToString, type SpatialNode } from "@ifc-lite/data";
+import { IfcTypeEnumToString, RelationshipType, type SpatialNode } from "@ifc-lite/data";
 import {
   simpleAttributeNamesFor,
   type ModelStructureNode,
@@ -17,7 +17,7 @@ import {
 } from "@ifc-qa/shared-types";
 import type { ClassificationReference } from "@ifc-qa/shared-types";
 import { resolvePartOf } from "./part-of.js";
-import { effectivePredefinedType } from "./predefined-type.js";
+import { resolvePredefinedType, type PredefinedTypeSource } from "./predefined-type.js";
 import type { IfcParseResult, UnrecognizedEntityType } from "./types.js";
 import { classifyEntityType, warnAboutUnrecognizedTypes } from "./element-filter.js";
 import { identifyEntity } from "./entity-identity.js";
@@ -149,6 +149,33 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
     (unitType) => projectUnits.resolvedForUnitType(unitType)?.siScale
   );
 
+  // The predefined type of an occurrence is stated by its IfcTypeObject first and by the
+  // occurrence itself only where the type defines nothing. extractTypePropertiesOnDemand knows the
+  // type's express id but returns null when the type carries no property sets, so the relationship
+  // is followed directly — RelationshipType.DefinesByType maps 1:1 onto IFCRELDEFINESBYTYPE, with
+  // none of the conflation REL_TYPE_MAP applies to IFCRELNESTS.
+  //
+  // Memoized per type object rather than per occurrence: one type typically defines many walls,
+  // and re-reading its attributes for each of them is the whole cost of this lookup.
+  const typeSourceCache = new Map<number, PredefinedTypeSource>();
+  function typeSourceOf(expressId: number): PredefinedTypeSource | null {
+    const [typeId] = store.relationships.getRelated(expressId, RelationshipType.DefinesByType, "inverse");
+    if (typeId === undefined) return null;
+
+    const cached = typeSourceCache.get(typeId);
+    if (cached) return cached;
+
+    const typeAttrs = extractAllEntityAttributes(store, typeId);
+    const read = (name: string) => typeAttrs.find((attr) => attr.name === name)?.value ?? null;
+    const source: PredefinedTypeSource = {
+      predefinedType: stripEnumDots(read("PredefinedType")),
+      elementType: read("ElementType"),
+      processType: read("ProcessType"),
+    };
+    typeSourceCache.set(typeId, source);
+    return source;
+  }
+
   // store.entityIndex.byType is keyed by the raw type name the file carries, so
   // the model itself decides what is on offer here. Asking for a fixed list of
   // names instead meant every concrete MEP class — IfcValve, IfcAirTerminal,
@@ -249,10 +276,14 @@ export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResul
       idsScope.push({
         globalId: identifyEntity(typeName, store.entities.getGlobalId(expressId), expressId),
         ifcType: typeName,
-        predefinedType: effectivePredefinedType(
-          stripEnumDots(findAttr("PredefinedType")),
-          findAttr("ObjectType"),
-          findAttr("ElementType")
+        ...resolvePredefinedType(
+          {
+            predefinedType: stripEnumDots(findAttr("PredefinedType")),
+            objectType: findAttr("ObjectType"),
+            elementType: findAttr("ElementType"),
+            processType: findAttr("ProcessType"),
+          },
+          typeSourceOf(expressId)
         ),
         name: typeof name === "string" ? name : null,
         attributes,

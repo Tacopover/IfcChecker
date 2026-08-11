@@ -77,12 +77,30 @@ export interface ParsedPartOfFacet {
   cardinality: FacetCardinality;
 }
 
+/**
+ * The IFC class the element must be, and optionally the predefined type it must carry.
+ *
+ * Both parameters are restrictions rather than plain names: the suite writes an entity name as a
+ * `<simpleValue>`, as an `xs:enumeration` and as an `xs:pattern`, and does the same for the
+ * predefined type. That is the one place a requirement differs from an applicability, which must
+ * be able to *list* the classes it selects and so refuses a pattern.
+ *
+ * There is no cardinality here. `ids.xsd` gives `entityType` none, because "this element must be
+ * one of these classes" is not a statement that can be waived or forbidden.
+ */
+export interface ParsedEntityFacet {
+  kind: "entity";
+  name: ParsedRestriction;
+  predefinedType: ParsedRestriction | null;
+}
+
 export type ParsedRequirementFacet =
   | ParsedAttributeFacet
   | ParsedPropertyFacet
   | ParsedClassificationFacet
   | ParsedMaterialFacet
-  | ParsedPartOfFacet;
+  | ParsedPartOfFacet
+  | ParsedEntityFacet;
 
 /** Something the source document asked for that this parser cannot represent. */
 export interface UnsupportedConstruct {
@@ -487,13 +505,26 @@ function readRequirements(
       tag !== "property" &&
       tag !== "classification" &&
       tag !== "material" &&
-      tag !== "partOf"
+      tag !== "partOf" &&
+      tag !== "entity"
     ) {
       unsupported.push({
         section: "requirements",
         construct: tag,
         description: `Requires <${tag}>, which cannot be represented, so it is not checked.`,
       });
+      continue;
+    }
+
+    if (tag === "entity") {
+      const entity = parseEntityFacet(node, unsupported);
+      if (entity) requirements.push(entity);
+      else
+        unsupported.push({
+          section: "requirements",
+          construct: "entity/name",
+          description: "States no readable entity name, so the class it requires is unknown.",
+        });
       continue;
     }
 
@@ -531,6 +562,27 @@ function readRequirements(
   }
 
   return requirements;
+}
+
+/**
+ * `null` when the `<name>` states nothing readable, which leaves the required class unknown.
+ *
+ * Unlike an applicability entity, a pattern is fully understood here: a requirement asks whether
+ * *this* element's class matches, so an open-ended set of classes is a question that can be
+ * answered. An applicability has to enumerate the elements it selects, which a pattern prevents.
+ */
+function parseEntityFacet(
+  node: OrderedNode,
+  unsupported: UnsupportedConstruct[]
+): ParsedEntityFacet | null {
+  const children = childrenOf(node, "entity");
+  const name = parseRestriction(children, "name", unsupported);
+  if (name === null) return null;
+  return {
+    kind: "entity",
+    name,
+    predefinedType: parseRestriction(children, "predefinedType", unsupported),
+  };
 }
 
 function parseAttributeFacet(

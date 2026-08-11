@@ -888,3 +888,110 @@ Applicability-side facets remain deliberately unimplemented (stage 5): a `<class
 **The authoring UI has not been touched**, per the Decisions-Log entry of 2026-08-10 — engine
 first, interface after. These three facets are the ones that will not fit the current condition
 row, so the three-level design is now the blocking question for stage 4.
+
+## Requirement-side `entity` — landed and measured 2026-08-11
+
+The fourth of the four missing facets, and the last block of refusals worth 29 cases.
+**275 → 299 → 300 → 301 → 302 agreed of 334**, refusals 43 → 14, nothing lost at any step, and
+**false passes stayed at 0 throughout**. `entity` went 2/33 → 29/33.
+
+| | agreed | wrong | refused | false passes |
+| --- | --- | --- | --- | --- |
+| before | 275 | 16 | 43 | 0 |
+| + the entity facet | 299 | 21 | 14 | 0 |
+| + `ProcessType` | 300 | 20 | 14 | 0 |
+| + the stored enumeration | 301 | 19 | 14 | 0 |
+| + type-object inheritance | **302** | **18** | **14** | **0** |
+
+### The note that sent this stage here was wrong, and it was worth checking
+
+The Decisions-Log said requirement-side `entity` "needs no new parser data at all". Three of the
+four landings are parser work, and the first landing surfaced them by turning refusals into wrong
+answers that named their own cause. That is the argument for landing the validator half first even
+knowing more was coming: 24 cases moved to agreed and the remaining 5 each stated a distinct
+mechanism, which no amount of reading would have enumerated as reliably.
+
+- **`ProcessType`.** IFC declares "the real name is elsewhere" afresh on each branch: `ObjectType`
+  on an occurrence, `ElementType` on an element type, `ProcessType` on a type process. Two of the
+  three were read, so an `IfcTaskType` saying `USERDEFINED` reported the literal.
+- **Two strings, not one.** An element storing `.USERDEFINED.` with an `ElementType` of `WALDO`
+  satisfies a requirement asking `WALDO` *and* one asking `USERDEFINED`. `entity-facet.md`'s table
+  of examples marks both, and the suite states each as a document that must pass, so the resolved
+  name alone cannot answer the first. `NormalizedElement.storedPredefinedType` keeps the
+  enumeration literal, populated only where it differs — `null` on every element that never said
+  `USERDEFINED`, which on the real model is all 28,645 of them.
+- **The type object is consulted first.** `entity-facet.md` gives the order outright, and both
+  adapters read only the occurrence. The one departure from the document as written is
+  `NOTDEFINED`, which it files under "a value other than USERDEFINED" and which would therefore let
+  a type overwrite what its occurrence states — the suite states the opposite as a document that
+  must pass, so `NOTDEFINED` on a type defines nothing. There is no such fall-through on the
+  occurrence, the last place to look, so it is kept there.
+
+`extractTypePropertiesOnDemand` was the obvious way in and is the wrong one: it knows the type's
+express id but returns `null` when the type carries no property sets, and the suite's inheriting
+fixture has exactly that shape. `RelationshipType.DefinesByType` is followed directly instead, and
+maps 1:1 onto `IFCRELDEFINESBYTYPE` with none of the conflation `REL_TYPE_MAP` applies to
+`IFCRELNESTS`.
+
+### Exact, not by subtype — and the applicability side may be wrong
+
+A requirement's entity name matches **exactly and case-sensitively**. `entity-facet.md` says it
+twice: "The IFC Class must match exactly", and "**there is no automatic inheritance in IDS entity
+facet interpretation** … all the entities need to be listed explicitly". The suite pins both halves
+— an `IfcWallStandardCase` must fail a requirement naming `IFCWALL`, and `IfcWall` names no class
+at all.
+
+**That section is about the entity facet as such, not about requirements.** `matchesApplicability`
+uses `isSubtypeOf`, so our applicability is subtype-matching, which the specification appears to
+forbid. This was measured rather than argued: switching it to exact matching **moves 0 of the 334
+conformance cases**. Every applicability name in the suite is present literally in its own model,
+so the suite cannot discriminate — which is why the divergence has survived this long.
+
+It is not academic. The untracked real IDS at `fixtures/ifc/3.6_contain_NlSfb.ids` names
+**`IFCELEMENT`** in its applicability. Today it selects **757 elements** of the 37 MB model and
+checks them. Under exact matching it would select **0** — the model contains no literal
+`IfcElement`, because the class is abstract — and the specification would fail on applicability
+cardinality instead. `entity-facet.md` calls that authoring mistake out by name ("the IfcElement
+should not be listed, as it is an abstract entity") and supplies copy-paste lists of every subtype
+precisely because there is no inheritance.
+
+So the two readings disagree about a real file the user checks real models with, and the direction
+of harm runs both ways: subtype matching selects more elements than the author named, which can let
+a required specification pass on a subtype when nothing it actually named exists (a false pass);
+exact matching would report a widely-used authoring shorthand as checking nothing. **Left unchanged
+and raised as a decision** — it is a behaviour change on real models with no conformance evidence
+either way, and it belongs with the authoring UI, which would have to expand a supertype into its
+subtypes at authoring time for exact matching to be usable.
+
+### Costs
+
+Nothing measurable. Parse on the 37 MB model: **2,553–2,698 ms before against 2,593–2,788 ms
+after**, the same band as the previous stage, and a digest of every scoped entity's predefined type
+is **byte-identical** either way. That model states 323 predefined types across 28,645 scoped
+entities and no `USERDEFINED` at all, so nothing in it inherits and nothing in it carries a second
+matchable string. Both lookups memoize per type object, so the cost tracks type-object count rather
+than occurrence count.
+
+`adapter-parity` gained three assertions on a new `predefined-types.ifc` fixture and caught no
+divergence this time — the first stage where it has not. Every entity line in the fixture is copied
+from an entity conformance case rather than counted by hand.
+
+### What is left
+
+**14 refusals, 18 wrong, 0 errored, 0 false passes.**
+
+- **a property or attribute *name* given as a pattern, 14 refusals** — now the only refusals on the
+  board, and pure validator work with no new parser data.
+- **the `entity` IFC2X3 occurrence/type mapping table, 4** — not 2. Two more surfaced once the
+  requirement facet started judging them. All four are applicability-side: an `IfcFlowTerminal`
+  typed by an `IfcAirTerminalType` must answer to `IFCAIRTERMINAL`, and all four report
+  `0 applicable`. A separate mechanism from anything in this stage.
+- **the cheap comparison leftovers, 14** — `length`/`minLength`/`maxLength` 3, regex OR 1,
+  quantities/material/predefined property sets 4, attribute references and selects 3, the
+  `IfcPropertyTableValue` case 1, the `IfcMaterial` classified through
+  `IfcExternalReferenceRelationship` 1, and `properties_can_be_inherited_from_the_type_2_2` 1.
+
+Applicability-side classification, material and partOf remain deliberately unimplemented (stage 5),
+and `storedPredefinedType` was deliberately **not** extended to a partOf whole: `partof` is 34/34 on
+the resolved name alone, and carrying the pair there would be a guess at a case the suite does not
+state.
