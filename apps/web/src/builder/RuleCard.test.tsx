@@ -205,4 +205,34 @@ describe("RuleCard", () => {
 
     expect(screen.getByText(/No conditions/)).toHaveClass("rule-error");
   });
+
+  // "classification" alone says a facet was kept. It does not say the rule in front of the user
+  // checks less than the score above it suggests, which is the thing worth knowing.
+  it("says why each kept requirement could not be shown, not only which one", () => {
+    const { container } = render(
+      <Harness
+        initial={{
+          ...RULE,
+          imported: {
+            attributes: {},
+            entityNamesAsEnumeration: false,
+            applicabilityAttributes: {},
+            requirementsAttributes: {},
+            passThrough: [
+              {
+                afterIndex: 1,
+                construct: "classification",
+                reason: "The builder can show an attribute or a property; <classification> is neither.",
+                xml: "<classification />",
+              },
+            ],
+          },
+        }}
+      />
+    );
+
+    const kept = container.querySelector(".rule-preserved");
+    expect(kept).toHaveTextContent("classification");
+    expect(kept).toHaveTextContent("<classification> is neither");
+  });
 });

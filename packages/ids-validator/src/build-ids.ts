@@ -2,6 +2,7 @@ import type { ParsedRestriction } from "./parse-ids.js";
 import type { ConditionDraft, PassThrough, RuleDraft } from "./rule-draft.js";
 import {
   BUILDER_PROPERTY_DATA_TYPE,
+  applicabilityEntityNamesOf,
   cardinalityForCondition,
   restrictionForCondition,
 } from "./rule-draft.js";
@@ -127,8 +128,7 @@ function interleave(
  * several types are one facet whose name is an enumeration — emitting one `<entity>` per type
  * produces a document no conforming checker will read.
  */
-function entityApplicabilityXml(entityTypes: string[], asEnumeration: boolean): string[] {
-  const names = entityTypes.map((entityType) => entityType.toUpperCase());
+function entityApplicabilityXml(names: string[], asEnumeration: boolean): string[] {
   if (names.length === 0) return [];
   if (names.length === 1 && !asEnumeration) {
     return [`        <entity><name><simpleValue>${escapeXml(names[0])}</simpleValue></name></entity>`];
@@ -148,7 +148,7 @@ function entityApplicabilityXml(entityTypes: string[], asEnumeration: boolean): 
 function specificationXml(rule: RuleDraft): string {
   const source = rule.imported;
   const entities = entityApplicabilityXml(
-    rule.entityTypes,
+    applicabilityEntityNamesOf(rule),
     source?.entityNamesAsEnumeration ?? false
   );
 

@@ -18,6 +18,52 @@ export const OPERATORS: Array<{ id: ConditionOperator; label: string }> = [
 
 const MAX_SUGGESTIONS = 40;
 
+/** The value a `dataType` select carries when the facet should declare none. */
+export const NO_DATA_TYPE = "";
+
+function propertyFieldIn(source: FieldsForResult, propertySet: string | null, name: string) {
+  return source.propertySets.find((set) => set.name === propertySet)?.fields.find((field) => field.name === name);
+}
+
+/**
+ * The types offered for a property, commonest in the model first.
+ *
+ * Everything offered comes from the user's own file, which is the whole point of the rail — and
+ * here it is also the only honest source: a declared type the model does not hold fails every
+ * element. A type an imported rule already states is kept selectable even when this model has
+ * nothing stored that way, so opening a file never silently rewrites it.
+ */
+export function dataTypeOptionsFor(
+  source: FieldsForResult,
+  condition: ConditionDraft
+): Array<{ value: string; label: string }> {
+  if (condition.kind !== "property") return [];
+  const observed = propertyFieldIn(source, condition.propertySet, condition.name)?.dataTypes ?? [];
+  const options = observed.map((entry) => ({
+    value: entry.value,
+    label: `${entry.value} (${entry.count})`,
+  }));
+  const current = condition.dataType;
+  if (current && !observed.some((entry) => entry.value === current)) {
+    options.push({ value: current, label: `${current} (not in file)` });
+  }
+  return options;
+}
+
+/**
+ * The type to declare for a property the user just pointed at: the one the model stores it as,
+ * or none where the model is silent or disagrees with itself. A field stored as two types cannot
+ * be checked against either without failing the other, so it declares nothing.
+ */
+export function dataTypeFromModel(
+  source: FieldsForResult,
+  propertySet: string | null,
+  name: string
+): string | null {
+  const observed = propertyFieldIn(source, propertySet, name)?.dataTypes ?? [];
+  return observed.length === 1 ? observed[0].value : null;
+}
+
 export function observedValuesFor(source: FieldsForResult, condition: ConditionDraft): ObservedValue[] {
   const field =
     condition.kind === "attribute"
@@ -32,14 +78,16 @@ export function observedValuesFor(source: FieldsForResult, condition: ConditionD
 export function defaultConditionFor(source: FieldsForResult): ConditionDraft {
   const set = source.propertySets[0];
   if (set) {
+    const name = set.fields[0]?.name ?? "";
     return {
       id: nextDraftId("c"),
       kind: "property",
       propertySet: set.name,
-      name: set.fields[0]?.name ?? "",
+      name,
       operator: "exists",
       values: [],
       text: "",
+      dataType: dataTypeFromModel(source, set.name, name),
     };
   }
   return {
@@ -81,6 +129,7 @@ export function ConditionRow({
   onDelete,
 }: ConditionRowProps) {
   const observed = useMemo(() => observedValuesFor(source, condition), [source, condition]);
+  const dataTypeOptions = useMemo(() => dataTypeOptionsFor(source, condition), [source, condition]);
   const error = conditionProblem(condition);
 
   const nameOptions =
@@ -96,12 +145,14 @@ export function ConditionRow({
   function changeKind(kind: ConditionDraft["kind"]) {
     if (kind === "property") {
       const set = source.propertySets[0];
+      const name = set?.fields[0]?.name ?? "";
       onChange({
         ...condition,
         kind,
         propertySet: set?.name ?? null,
-        name: set?.fields[0]?.name ?? "",
+        name,
         values: [],
+        dataType: dataTypeFromModel(source, set?.name ?? null, name),
       });
       return;
     }
@@ -111,12 +162,30 @@ export function ConditionRow({
       propertySet: null,
       name: source.attributes[0]?.name ?? "Name",
       values: [],
+      // IDS declares dataType on <property> alone, so an attribute states none.
+      dataType: null,
     });
   }
 
   function changePropertySet(propertySet: string) {
     const set = source.propertySets.find((entry) => entry.name === propertySet);
-    onChange({ ...condition, propertySet, name: set?.fields[0]?.name ?? condition.name, values: [] });
+    const name = set?.fields[0]?.name ?? condition.name;
+    onChange({
+      ...condition,
+      propertySet,
+      name,
+      values: [],
+      dataType: dataTypeFromModel(source, propertySet, name),
+    });
+  }
+
+  function changeFieldName(name: string) {
+    onChange({
+      ...condition,
+      name,
+      values: [],
+      dataType: condition.kind === "property" ? dataTypeFromModel(source, condition.propertySet, name) : null,
+    });
   }
 
   return (
@@ -155,7 +224,7 @@ export function ConditionRow({
         className="tok"
         aria-label="Field name"
         value={condition.name}
-        onChange={(event) => onChange({ ...condition, name: event.target.value, values: [] })}
+        onChange={(event) => changeFieldName(event.target.value)}
       >
         {optionsWith(nameOptions, condition.name).map((option) => (
           <option key={option.value} value={option.value}>
@@ -163,6 +232,28 @@ export function ConditionRow({
           </option>
         ))}
       </select>
+
+      {condition.kind === "property" && (
+        <select
+          className="tok subtle"
+          aria-label="Stored as"
+          title="The IFC data type the property must be stored as"
+          value={condition.dataType ?? NO_DATA_TYPE}
+          onChange={(event) =>
+            onChange({
+              ...condition,
+              dataType: event.target.value === NO_DATA_TYPE ? null : event.target.value,
+            })
+          }
+        >
+          <option value={NO_DATA_TYPE}>any type</option>
+          {dataTypeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      )}
 
       <select
         aria-label="Operator"

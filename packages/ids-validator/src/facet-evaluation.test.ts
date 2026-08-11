@@ -33,10 +33,15 @@ describe("matchesApplicability", () => {
     expect(matchesApplicability(makeElement({ ifcType: "IFCDOOR" }), ["IFCWALL"])).toBe(false);
   });
 
-  it("matches a subtype against a supertype applicability entry", () => {
+  // entity-facet.md: the class "must match exactly", and "there is no automatic inheritance in IDS
+  // entity facet interpretation". IfcOpenShell's ifctester selects with include_subtypes=False.
+  // The builder expands a supertype pick into its concrete classes before writing the file, so
+  // nothing authored here depends on inheritance happening at check time.
+  it("does not match a subtype against a supertype applicability entry", () => {
     const wall = makeElement({ ifcType: "IFCWALL" });
-    expect(matchesApplicability(wall, ["IFCELEMENT"])).toBe(true);
-    expect(matchesApplicability(wall, ["IFCBUILDINGELEMENT"])).toBe(true);
+    expect(matchesApplicability(wall, ["IFCELEMENT"])).toBe(false);
+    expect(matchesApplicability(wall, ["IFCBUILDINGELEMENT"])).toBe(false);
+    expect(matchesApplicability(wall, ["IFCELEMENT", "IFCWALL"])).toBe(true);
   });
 
   it("does not match a supertype element against a subtype applicability entry", () => {
@@ -46,8 +51,14 @@ describe("matchesApplicability", () => {
   it("does not match across sibling branches", () => {
     expect(matchesApplicability(makeElement({ ifcType: "IFCDUCTSEGMENT" }), ["IFCWALL"])).toBe(false);
     expect(matchesApplicability(makeElement({ ifcType: "IFCDUCTSEGMENT" }), ["IFCFLOWSEGMENT"])).toBe(
-      true
+      false
     );
+  });
+
+  // A name outside the schema table used to fall back to a literal comparison; now every
+  // comparison is literal, so an unknown class still selects the elements that carry it.
+  it("matches a type the schema table does not know", () => {
+    expect(matchesApplicability(makeElement({ ifcType: "IFCNOTATHING" }), ["IFCNOTATHING"])).toBe(true);
   });
 });
 

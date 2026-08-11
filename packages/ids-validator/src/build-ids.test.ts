@@ -130,8 +130,80 @@ describe("buildIdsXml", () => {
 
   it("uppercases applicability entity names", () => {
     const xml = buildIdsXml(DRAFTS);
-    expect(xml).toContain("<entity><name><simpleValue>IFCELEMENT</simpleValue></name></entity>");
     expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
+  });
+
+  // IDS matches an entity name exactly, so a supertype the user picked has to reach the file as
+  // the concrete classes it stands for. IfcElement is abstract: left as written it selects nothing.
+  it("expands an authored entity type into its concrete subtypes", () => {
+    const xml = buildIdsXml(DRAFTS);
+
+    expect(xml).not.toContain("<simpleValue>IFCELEMENT</simpleValue>");
+    expect(xml).not.toContain('<xs:enumeration value="IFCELEMENT" />');
+    expect(xml).toContain('<xs:enumeration value="IFCWALL" />');
+    expect(xml).toContain('<xs:enumeration value="IFCDOOR" />');
+    // A concrete supertype names itself as well as everything below it.
+    expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
+  });
+
+  // The builder used to declare IFCLABEL on everything it wrote. The checker enforces the declared
+  // type, so on the reference model — whose NL/SfB codes are stored as IFCTEXT — that rule failed
+  // all 757 elements instead of passing 668. Only the file can say which type it holds.
+  it("declares no data type when none was chosen", () => {
+    const xml = buildIdsXml([
+      {
+        id: "r",
+        name: "Codes",
+        entityTypes: ["IfcSanitaryTerminal"],
+        conditions: [
+          {
+            id: "c",
+            kind: "property",
+            propertySet: "ASML",
+            name: "3.6 NL-SfB code",
+            operator: "exists",
+            values: [],
+            text: "",
+          },
+        ],
+      },
+    ]);
+
+    expect(xml).toContain("<property>");
+    expect(xml).not.toContain("dataType=");
+  });
+
+  it("writes the data type a condition states", () => {
+    const withType = (dataType: string | null) =>
+      buildIdsXml([
+        {
+          id: "r",
+          name: "Codes",
+          entityTypes: ["IfcSanitaryTerminal"],
+          conditions: [
+            {
+              id: "c",
+              kind: "property",
+              propertySet: "ASML",
+              name: "3.6 NL-SfB code",
+              operator: "exists",
+              values: [],
+              text: "",
+              dataType,
+            },
+          ],
+        },
+      ]);
+
+    expect(withType("IFCTEXT")).toContain('<property dataType="IFCTEXT">');
+    expect(withType(null)).toContain("<property>");
+  });
+
+  it("keeps a concrete leaf type as a single simpleValue", () => {
+    const xml = buildIdsXml([
+      { id: "r", name: "Sanitary terminals", entityTypes: ["IfcSanitaryTerminal"], conditions: [] },
+    ]);
+    expect(xml).toContain("<entity><name><simpleValue>IFCSANITARYTERMINAL</simpleValue></name></entity>");
   });
 
   // ids.xsd allows one <entity> in an applicability, so several types are one enumeration. Emitting

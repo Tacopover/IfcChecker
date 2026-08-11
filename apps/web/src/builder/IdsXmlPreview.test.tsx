@@ -35,7 +35,12 @@ describe("IdsXmlPreview", () => {
     const [specification] = parseIdsXml(xml);
 
     expect(specification.name).toBe("Walls declare a fire rating");
-    expect(specification.applicabilityEntityNames).toEqual(["IFCWALL"]);
+    // The builder writes the concrete classes the pick stands for: IDS inherits nothing.
+    expect(specification.applicabilityEntityNames).toEqual([
+      "IFCWALL",
+      "IFCWALLELEMENTEDCASE",
+      "IFCWALLSTANDARDCASE",
+    ]);
     expect(specification.requirements[0]).toMatchObject({
       kind: "property",
       propertySet: "Pset_WallCommon",

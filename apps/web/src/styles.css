@@ -1045,6 +1045,14 @@ caption {
   font-size: 11.5px;
 }
 
+/* The stored-as picker is a qualifier on the field beside it, not a step in the
+   sentence — it stays legible without competing with the operator. */
+.cond select.subtle {
+  color: var(--faint);
+  border-color: var(--border);
+  max-width: 140px;
+}
+
 .cond-score {
   margin-left: auto;
   display: flex;

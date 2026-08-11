@@ -9,8 +9,8 @@ import type { FieldsForResult } from "./introspect";
 const SOURCE: FieldsForResult = {
   total: 10,
   attributes: [
-    { name: "Tag", propertySet: null, hits: 9, coverage: 0.9, values: [{ value: "W-1", count: 1 }] },
-    { name: "Name", propertySet: null, hits: 10, coverage: 1, values: [{ value: "Wall", count: 10 }] },
+    { name: "Tag", propertySet: null, hits: 9, coverage: 0.9, values: [{ value: "W-1", count: 1 }], dataTypes: [] },
+    { name: "Name", propertySet: null, hits: 10, coverage: 1, values: [{ value: "Wall", count: 10 }], dataTypes: [] },
   ],
   propertySets: [
     {
@@ -25,14 +25,33 @@ const SOURCE: FieldsForResult = {
             { value: "60", count: 5 },
             { value: "90", count: 3 },
           ],
+          dataTypes: [{ value: "IFCLABEL", count: 8 }],
         },
-        { name: "Status", propertySet: "Pset_WallCommon", hits: 10, coverage: 1, values: [] },
+        // Stored two ways, so nothing can be declared without failing the other half.
+        {
+          name: "Status",
+          propertySet: "Pset_WallCommon",
+          hits: 10,
+          coverage: 1,
+          values: [],
+          dataTypes: [
+            { value: "IFCTEXT", count: 7 },
+            { value: "IFCLABEL", count: 3 },
+          ],
+        },
       ],
     },
     {
       name: "MEP_Data",
       fields: [
-        { name: "SystemAbbreviation", propertySet: "MEP_Data", hits: 4, coverage: 0.4, values: [] },
+        {
+          name: "SystemAbbreviation",
+          propertySet: "MEP_Data",
+          hits: 4,
+          coverage: 0.4,
+          values: [],
+          dataTypes: [{ value: "IFCIDENTIFIER", count: 4 }],
+        },
       ],
     },
   ],
@@ -46,6 +65,8 @@ const CONDITION: ConditionDraft = {
   operator: "exists",
   values: [],
   text: "",
+  // What the builder now writes when the field is picked: the type the model reports.
+  dataType: "IFCLABEL",
 };
 
 function Harness({
@@ -212,6 +233,71 @@ describe("ConditionRow", () => {
   });
 });
 
+describe("the stored-as picker", () => {
+  // A declared type the model does not hold fails every element, silently. Declaring IFCLABEL on
+  // everything cost 668 passing elements on the reference model, so the type has to come from the
+  // file and the user has to be able to see and change it.
+  it("offers the types the model stores the property as, with counts", () => {
+    render(<Harness />);
+
+    const picker = screen.getByLabelText("Stored as");
+    expect(picker).toHaveValue("IFCLABEL");
+    expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
+      "any type",
+      "IFCLABEL (8)",
+    ]);
+  });
+
+  it("lets the user declare no type at all", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.selectOptions(screen.getByLabelText("Stored as"), "");
+    expect(screen.getByLabelText("Stored as")).toHaveValue("");
+  });
+
+  it("declares nothing for a property the model stores two ways", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.selectOptions(screen.getByLabelText("Field name"), "Status");
+    const picker = screen.getByLabelText("Stored as");
+    expect(picker).toHaveValue("");
+    expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
+      "any type",
+      "IFCTEXT (7)",
+      "IFCLABEL (3)",
+    ]);
+  });
+
+  it("follows the property set to the type the new field is stored as", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.selectOptions(screen.getByLabelText("Property set"), "MEP_Data");
+    expect(screen.getByLabelText("Stored as")).toHaveValue("IFCIDENTIFIER");
+  });
+
+  // IDS declares dataType on <property> alone.
+  it("is absent for an attribute", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.selectOptions(screen.getByLabelText("Condition kind"), "attribute");
+    expect(screen.queryByLabelText("Stored as")).toBeNull();
+  });
+
+  it("keeps an imported type selectable when this model holds nothing stored that way", () => {
+    render(<Harness initial={{ ...CONDITION, dataType: "IFCBOOLEAN" }} />);
+
+    const picker = screen.getByLabelText("Stored as");
+    expect(picker).toHaveValue("IFCBOOLEAN");
+    expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toContain(
+      "IFCBOOLEAN (not in file)"
+    );
+  });
+});
+
 describe("defaultConditionFor", () => {
   it("points at the first property set of the selection", () => {
     expect(defaultConditionFor(SOURCE)).toMatchObject({
@@ -219,6 +305,7 @@ describe("defaultConditionFor", () => {
       propertySet: "Pset_WallCommon",
       name: "FireRating",
       operator: "exists",
+      dataType: "IFCLABEL",
     });
   });
 

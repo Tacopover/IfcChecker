@@ -5,6 +5,7 @@ import type {
   ParsedSpecification,
 } from "./parse-ids.js";
 import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
+import { concreteTypeNamesFor } from "./ifc-type-hierarchy.js";
 
 export type ConditionOperator =
   | "exists"
@@ -25,9 +26,10 @@ export interface ConditionDraft {
   values: string[]; // used by oneOf
   text: string; // used by equals/contains/startsWith/endsWith/matches
   /**
-   * Property data type, carried from an imported file. `undefined` means the builder authored this
-   * condition and the default applies; `null` means the source deliberately omitted the attribute,
-   * which must be re-emitted as an omission rather than as the default.
+   * The IFC data type the property must be stored as, e.g. `IFCTEXT`. `null` declares none, which
+   * IDS reads as "do not check the stored type"; `undefined` means nothing was chosen and
+   * `BUILDER_PROPERTY_DATA_TYPE` applies. An imported condition always states one of the first two,
+   * so an omission in the source comes back out as an omission.
    */
   dataType?: string | null;
   /**
@@ -43,6 +45,14 @@ export interface PassThrough {
   afterIndex: number;
   /** The construct in the source document's own vocabulary, e.g. `classification`. */
   construct: string;
+  /**
+   * Why the builder could not show it, one specific sentence. Absent on a whole specification
+   * kept verbatim, where the reasons are carried per construct on `RefusedSpecification`.
+   *
+   * The tag name alone tells the user a facet was kept; it does not tell them the rule in front of
+   * them checks less than it looks like it does.
+   */
+  reason?: string;
   xml: string;
 }
 
@@ -80,8 +90,36 @@ export interface RuleDraft {
   imported?: ImportedRuleSource;
 }
 
-/** Every property facet we emit is a plain label; richer data types are out of scope for the builder. */
-export const BUILDER_PROPERTY_DATA_TYPE = "IFCLABEL";
+/**
+ * The data type a property facet declares when the builder has none to state.
+ *
+ * `null` means the `dataType` attribute is omitted, which IDS reads as "do not check the stored
+ * type". Declaring one the model does not hold fails every element, and the builder used to
+ * declare `IFCLABEL` on everything it wrote: on the reference 37 MB model, whose NL/SfB codes are
+ * stored as `IFCTEXT`, that turned 668 passing elements into 757 failing ones. A type is only
+ * honest when it comes from the file, so the builder states one only where the model reports it.
+ */
+export const BUILDER_PROPERTY_DATA_TYPE: string | null = null;
+
+/**
+ * The entity names a rule's applicability facet states.
+ *
+ * IDS matches an entity name exactly and inherits nothing, so a rule the builder authors is
+ * expanded: the user picks `IfcElement` from the explorer rail and the file names all 137 concrete
+ * classes below it. Without that, an abstract pick selects nothing and a supertype pick quietly
+ * checks less than the tree it was chosen from shows.
+ *
+ * Expansion is for authored rules only. An imported rule keeps the author's own list, because
+ * rewriting someone else's document is the thing the import work exists not to do — and because a
+ * file that names an abstract class is honestly reported as selecting nothing, which is what any
+ * other conforming checker does with it.
+ */
+export function applicabilityEntityNamesOf(rule: RuleDraft): string[] {
+  const names = rule.imported
+    ? rule.entityTypes.map((entityType) => entityType.trim().toUpperCase())
+    : rule.entityTypes.flatMap(concreteTypeNamesFor);
+  return [...new Set(names)];
+}
 
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -148,7 +186,7 @@ export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
       rule.imported?.applicabilityAttributes.minOccurs,
       rule.imported?.applicabilityAttributes.maxOccurs
     ),
-    applicabilityEntityNames: rule.entityTypes.map((entityType) => entityType.toUpperCase()),
+    applicabilityEntityNames: applicabilityEntityNamesOf(rule),
     requirements: rule.conditions.map(compileCondition),
     // Authored rules can say nothing the builder cannot; imported ones carry what it could not read.
     unsupported: (rule.imported?.passThrough ?? []).map((entry) => ({
