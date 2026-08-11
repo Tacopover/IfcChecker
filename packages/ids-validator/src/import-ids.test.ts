@@ -345,6 +345,66 @@ describe("idsXmlToDrafts classification", () => {
   });
 });
 
+describe("idsXmlToDrafts partOf", () => {
+  it("reads the nested entity and keeps the relation attribute as written", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<partOf relation="IFCRELAGGREGATES"><entity><name><simpleValue>IFCBUILDINGSTOREY</simpleValue></name></entity></partOf>`
+        )
+      )
+    ).toMatchObject({
+      kind: "partOf",
+      relation: "IFCRELAGGREGATES",
+      entityName: { kind: "simple", value: "IFCBUILDINGSTOREY" },
+      predefinedType: null,
+      cardinality: "required",
+    });
+  });
+
+  // One member of the schema's relations enumeration is two names in a single attribute value, so
+  // the draft keeps the attribute rather than a split list. compileFacet splits.
+  it("keeps a two-name relation as the one attribute the author wrote", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<partOf relation="IFCRELVOIDSELEMENT IFCRELFILLSELEMENT"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></partOf>`
+        )
+      )
+    ).toMatchObject({ kind: "partOf", relation: "IFCRELVOIDSELEMENT IFCRELFILLSELEMENT" });
+  });
+
+  it("reads the whole's predefined type, and a relation the source omitted as none", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<partOf><entity><name><simpleValue>IFCSPACE</simpleValue></name><predefinedType><simpleValue>INTERNAL</simpleValue></predefinedType></entity></partOf>`
+        )
+      )
+    ).toMatchObject({
+      kind: "partOf",
+      relation: null,
+      predefinedType: { kind: "simple", value: "INTERNAL" },
+    });
+  });
+
+  // simpleCardinality has no `optional`, so reading it as one of the other two would answer a
+  // question the author never asked.
+  it.each(["prohibited", "optional"])("handles cardinality=%s the way ids.xsd defines it", (stated) => {
+    const xml = withRequirements(
+      `<partOf cardinality="${stated}"><entity><name><simpleValue>IFCSPACE</simpleValue></name></entity></partOf>`
+    );
+
+    if (stated === "prohibited") {
+      expect(onlyFacet(xml)).toMatchObject({ kind: "partOf", cardinality: "prohibited" });
+      return;
+    }
+    const rule = onlyRule(idsXmlToDrafts(xml));
+    expect(rule.conditions).toEqual([]);
+    expect(rule.imported?.passThrough[0].reason).toMatch(/ids\.xsd does not give this facet/);
+  });
+});
+
 describe("idsXmlToDrafts pass-through", () => {
   it.each([
     [

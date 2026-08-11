@@ -8,8 +8,10 @@ import type {
   FacetDraft,
   ImportedRuleSource,
   LengthDraft,
+  PartOfFacetDraft,
   PassThrough,
   RuleDraft,
+  SimpleCardinality,
   ValueDraft,
 } from "./rule-draft.js";
 import { patternValueDraft } from "./rule-draft.js";
@@ -320,6 +322,7 @@ const FACET_ATTRIBUTES: Record<string, string[]> = {
   attribute: ["@_cardinality", "@_instructions"],
   property: ["@_cardinality", "@_dataType", "@_uri", "@_instructions"],
   classification: ["@_cardinality", "@_uri", "@_instructions"],
+  partOf: ["@_cardinality", "@_relation", "@_instructions"],
 };
 
 /** Child elements a facet may carry and still be fully representable. */
@@ -327,7 +330,11 @@ const FACET_CHILDREN: Record<string, string[]> = {
   attribute: ["name", "value"],
   property: ["propertySet", "baseName", "value"],
   classification: ["value", "system"],
+  partOf: ["entity"],
 };
+
+/** What an `entityType` element holds, wherever `ids.xsd` nests one. */
+const ENTITY_CHILDREN = ["name", "predefinedType"];
 
 /**
  * Whether the source states one of the three cardinalities `ids.xsd` gives an attribute or a
@@ -340,6 +347,17 @@ const FACET_CHILDREN: Record<string, string[]> = {
  */
 function isConditionalCardinality(value: string): value is ConditionalCardinality {
   return value === "required" || value === "optional" || value === "prohibited";
+}
+
+/**
+ * Whether the source states one of the two cardinalities `ids.xsd` gives a `partOf`.
+ *
+ * `simpleCardinality` has no `optional`, so a `cardinality="optional"` on a partOf is a document
+ * the schema does not describe. Reading it as one of the other two would answer a question the
+ * author did not ask.
+ */
+function isSimpleCardinality(value: string): value is SimpleCardinality {
+  return value === "required" || value === "prohibited";
 }
 
 /**
@@ -406,9 +424,70 @@ function readFacet(node: OrderedNode): FacetDraft | FacetRefusal {
       return readSlotFacet(node, tag);
     case "classification":
       return readClassificationFacet(node);
+    case "partOf":
+      return readPartOfFacet(node);
     default:
       return refused(`The builder cannot show a <${tag ?? "this facet"}> requirement.`);
   }
+}
+
+/**
+ * The two parameters an `entityType` element states, wherever `ids.xsd` nests one.
+ *
+ * `<name>` is mandatory and the drafts that hold one type it as a plain `ValueDraft`, so a nameless
+ * entity is kept verbatim rather than imported as an entity that requires nothing.
+ */
+function readNestedEntity(
+  entityNode: OrderedNode,
+  where: string
+): { name: ValueDraft; predefinedType: ValueDraft | null } | FacetRefusal {
+  const children = childrenOf(entityNode);
+  const unknownChild = elementsOf(children).find(
+    (child) => !ENTITY_CHILDREN.includes(tagOf(child) ?? "")
+  );
+  if (unknownChild !== undefined) {
+    return refused(`Its ${where} carries <${tagOf(unknownChild)}>, which the builder cannot show.`);
+  }
+
+  const name = readValueDraft(children, "name");
+  if ("refused" in name) return name;
+  if (name.value === null) {
+    return refused(`Its ${where} names no IFC class, so what it requires is unknown.`);
+  }
+
+  const predefinedType = readValueDraft(children, "predefinedType");
+  if ("refused" in predefinedType) return predefinedType;
+
+  return { name: name.value, predefinedType: predefinedType.value };
+}
+
+function readPartOfFacet(node: OrderedNode): PartOfFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "partOf");
+  if ("refused" in shell) return shell;
+  if (shell.stated !== null && !isSimpleCardinality(shell.stated)) {
+    return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
+  }
+
+  const entityNode = findChild(childrenOf(node), "entity");
+  if (!entityNode) {
+    return refused("States no <entity>, so the whole it must be part of is unknown.");
+  }
+  const entity = readNestedEntity(entityNode, "<entity>");
+  if ("refused" in entity) return entity;
+
+  return {
+    id: shell.id,
+    kind: "partOf",
+    // The source attribute verbatim: one member of the schema's enumeration is two relationship
+    // names in a single value, so splitting here would leave the exporter guessing how to join
+    // them back. `compileFacet` splits.
+    relation: attributeOrNull(node, "relation"),
+    entityName: entity.name,
+    predefinedType: entity.predefinedType,
+    cardinality: shell.stated ?? "required",
+    explicitCardinality: shell.explicitCardinality,
+    instructions: shell.instructions,
+  };
 }
 
 /** The two facets that name one value slot on the element and constrain what it holds. */
