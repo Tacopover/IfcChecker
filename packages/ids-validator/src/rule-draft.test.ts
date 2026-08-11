@@ -180,7 +180,9 @@ describe("compileDraft", () => {
         kind: "property",
         propertySet: "MEP_Data",
         baseName: "SystemAbbreviation",
-        dataType: "IFCLABEL",
+        // Nothing was chosen, so nothing is declared: a dataType the model does not hold fails
+        // every element, and only the file can say which one it holds.
+        dataType: null,
         restriction: null,
         cardinality: "required",
       },

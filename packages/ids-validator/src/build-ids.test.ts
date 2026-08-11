@@ -146,6 +146,59 @@ describe("buildIdsXml", () => {
     expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
   });
 
+  // The builder used to declare IFCLABEL on everything it wrote. The checker enforces the declared
+  // type, so on the reference model — whose NL/SfB codes are stored as IFCTEXT — that rule failed
+  // all 757 elements instead of passing 668. Only the file can say which type it holds.
+  it("declares no data type when none was chosen", () => {
+    const xml = buildIdsXml([
+      {
+        id: "r",
+        name: "Codes",
+        entityTypes: ["IfcSanitaryTerminal"],
+        conditions: [
+          {
+            id: "c",
+            kind: "property",
+            propertySet: "ASML",
+            name: "3.6 NL-SfB code",
+            operator: "exists",
+            values: [],
+            text: "",
+          },
+        ],
+      },
+    ]);
+
+    expect(xml).toContain("<property>");
+    expect(xml).not.toContain("dataType=");
+  });
+
+  it("writes the data type a condition states", () => {
+    const withType = (dataType: string | null) =>
+      buildIdsXml([
+        {
+          id: "r",
+          name: "Codes",
+          entityTypes: ["IfcSanitaryTerminal"],
+          conditions: [
+            {
+              id: "c",
+              kind: "property",
+              propertySet: "ASML",
+              name: "3.6 NL-SfB code",
+              operator: "exists",
+              values: [],
+              text: "",
+              dataType,
+            },
+          ],
+        },
+      ]);
+
+    expect(withType("IFCTEXT")).toContain('<property dataType="IFCTEXT">');
+    expect(withType(null)).toContain("<property>");
+  });
+
   it("keeps a concrete leaf type as a single simpleValue", () => {
     const xml = buildIdsXml([
       { id: "r", name: "Sanitary terminals", entityTypes: ["IfcSanitaryTerminal"], conditions: [] },

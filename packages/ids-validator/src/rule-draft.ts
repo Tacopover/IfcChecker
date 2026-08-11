@@ -26,9 +26,10 @@ export interface ConditionDraft {
   values: string[]; // used by oneOf
   text: string; // used by equals/contains/startsWith/endsWith/matches
   /**
-   * Property data type, carried from an imported file. `undefined` means the builder authored this
-   * condition and the default applies; `null` means the source deliberately omitted the attribute,
-   * which must be re-emitted as an omission rather than as the default.
+   * The IFC data type the property must be stored as, e.g. `IFCTEXT`. `null` declares none, which
+   * IDS reads as "do not check the stored type"; `undefined` means nothing was chosen and
+   * `BUILDER_PROPERTY_DATA_TYPE` applies. An imported condition always states one of the first two,
+   * so an omission in the source comes back out as an omission.
    */
   dataType?: string | null;
   /**
@@ -81,8 +82,16 @@ export interface RuleDraft {
   imported?: ImportedRuleSource;
 }
 
-/** Every property facet we emit is a plain label; richer data types are out of scope for the builder. */
-export const BUILDER_PROPERTY_DATA_TYPE = "IFCLABEL";
+/**
+ * The data type a property facet declares when the builder has none to state.
+ *
+ * `null` means the `dataType` attribute is omitted, which IDS reads as "do not check the stored
+ * type". Declaring one the model does not hold fails every element, and the builder used to
+ * declare `IFCLABEL` on everything it wrote: on the reference 37 MB model, whose NL/SfB codes are
+ * stored as `IFCTEXT`, that turned 668 passing elements into 757 failing ones. A type is only
+ * honest when it comes from the file, so the builder states one only where the model reports it.
+ */
+export const BUILDER_PROPERTY_DATA_TYPE: string | null = null;
 
 /**
  * The entity names a rule's applicability facet states.
