@@ -63,6 +63,23 @@ function normalize(nodes: Node[]): unknown[] {
   return out;
 }
 
+interface Normalized {
+  tag: string;
+  attributes: Record<string, string>;
+  children: Normalized[];
+}
+
+/** How many facet elements each specification's `<requirements>` holds, counted from the source. */
+function sourceFacetCounts(idsXml: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const specification of structure(idsXml) as Normalized[]) {
+    if (specification.tag !== "specification") continue;
+    const requirements = specification.children.find((child) => child.tag === "requirements");
+    counts.set(specification.attributes["@_name"] ?? "", requirements?.children.length ?? 0);
+  }
+  return counts;
+}
+
 /** The `<specifications>` subtree, which is everything a re-export has to reproduce exactly. */
 function structure(idsXml: string): unknown[] {
   const root = structureParser.parse(idsXml) as Node[];
@@ -107,6 +124,23 @@ describe("import / export round-trip", () => {
       "Classified elements are named",
       "Some storey must exist",
     ]);
+  });
+
+  // The one way this import could produce a false pass: a facet read into the model and then not
+  // compiled would leave `passThrough` without joining the rule's conditions, and `isEvaluable`
+  // would call a specification checked when part of it is not. Counted against the source itself,
+  // because both readers refuse things and neither is the authority on how many facets there were.
+  it.each(FIXTURES)("reads or keeps every requirement facet in %s, and loses none", (name) => {
+    const source = fixture(name);
+    const { rules } = idsXmlToDrafts(source);
+    const counts = sourceFacetCounts(source);
+
+    for (const rule of rules) {
+      expect(
+        rule.conditions.length + (rule.imported?.passThrough.length ?? 0),
+        `facet count for ${rule.name}`
+      ).toBe(counts.get(rule.name));
+    }
   });
 
   it("still exports a rule the builder authored from scratch as plain IFC4", () => {

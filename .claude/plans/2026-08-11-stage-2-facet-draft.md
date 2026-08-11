@@ -281,9 +281,58 @@ one way this refactor could produce a false pass.
 
 ## Open, and worth deciding before C4
 
-1. **Does `instructions` get a control, or only a display, in stage 2?** Carrying it through the
-   model is what claims the 67 facets. Editing it is stage 5 (metadata). A read-only line on the
-   facet row is enough for stage 2 and keeps the row from growing a text box per facet.
+1. **Does `instructions` get a control, or only a display, in stage 2?** — **decided: display.**
+   A read-only line on the row, landed alongside C4. Editing it belongs with the facet-authoring
+   surface, not with a refactor commit.
 2. **The 12 permanent pass-throughs** (`<name>` 7, `measure` 5) should get a reason that says "not
-   in IDS 1.0, kept verbatim on purpose" rather than one implying a capability is coming. Cheap,
-   and it belongs in C1 with the other message splits.
+   in IDS 1.0, kept verbatim on purpose" rather than one implying a capability is coming. **Still
+   open** — now 13, since one more `<name>` surfaced under a removed reason in C4.
+
+---
+
+## Landed and measured — 2026-08-11
+
+| | commit | conformance | round-trip | pass-through | predicted |
+| --- | --- | --- | --- | --- | --- |
+| **C1** | `ValueDraft` replaces the operator triple | 302 | 7,784 | **279** | 279 ✓ |
+| **C2** | cardinality orthogonal to value | 302 | 7,784 | **273** | 273 ✓ |
+| **C3** | the importer reads bounds | 302 | 7,784 | **255** | 255 ✓ |
+| **C4** | `instructions`, and `uri` | 302 | 7,784 | **191** | 183 ✗ |
+| **C5** | the union widens to six facets | 302 | 7,784 | **191** | 191 ✓ |
+
+Conformance never moved: 302 agreed / 18 wrong / 14 refused / 0 errored, at every commit. Corpus
+reproduced 7,784 / 7,784 with 0 drifted and schema-invalid out held at 3, at every commit.
+
+**C4 is the one miss, and first-reason-wins is why** — exactly as the section above predicted it
+would be. 72 reasons went away and 8 facets turned out to carry a second one underneath: 7 name
+their property set or property with a pattern, 1 carries a `<name>` child. Nothing was lost; the
+reasons were always there, hidden behind the one `readFacet` reported first.
+
+### Four departures from the plan as written
+
+- **`ValueDraft` has five variants, not four.** `affix` stores a friendly operator and its literal.
+  Without it, `contains` with an empty box compiles to `.*.*`, reads back as `matches`, and the
+  select moves as the user clears the field. Storing the operator beside the value is what the plan
+  forbids; React local state puts the incomplete row out of `exportBlockers`' reach, which is how an
+  empty `oneOf` gets caught before it exports as "accepts anything".
+- **`bounds` carries a `base`.** Measured before writing the reader: of 71 bound-carrying
+  restrictions in the corpus, 63 are `xs:double`, 4 `xs:integer`, and 6 use a capitalised
+  `xs:Decimal` or `xs:Integer` that no XSD type has. Assuming one would rewrite 8 authors' files.
+- **`partOf` stores `relation`, the source attribute, not the split list.** One member of the
+  schema's enumeration is two names in a single value, so splitting on storage leaves the exporter
+  guessing how to join them. `compileFacet` splits.
+- **D5 was wrong: the read-only row for the four new kinds landed in C5, not stage 4.** Widening
+  `RuleDraft.conditions` makes `RuleCard` cope with all six or not compile, and a facet that
+  vanished from a rule still checking it is the loss D5 was written to avoid. The row is the same
+  bet C1 made with `unshownValue`, one stage earlier than planned.
+
+### What stage 2 did not take
+
+- **`name` and `propertySet` are still plain strings, not `ValueDraft`.** That is the
+  pattern-valued-name work: it moves numbers (15 property + 4 attribute facets), and it was
+  deliberately out of scope.
+- **`length` has no variant.** `ParsedRestriction` has none to compile into. Cost of waiting,
+  measured: 6 corpus facets.
+- **The conservation assertion is now pinned**, in `import-ids.roundtrip.test.ts` over the fixtures
+  and in `corpus-roundtrip.mjs` over all 7,784 files: every requirement facet is either shown or
+  kept verbatim, never neither. It reports **0** files losing a facet.
