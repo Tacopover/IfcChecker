@@ -1,10 +1,10 @@
 {
-  "generated": "2026-08-10",
+  "generated": "2026-08-11",
   "totals": {
     "cases": 334,
-    "agreed": 275,
-    "wrong": 16,
-    "refused": 43,
+    "agreed": 299,
+    "wrong": 21,
+    "refused": 14,
     "errored": 0
   },
   "groups": {
@@ -24,9 +24,9 @@
     },
     "entity": {
       "total": 33,
-      "agreed": 2,
-      "wrong": 2,
-      "refused": 29,
+      "agreed": 26,
+      "wrong": 7,
+      "refused": 0,
       "errored": 0
     },
     "ids": {
@@ -146,8 +146,32 @@
     "classification/pass-systems_should_match_exactly_5_5",
     "classification/pass-values_match_subreferences_if_full_classifications_are_used__e_g__ef_25_10_should_match_ef_25_10_25__ef_25_10_30__etc_",
     "classification/pass-values_should_match_exactly_if_lightweight_classifications_are_used",
+    "entity/fail-a_null_predefined_type_should_always_fail_a_specified_predefined_types",
+    "entity/fail-a_predefined_type_from_an_enumeration_must_be_uppercase",
+    "entity/fail-an_entity_not_matching_a_specified_predefined_type_will_fail",
+    "entity/fail-in_ifc2x3_a_user_defined_airterminal_predefined_type_resolves_via_the_type_mapping_table_2_2",
     "entity/fail-in_ifc2x3_an_airterminal_can_be_checked_by_name_via_the_type_mapping_table_2_2",
+    "entity/fail-in_ifc2x3_an_airterminal_predefined_type_resolves_via_the_type_mapping_table_2_2",
     "entity/fail-in_ifc2x3_there_must_be_an_airterminal_per_the_type_mapping_table_2_2",
+    "entity/fail-restrictions_can_be_specified_for_the_predefined_type_3_3",
+    "entity/fail-user_defined_types_are_checked_case_sensitively",
+    "entity/invalid-an_entity_not_matching_the_specified_class_should_fail",
+    "entity/invalid-entities_can_be_specified_as_a_xsd_regex_pattern_1_2",
+    "entity/invalid-entities_can_be_specified_as_an_enumeration_3_3",
+    "entity/invalid-entities_must_be_specified_as_uppercase_strings",
+    "entity/invalid-invalid_entities_always_fail",
+    "entity/invalid-subclasses_are_not_considered_as_matching",
+    "entity/pass-a_matching_entity_should_pass",
+    "entity/pass-a_matching_predefined_type_should_pass",
+    "entity/pass-a_predefined_type_may_specify_a_user_defined_element_type",
+    "entity/pass-a_predefined_type_may_specify_a_user_defined_object_type",
+    "entity/pass-an_matching_entity_should_pass_regardless_of_predefined_type",
+    "entity/pass-entities_can_be_specified_as_a_xsd_regex_pattern_2_2",
+    "entity/pass-entities_can_be_specified_as_an_enumeration_1_3",
+    "entity/pass-entities_can_be_specified_as_an_enumeration_2_3",
+    "entity/pass-overridden_predefined_types_should_pass",
+    "entity/pass-restrictions_can_be_specified_for_the_predefined_type_1_3",
+    "entity/pass-restrictions_can_be_specified_for_the_predefined_type_2_3",
     "ids/fail-a_minimal_ids_can_check_a_minimal_ifc_1_2",
     "ids/fail-a_specification_passes_only_if_all_requirements_pass_1_2",
     "ids/fail-prohibited_specifications_fails_if_the_applicability_matches",
@@ -411,142 +435,16 @@
       "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
-      "case": "entity/fail-a_null_predefined_type_should_always_fail_a_specified_predefined_types",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/fail-a_predefined_type_from_an_enumeration_must_be_uppercase",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/fail-an_entity_not_matching_a_specified_predefined_type_will_fail",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/fail-in_ifc2x3_a_user_defined_airterminal_predefined_type_resolves_via_the_type_mapping_table_2_2",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/fail-in_ifc2x3_an_airterminal_predefined_type_resolves_via_the_type_mapping_table_2_2",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/fail-restrictions_can_be_specified_for_the_predefined_type_3_3",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/fail-user_defined_types_are_checked_case_sensitively",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/invalid-an_entity_not_matching_the_specified_class_should_fail",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/invalid-entities_can_be_specified_as_a_xsd_regex_pattern_1_2",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/invalid-entities_can_be_specified_as_an_enumeration_3_3",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/invalid-entities_must_be_specified_as_uppercase_strings",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/invalid-invalid_entities_always_fail",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/invalid-subclasses_are_not_considered_as_matching",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-a_matching_entity_should_pass",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-a_matching_predefined_type_should_pass",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-a_predefined_type_may_specify_a_user_defined_element_type",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-a_predefined_type_may_specify_a_user_defined_object_type",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
       "case": "entity/pass-a_predefined_type_may_specify_a_user_defined_process_type",
       "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-an_matching_entity_should_pass_regardless_of_predefined_type",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-entities_can_be_specified_as_a_xsd_regex_pattern_2_2",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-entities_can_be_specified_as_an_enumeration_1_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-entities_can_be_specified_as_an_enumeration_2_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
       "case": "entity/pass-in_ifc2x3_a_user_defined_airterminal_predefined_type_resolves_via_the_type_mapping_table_1_2",
       "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
+      "actual": "fail",
+      "detail": "0 applicable, 0 passed, 0 failed (This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.)"
     },
     {
       "case": "entity/pass-in_ifc2x3_an_airterminal_can_be_checked_by_name_via_the_type_mapping_table_1_2",
@@ -557,8 +455,8 @@
     {
       "case": "entity/pass-in_ifc2x3_an_airterminal_predefined_type_resolves_via_the_type_mapping_table_1_2",
       "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
+      "actual": "fail",
+      "detail": "0 applicable, 0 passed, 0 failed (This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.)"
     },
     {
       "case": "entity/pass-in_ifc2x3_there_must_be_an_airterminal_per_the_type_mapping_table_1_2",
@@ -569,32 +467,14 @@
     {
       "case": "entity/pass-inherited_predefined_types_should_pass",
       "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-overridden_predefined_types_should_pass",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-restrictions_can_be_specified_for_the_predefined_type_1_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
-    },
-    {
-      "case": "entity/pass-restrictions_can_be_specified_for_the_predefined_type_2_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
       "case": "entity/pass-userdefined_predefined_types_may_be_specified",
       "expected": "pass",
-      "actual": "refused",
-      "detail": "entity"
+      "actual": "fail",
+      "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
       "case": "property/fail-all_matching_properties_must_satisfy_requirements_3_3",

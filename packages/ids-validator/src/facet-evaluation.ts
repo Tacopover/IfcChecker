@@ -9,6 +9,7 @@ import type {
   ParsedAttributeFacet,
   ParsedBound,
   ParsedClassificationFacet,
+  ParsedEntityFacet,
   ParsedMaterialFacet,
   ParsedPartOfFacet,
   ParsedPropertyFacet,
@@ -443,6 +444,48 @@ function evaluatePartOf(element: NormalizedElement, facet: ParsedPartOfFacet): F
     : { passed: false, message: `Element is not ${partOfLabel(facet)}` };
 }
 
+/**
+ * Whether the element is the class — and, where stated, carries the predefined type — the facet
+ * requires.
+ *
+ * The class name is matched **exactly**, not by subtype. `entity-facet.md` says it outright:
+ * "There is no automatic inheritance in IDS entity facet interpretation … all the entities need to
+ * be listed explicitly", and the suite pins it from the failing side — an `IfcWallStandardCase`
+ * does not satisfy a requirement naming `IFCWALL`. This is the same rule partOf follows.
+ *
+ * The comparison is also **case-sensitive**, against the uppercase name both adapters report. IDS
+ * requires an entity name to be written in upper case, so `IfcWall` names no class at all and a
+ * lenient match would approve a document the suite states must fail. The same holds for a
+ * user-defined predefined type: `waldo` is not `WALDO`.
+ *
+ * A stated predefined type is never satisfied by an element that has none — "unstated" is not a
+ * value that can match one.
+ */
+function evaluateEntity(element: NormalizedElement, facet: ParsedEntityFacet): FacetCheckResult {
+  if (!admitsString(facet.name, element.ifcType)) {
+    return {
+      passed: false,
+      message: `Element is an ${element.ifcType}, but the specification requires ${restrictionLabel(facet.name)}`,
+    };
+  }
+
+  if (facet.predefinedType === null) return { passed: true, message: "" };
+
+  const predefinedType = element.predefinedType;
+  if (predefinedType === null) {
+    return {
+      passed: false,
+      message: `Element has no predefined type, but ${restrictionLabel(facet.predefinedType)} is required`,
+    };
+  }
+  return admitsString(facet.predefinedType, predefinedType)
+    ? { passed: true, message: "" }
+    : {
+        passed: false,
+        message: `Element has predefined type "${predefinedType}", but the specification requires ${restrictionLabel(facet.predefinedType)}`,
+      };
+}
+
 export function evaluateRequirement(
   element: NormalizedElement,
   facet: ParsedRequirementFacet,
@@ -452,6 +495,7 @@ export function evaluateRequirement(
   if (facet.kind === "classification") return evaluateClassification(element, facet);
   if (facet.kind === "material") return evaluateMaterial(element, facet);
   if (facet.kind === "partOf") return evaluatePartOf(element, facet);
+  if (facet.kind === "entity") return evaluateEntity(element, facet);
 
   const slot = readFacetValue(element, facet);
   const filledIn = isFilledIn(slot);

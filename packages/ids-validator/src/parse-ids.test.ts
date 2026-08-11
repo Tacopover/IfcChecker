@@ -130,7 +130,10 @@ describe("parseIdsXml", () => {
       )
     );
 
-    expect(spec.requirements.map((facet) => facet.cardinality)).toEqual([
+    // "cardinality" in facet, because an entity requirement is the one facet ids.xsd gives none.
+    expect(
+      spec.requirements.map((facet) => ("cardinality" in facet ? facet.cardinality : null))
+    ).toEqual([
       "prohibited",
       "prohibited",
       "required",
@@ -257,7 +260,8 @@ describe("parseIdsXml", () => {
       </attribute>`)
     );
 
-    expect(spec.requirements[0].cardinality).toBe("optional");
+    const [facet] = spec.requirements;
+    expect("cardinality" in facet && facet.cardinality).toBe("optional");
     expect(spec.unsupported).toEqual([]);
   });
 
@@ -277,6 +281,57 @@ describe("parseIdsXml", () => {
 
   it("returns an empty list for a document with no specifications", () => {
     expect(parseIdsXml("<ids><specifications></specifications></ids>")).toEqual([]);
+  });
+});
+
+describe("parseIdsXml — a requirement-side entity", () => {
+  it("reads the name and the predefined type, and gives the facet no cardinality", () => {
+    const [spec] = parseIdsXml(
+      specificationXml(`<entity>
+        <name><simpleValue>IFCWALL</simpleValue></name>
+        <predefinedType><simpleValue>SOLIDWALL</simpleValue></predefinedType>
+      </entity>`)
+    );
+
+    expect(spec.requirements).toEqual([
+      {
+        kind: "entity",
+        name: { kind: "exact", value: "IFCWALL" },
+        predefinedType: { kind: "exact", value: "SOLIDWALL" },
+      },
+    ]);
+    expect(spec.unsupported).toEqual([]);
+    expect(isEvaluable(spec)).toBe(true);
+  });
+
+  // A pattern names an open-ended set of classes, which an applicability cannot enumerate and so
+  // refuses. A requirement only ever asks about the element in hand, so it is fully understood.
+  it("reads a name given as a pattern, unlike an applicability entity", () => {
+    const [spec] = parseIdsXml(
+      specificationXml(`<entity>
+        <name><xs:restriction base="xs:string"><xs:pattern value="IFC.*TYPE" /></xs:restriction></name>
+      </entity>`)
+    );
+
+    const [facet] = spec.requirements;
+    expect(facet.kind).toBe("entity");
+    expect(facet.kind === "entity" && facet.name.kind).toBe("pattern");
+    expect(spec.unsupported).toEqual([]);
+    expect(isEvaluable(spec)).toBe(true);
+  });
+
+  it("refuses the specification when the entity states no readable name", () => {
+    const [spec] = parseIdsXml(specificationXml(`<entity><name /></entity>`));
+
+    expect(spec.requirements).toEqual([]);
+    expect(spec.unsupported).toEqual([
+      {
+        section: "requirements",
+        construct: "entity/name",
+        description: "States no readable entity name, so the class it requires is unknown.",
+      },
+    ]);
+    expect(isEvaluable(spec)).toBe(false);
   });
 });
 
