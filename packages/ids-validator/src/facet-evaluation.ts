@@ -10,6 +10,7 @@ import type {
   ParsedBound,
   ParsedClassificationFacet,
   ParsedEntityFacet,
+  ParsedLength,
   ParsedMaterialFacet,
   ParsedPartOfFacet,
   ParsedPropertyFacet,
@@ -256,6 +257,27 @@ function boundsLabel(min: ParsedBound | null, max: ParsedBound | null): string {
   return parts.join(" and ");
 }
 
+/**
+ * Whether a value holds the number of characters a length restriction states.
+ *
+ * All three edges are checked, because XSD lets an author write `xs:length` beside the two
+ * bounds and keeping only one of them would stop enforcing a constraint the file states.
+ */
+function withinLength(text: string, length: ParsedLength): boolean {
+  if (length.exact !== null && text.length !== length.exact) return false;
+  if (length.min !== null && text.length < length.min) return false;
+  if (length.max !== null && text.length > length.max) return false;
+  return true;
+}
+
+function lengthLabel(length: ParsedLength): string {
+  const parts: string[] = [];
+  if (length.exact !== null) parts.push(`exactly ${length.exact}`);
+  if (length.min !== null) parts.push(`at least ${length.min}`);
+  if (length.max !== null) parts.push(`at most ${length.max}`);
+  return `${parts.join(" and ")} characters long`;
+}
+
 function restrictionFailure(
   facet: SlotFacet,
   restriction: ParsedRestriction,
@@ -291,6 +313,12 @@ function restrictionFailure(
       return candidates.some((held) => withinBounds(held, restriction.min, restriction.max))
         ? null
         : `${facetLabel(facet)} value "${value}" is not ${boundsLabel(restriction.min, restriction.max)}`;
+    case "length":
+      // Counted on the candidates as the file wrote them, not on `candidates`: a unit conversion
+      // rewrites 2 as 2000 and would change the number of characters the author sees.
+      return candidatesOf(slot).some((held) => withinLength(String(held), restriction))
+        ? null
+        : `${facetLabel(facet)} value "${value}" is not ${lengthLabel(restriction)}`;
   }
 }
 
@@ -312,6 +340,8 @@ function admitsString(restriction: ParsedRestriction, candidate: string): boolea
       return restriction.regex.test(candidate);
     case "bounds":
       return false;
+    case "length":
+      return withinLength(candidate, restriction);
   }
 }
 
@@ -331,6 +361,8 @@ function restrictionLabel(restriction: ParsedRestriction): string {
       return `matching "${restriction.source}"`;
     case "bounds":
       return boundsLabel(restriction.min, restriction.max);
+    case "length":
+      return lengthLabel(restriction);
   }
 }
 

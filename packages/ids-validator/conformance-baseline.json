@@ -2,8 +2,8 @@
   "generated": "2026-08-11",
   "totals": {
     "cases": 334,
-    "agreed": 302,
-    "wrong": 18,
+    "agreed": 305,
+    "wrong": 15,
     "refused": 14,
     "errored": 0
   },
@@ -59,8 +59,8 @@
     },
     "restriction": {
       "total": 25,
-      "agreed": 21,
-      "wrong": 4,
+      "agreed": 24,
+      "wrong": 1,
       "refused": 0,
       "errored": 0
     },
@@ -336,6 +336,9 @@
     "restriction/pass-a_bound_can_be_inclusive_3_4",
     "restriction/pass-an_enumeration_matches_case_sensitively_1_3",
     "restriction/pass-an_enumeration_matches_case_sensitively_2_3",
+    "restriction/pass-length_checks_can_be_used_2_2",
+    "restriction/pass-max_and_min_length_checks_can_be_used_2_3",
+    "restriction/pass-max_and_min_length_checks_can_be_used_3_3",
     "restriction/pass-regex_patterns_can_be_used_1_3",
     "restriction/pass-regex_patterns_can_be_used_2_3",
     "restriction/pass-regex_patterns_work_in_OR_1_3",
@@ -541,24 +544,6 @@
     },
     {
       "case": "property/pass-properties_can_be_inherited_from_the_type_2_2",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "restriction/pass-length_checks_can_be_used_2_2",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "restriction/pass-max_and_min_length_checks_can_be_used_2_3",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "restriction/pass-max_and_min_length_checks_can_be_used_3_3",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"
