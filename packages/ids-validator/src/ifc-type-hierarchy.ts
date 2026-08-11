@@ -1,4 +1,4 @@
-import { IFC_ENTITY_PARENTS, IFC_LEGACY_TYPE_NAMES } from "@ifc-qa/shared-types";
+import { IFC_ABSTRACT_ENTITY_NAMES, IFC_ENTITY_PARENTS, IFC_LEGACY_TYPE_NAMES } from "@ifc-qa/shared-types";
 
 export const IFC_SCHEMA = "IFC4" as const;
 
@@ -16,6 +16,7 @@ const CANONICAL_BY_UPPER = new Map<string, string>();
 const ANCESTORS = new Map<string, string[]>();
 const DESCENDANTS = new Map<string, string[]>();
 const LEGACY = new Set<string>(IFC_LEGACY_TYPE_NAMES);
+const ABSTRACT = new Set<string>(IFC_ABSTRACT_ENTITY_NAMES);
 
 for (const name of Object.keys(IFC_ENTITY_PARENTS)) {
   CANONICAL_BY_UPPER.set(name.toUpperCase(), name);
@@ -50,6 +51,28 @@ export function ancestorsOf(t: string): string[] {
 export function descendantsOf(t: string): string[] {
   const canonical = canonicalIfcType(t);
   return canonical ? [...(DESCENDANTS.get(canonical) ?? [])] : [];
+}
+
+/** True for entities EXPRESS declares ABSTRACT, which no instance can carry. */
+export function isAbstractIfcType(t: string): boolean {
+  const canonical = canonicalIfcType(t);
+  return canonical !== null && ABSTRACT.has(canonical);
+}
+
+/**
+ * The names an IDS entity facet has to list to select everything `t` covers, given that IDS
+ * matches a name exactly and inherits nothing (`Documentation/UserManual/entity-facet.md`).
+ *
+ * That is `t` itself plus every concrete entity below it, with the abstract ones dropped — an
+ * abstract name in a facet selects nothing, so emitting it would only make the file longer. A
+ * name outside the schema table is returned unchanged: it may be a class from a schema version
+ * this build does not carry, and rewriting it to nothing would silently gut the rule.
+ */
+export function concreteTypeNamesFor(t: string): string[] {
+  const canonical = canonicalIfcType(t);
+  if (!canonical) return [t.trim().toUpperCase()];
+  const names = [canonical, ...(DESCENDANTS.get(canonical) ?? [])].filter((name) => !ABSTRACT.has(name));
+  return names.map((name) => name.toUpperCase());
 }
 
 export function isSubtypeOf(t: string, candidate: string): boolean {

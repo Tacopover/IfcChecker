@@ -5,6 +5,7 @@ import type {
   ParsedSpecification,
 } from "./parse-ids.js";
 import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
+import { concreteTypeNamesFor } from "./ifc-type-hierarchy.js";
 
 export type ConditionOperator =
   | "exists"
@@ -83,6 +84,26 @@ export interface RuleDraft {
 /** Every property facet we emit is a plain label; richer data types are out of scope for the builder. */
 export const BUILDER_PROPERTY_DATA_TYPE = "IFCLABEL";
 
+/**
+ * The entity names a rule's applicability facet states.
+ *
+ * IDS matches an entity name exactly and inherits nothing, so a rule the builder authors is
+ * expanded: the user picks `IfcElement` from the explorer rail and the file names all 137 concrete
+ * classes below it. Without that, an abstract pick selects nothing and a supertype pick quietly
+ * checks less than the tree it was chosen from shows.
+ *
+ * Expansion is for authored rules only. An imported rule keeps the author's own list, because
+ * rewriting someone else's document is the thing the import work exists not to do — and because a
+ * file that names an abstract class is honestly reported as selecting nothing, which is what any
+ * other conforming checker does with it.
+ */
+export function applicabilityEntityNamesOf(rule: RuleDraft): string[] {
+  const names = rule.imported
+    ? rule.entityTypes.map((entityType) => entityType.trim().toUpperCase())
+    : rule.entityTypes.flatMap(concreteTypeNamesFor);
+  return [...new Set(names)];
+}
+
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -148,7 +169,7 @@ export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
       rule.imported?.applicabilityAttributes.minOccurs,
       rule.imported?.applicabilityAttributes.maxOccurs
     ),
-    applicabilityEntityNames: rule.entityTypes.map((entityType) => entityType.toUpperCase()),
+    applicabilityEntityNames: applicabilityEntityNamesOf(rule),
     requirements: rule.conditions.map(compileCondition),
     // Authored rules can say nothing the builder cannot; imported ones carry what it could not read.
     unsupported: (rule.imported?.passThrough ?? []).map((entry) => ({

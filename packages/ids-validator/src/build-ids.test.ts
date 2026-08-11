@@ -130,8 +130,27 @@ describe("buildIdsXml", () => {
 
   it("uppercases applicability entity names", () => {
     const xml = buildIdsXml(DRAFTS);
-    expect(xml).toContain("<entity><name><simpleValue>IFCELEMENT</simpleValue></name></entity>");
     expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
+  });
+
+  // IDS matches an entity name exactly, so a supertype the user picked has to reach the file as
+  // the concrete classes it stands for. IfcElement is abstract: left as written it selects nothing.
+  it("expands an authored entity type into its concrete subtypes", () => {
+    const xml = buildIdsXml(DRAFTS);
+
+    expect(xml).not.toContain("<simpleValue>IFCELEMENT</simpleValue>");
+    expect(xml).not.toContain('<xs:enumeration value="IFCELEMENT" />');
+    expect(xml).toContain('<xs:enumeration value="IFCWALL" />');
+    expect(xml).toContain('<xs:enumeration value="IFCDOOR" />');
+    // A concrete supertype names itself as well as everything below it.
+    expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
+  });
+
+  it("keeps a concrete leaf type as a single simpleValue", () => {
+    const xml = buildIdsXml([
+      { id: "r", name: "Sanitary terminals", entityTypes: ["IfcSanitaryTerminal"], conditions: [] },
+    ]);
+    expect(xml).toContain("<entity><name><simpleValue>IFCSANITARYTERMINAL</simpleValue></name></entity>");
   });
 
   // ids.xsd allows one <entity> in an applicability, so several types are one enumeration. Emitting

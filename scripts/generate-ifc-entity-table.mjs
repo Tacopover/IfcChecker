@@ -94,6 +94,18 @@ legacyOnly.sort();
 // shouting about, the first is routine.
 const recognised = [...new Set([...base, ...legacy].map((entity) => entity.name.toUpperCase()))].sort();
 
+// Which entities EXPRESS declares ABSTRACT, so no instance can ever carry the
+// name. IDS matches an entity name exactly, which makes an abstract name a rule
+// that selects nothing — the builder expands one into its concrete subtypes
+// instead. IFC4 wins where the two schemas disagree, as it does for parentage.
+const abstractNames = new Set();
+for (const entity of legacy) if (entity.abstract) abstractNames.add(entity.name);
+for (const entity of base) {
+  if (entity.abstract) abstractNames.add(entity.name);
+  else abstractNames.delete(entity.name);
+}
+const abstractEntities = [...abstractNames].filter((name) => parents.has(name)).sort();
+
 // Which of an entity's attributes hold a value a rule can be compared against,
 // as opposed to a reference to another entity or an aggregate of them. The
 // schema is the only thing that can answer this: both parsers hand back a
@@ -201,6 +213,19 @@ ${recognised.join("\n")}
 \`.trim().split("\\n");
 
 /**
+ * Entities EXPRESS declares ABSTRACT. No instance in any model carries one of
+ * these names, so an IDS facet naming one matches nothing under the exact
+ * matching \`entity-facet.md\` requires — which is why the builder expands a
+ * selected type into its concrete subtypes before it writes the file.
+ *
+ * Schema spelling, not the upper case a STEP file uses, so it reads against
+ * \`IFC_ENTITY_PARENTS\` directly.
+ */
+export const IFC_ABSTRACT_ENTITY_NAMES: readonly string[] = [
+${abstractEntities.map((name) => `  ${JSON.stringify(name)},`).join("\n")}
+];
+
+/**
  * Per entity, the attributes that hold a comparable value rather than a
  * reference to another entity or an aggregate of them. Upper-case entity names,
  * as a STEP file spells them; attribute names in their schema spelling.
@@ -261,5 +286,6 @@ console.log(
     `\n  ${simpleAttributeEntries.length} entities with simple-valued attributes` +
     `\n  ${integerAttributeEntries.length} entities with integer-typed attributes` +
     `\n  ${legacyOnly.length} ${LEGACY_VERSION}-only: ${legacyOnly.join(", ")}` +
-    `\n  ${recognised.length} recognised entity names`
+    `\n  ${recognised.length} recognised entity names` +
+    `\n  ${abstractEntities.length} abstract entities`
 );

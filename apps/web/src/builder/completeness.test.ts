@@ -30,9 +30,11 @@ describe("conditionProblem", () => {
     const empty: ConditionDraft = { ...CONDITION, operator: "oneOf", values: [] };
 
     // Proof this is not a theoretical worry: what we would emit is an unrestricted xs:string.
+    // Sliced at <requirements> because the applicability's own entity names are an enumeration.
     const xml = buildIdsXml([{ ...RULE, conditions: [empty] }]);
-    expect(xml).toContain('<xs:restriction base="xs:string">');
-    expect(xml).not.toContain("<xs:enumeration");
+    const requirements = xml.slice(xml.indexOf("<requirements"));
+    expect(requirements).toContain('<xs:restriction base="xs:string">');
+    expect(requirements).not.toContain("<xs:enumeration");
 
     expect(conditionProblem(empty)).toMatch(/Tick at least one value/);
     expect(conditionProblem({ ...empty, values: ["60"] })).toBeNull();

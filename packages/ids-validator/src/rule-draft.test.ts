@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ConditionDraft, RuleDraft } from "./rule-draft.js";
 import {
+  applicabilityEntityNamesOf,
   cardinalityForCondition,
   compileDraft,
   escapeRegExp,
@@ -99,11 +100,69 @@ describe("cardinalityForCondition", () => {
   });
 });
 
+describe("applicabilityEntityNamesOf", () => {
+  it("expands an abstract type into its concrete subtypes and drops the abstract name", () => {
+    const names = applicabilityEntityNamesOf(rule({ entityTypes: ["IfcElement"] }));
+
+    expect(names).not.toContain("IFCELEMENT");
+    expect(names).not.toContain("IFCBUILTELEMENT"); // abstract in IFC4X3, absent from IFC4
+    expect(names).not.toContain("IFCBUILDINGELEMENT"); // abstract
+    expect(names).toContain("IFCWALL");
+    expect(names).toContain("IFCDOOR");
+    expect(names).toContain("IFCSANITARYTERMINAL");
+  });
+
+  it("keeps a concrete type and adds the concrete types below it", () => {
+    expect(applicabilityEntityNamesOf(rule({ entityTypes: ["IfcWall"] }))).toEqual([
+      "IFCWALL",
+      "IFCWALLELEMENTEDCASE",
+      "IFCWALLSTANDARDCASE",
+    ]);
+  });
+
+  it("leaves a concrete leaf type alone", () => {
+    expect(applicabilityEntityNamesOf(rule({ entityTypes: ["IfcSanitaryTerminal"] }))).toEqual([
+      "IFCSANITARYTERMINAL",
+    ]);
+  });
+
+  it("does not repeat a type reachable from two selections", () => {
+    const names = applicabilityEntityNamesOf(rule({ entityTypes: ["IfcWall", "IfcWallStandardCase"] }));
+    expect(names.filter((name) => name === "IFCWALLSTANDARDCASE")).toHaveLength(1);
+  });
+
+  // Rewriting the author's own entity list is the thing the import work exists not to do. A file
+  // naming an abstract class is reported as selecting nothing, which is what any checker does.
+  it("leaves an imported rule's names exactly as the source wrote them", () => {
+    const imported = rule({
+      entityTypes: ["IfcElement"],
+      imported: {
+        attributes: {},
+        entityNamesAsEnumeration: false,
+        applicabilityAttributes: {},
+        requirementsAttributes: {},
+        passThrough: [],
+      },
+    });
+    expect(applicabilityEntityNamesOf(imported)).toEqual(["IFCELEMENT"]);
+  });
+
+  it("keeps a name the schema table does not know", () => {
+    expect(applicabilityEntityNamesOf(rule({ entityTypes: ["IfcNotAThing"] }))).toEqual(["IFCNOTATHING"]);
+  });
+});
+
 describe("compileDraft", () => {
   it("uppercases applicability entity names and keeps the rule name", () => {
-    const [spec] = compileDraft([rule({ name: "Walls", entityTypes: ["IfcWall", "ifcDoor"] })]);
-    expect(spec.name).toBe("Walls");
-    expect(spec.applicabilityEntityNames).toEqual(["IFCWALL", "IFCDOOR"]);
+    const [spec] = compileDraft([rule({ name: "Sanitary", entityTypes: ["IfcSanitaryTerminal", "ifcBoiler"] })]);
+    expect(spec.name).toBe("Sanitary");
+    expect(spec.applicabilityEntityNames).toEqual(["IFCSANITARYTERMINAL", "IFCBOILER"]);
+  });
+
+  it("compiles the same entity names the exported file states", () => {
+    const walls = rule({ entityTypes: ["IfcWall"] });
+    const [spec] = compileDraft([walls]);
+    expect(spec.applicabilityEntityNames).toEqual(applicabilityEntityNamesOf(walls));
   });
 
   it("emits one requirement per condition, in condition order", () => {
