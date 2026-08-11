@@ -8,6 +8,7 @@ import type {
   FacetDraft,
   ImportedRuleSource,
   LengthDraft,
+  MaterialFacetDraft,
   PartOfFacetDraft,
   PassThrough,
   RuleDraft,
@@ -323,6 +324,7 @@ const FACET_ATTRIBUTES: Record<string, string[]> = {
   property: ["@_cardinality", "@_dataType", "@_uri", "@_instructions"],
   classification: ["@_cardinality", "@_uri", "@_instructions"],
   partOf: ["@_cardinality", "@_relation", "@_instructions"],
+  material: ["@_cardinality", "@_uri", "@_instructions"],
 };
 
 /** Child elements a facet may carry and still be fully representable. */
@@ -331,6 +333,7 @@ const FACET_CHILDREN: Record<string, string[]> = {
   property: ["propertySet", "baseName", "value"],
   classification: ["value", "system"],
   partOf: ["entity"],
+  material: ["value"],
 };
 
 /** What an `entityType` element holds, wherever `ids.xsd` nests one. */
@@ -426,6 +429,8 @@ function readFacet(node: OrderedNode): FacetDraft | FacetRefusal {
       return readClassificationFacet(node);
     case "partOf":
       return readPartOfFacet(node);
+    case "material":
+      return readMaterialFacet(node);
     default:
       return refused(`The builder cannot show a <${tag ?? "this facet"}> requirement.`);
   }
@@ -459,6 +464,31 @@ function readNestedEntity(
   if ("refused" in predefinedType) return predefinedType;
 
   return { name: name.value, predefinedType: predefinedType.value };
+}
+
+/**
+ * A material requirement. `<value>` is optional, and a facet without one asks only whether the
+ * element is made of anything at all — which is a real check, not an empty one.
+ */
+function readMaterialFacet(node: OrderedNode): MaterialFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "material");
+  if ("refused" in shell) return shell;
+  if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
+    return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
+  }
+
+  const value = readValueDraft(childrenOf(node));
+  if ("refused" in value) return value;
+
+  return {
+    id: shell.id,
+    kind: "material",
+    value: value.value,
+    uri: attributeOrNull(node, "uri"),
+    cardinality: shell.stated ?? "required",
+    explicitCardinality: shell.explicitCardinality,
+    instructions: shell.instructions,
+  };
 }
 
 function readPartOfFacet(node: OrderedNode): PartOfFacetDraft | FacetRefusal {

@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Every shape the importer has to preserve rather than represent, in one file: spec-level metadata
-  the builder has no field for, requirement facets outside its model, an XSD bound it cannot read,
-  an author's annotation, and one specification whose applicability makes it unshowable at all.
+  the builder has no field for, a requirement facet outside its model, an author's annotation, and
+  one specification whose applicability makes it unshowable at all.
   Trimmed from the patterns found across the goal 3a corpus; not copied from any single file.
+
+  The facet kept verbatim is a property whose baseName is a pattern — 15 corpus facets do this, and
+  it is deliberately out of scope. It has to be something really unrepresentable: the classification,
+  the material and the bound this file used to keep are all read now, and a fixture whose "kept"
+  facet has quietly become representable stops testing the thing it was written for.
 -->
 <ids xmlns="http://standards.buildingsmart.org/IDS"
      xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -64,6 +69,14 @@
         <material>
           <value><simpleValue>Concrete</simpleValue></value>
         </material>
+        <property>
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName>
+            <xs:restriction base="xs:string">
+              <xs:pattern value="LoadBearing|IsExternal" />
+            </xs:restriction>
+          </baseName>
+        </property>
       </requirements>
     </specification>
     <specification name="Doors are documented" ifcVersion="IFC4">

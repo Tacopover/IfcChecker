@@ -345,6 +345,35 @@ describe("idsXmlToDrafts classification", () => {
   });
 });
 
+describe("idsXmlToDrafts material", () => {
+  it("reads the material it names, with the uri and cardinality beside it", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<material cardinality="prohibited" uri="https://example.org/materials"><value><simpleValue>Asbestos</simpleValue></value></material>`
+        )
+      )
+    ).toMatchObject({
+      kind: "material",
+      value: { kind: "simple", value: "Asbestos" },
+      uri: "https://example.org/materials",
+      cardinality: "prohibited",
+      explicitCardinality: true,
+    });
+  });
+
+  // <value> is optional, and a material facet without one is a real check — "must be made of
+  // something" — rather than an empty one.
+  it("reads a material facet that names no material at all", () => {
+    expect(onlyFacet(withRequirements(`<material />`))).toMatchObject({
+      kind: "material",
+      value: null,
+      cardinality: "required",
+      explicitCardinality: false,
+    });
+  });
+});
+
 describe("idsXmlToDrafts partOf", () => {
   it("reads the nested entity and keeps the relation attribute as written", () => {
     expect(
@@ -409,8 +438,8 @@ describe("idsXmlToDrafts pass-through", () => {
   it.each([
     [
       "a facet outside the builder's model",
-      `<material><value><simpleValue>Concrete</simpleValue></value></material>`,
-      "material",
+      `<entity><name><simpleValue>IFCWALL</simpleValue></name></entity>`,
+      "entity",
     ],
     // ids.xsd makes <system> mandatory, so this is a document the schema does not describe. A draft
     // cannot state none, and inventing one would author the rule on the file's behalf.
@@ -455,8 +484,8 @@ describe("idsXmlToDrafts pass-through", () => {
   // them checks less than it looks like it does. Each refusal names the one thing that stopped it.
   it.each([
     [
-      `<material><value><simpleValue>Concrete</simpleValue></value></material>`,
-      /cannot show a <material> requirement/,
+      `<entity><name><simpleValue>IFCWALL</simpleValue></name></entity>`,
+      /cannot show a <entity> requirement/,
     ],
     [
       `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
@@ -520,8 +549,9 @@ describe("idsXmlToDrafts pass-through", () => {
       "AcousticRating",
       "Description",
     ]);
-    // The classification is read into the rule now, so it counts as a preceding facet rather than
-    // sitting beside them: the material it used to share the list with moves from 6 to 7.
+    // The classification and the material are read into the rule now, so they count as preceding
+    // facets rather than sitting beside them. What is left verbatim is the one facet that really is
+    // outside the model: a property whose baseName is a pattern.
     expect(rule.conditions.map((facet) => facet.kind)).toEqual([
       "attribute",
       "property",
@@ -530,9 +560,10 @@ describe("idsXmlToDrafts pass-through", () => {
       "property",
       "property",
       "attribute",
+      "material",
     ]);
     expect(rule.imported?.passThrough.map((entry) => [entry.construct, entry.afterIndex])).toEqual([
-      ["material", 7],
+      ["property", 8],
     ]);
   });
 });
