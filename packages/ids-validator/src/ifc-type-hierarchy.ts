@@ -2,7 +2,8 @@ import { IFC_ABSTRACT_ENTITY_NAMES, IFC_ENTITY_PARENTS, IFC_LEGACY_TYPE_NAMES } 
 
 export const IFC_SCHEMA = "IFC4" as const;
 
-// matchesApplicability calls isSubtypeOf once per element per rule, so every
+// The explorer rail asks for a type's ancestors once per type in the model, and
+// the builder expands a pick into its descendants on every keystroke, so every
 // lookup here has to be a synchronous map hit. The chains are therefore
 // flattened once at module load from the generated parent map rather than
 // walked on demand — and the table has to be a committed artifact, since

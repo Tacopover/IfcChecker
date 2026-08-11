@@ -16,7 +16,6 @@ import type {
   ParsedRequirementFacet,
   ParsedRestriction,
 } from "./parse-ids.js";
-import { isSubtypeOf } from "./ifc-type-hierarchy.js";
 
 export interface FacetCheckResult {
   passed: boolean;
@@ -42,8 +41,29 @@ const TOP_LEVEL_ATTRIBUTE_READERS: Record<string, (element: NormalizedElement) =
   PREDEFINEDTYPE: (element) => element.predefinedType,
 };
 
+/**
+ * An applicability entity name matches exactly, the same way a requirement's does.
+ *
+ * `Documentation/UserManual/entity-facet.md` states it twice and scopes neither statement to
+ * requirements: the class "must match exactly", and "there is no automatic inheritance in IDS
+ * entity facet interpretation … all the entities need to be listed explicitly". The document then
+ * supplies copy-paste lists of every IfcElement subtype per schema version, precisely because
+ * there is none. IfcOpenShell's `ifctester` selects with
+ * `by_type(name, include_subtypes=False)` — the flag written out rather than defaulted.
+ *
+ * The conformance suite cannot decide this: every applicability name in it is present literally in
+ * its own model, so exact and subtype matching agree on all 334 cases. What decides it is that a
+ * user who checks a model here and then with any other conforming checker must get the same
+ * applicable count.
+ *
+ * A supertype the user picked in the builder reaches the file as the concrete classes it stands
+ * for (`applicabilityEntityNamesOf`), so nothing authored here loses elements. An imported file
+ * naming an abstract class now selects nothing — and fails on applicability cardinality, which is
+ * a loud result rather than a quiet one.
+ */
 export function matchesApplicability(element: NormalizedElement, entityNames: string[]): boolean {
-  return entityNames.some((entityName) => isSubtypeOf(element.ifcType, entityName));
+  const ifcType = element.ifcType.trim().toUpperCase();
+  return entityNames.some((entityName) => ifcType === entityName.trim().toUpperCase());
 }
 
 function readAttributeValue(element: NormalizedElement, attributeName: string): NormalizedValue | null {
