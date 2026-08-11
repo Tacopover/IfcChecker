@@ -139,6 +139,33 @@ describe("buildIdsXml", () => {
     expect(xml.match(/cardinality="prohibited"/g)).toHaveLength(2);
   });
 
+  // Cardinality and value are two separate statements in IDS, so the exporter writes each from its
+  // own field. A prohibited facet keeping its value is "must not be TODO", not "must not be there".
+  it("writes a cardinality and a value independently of each other", () => {
+    const xml = buildIdsXml([
+      {
+        id: "r1",
+        name: "Both halves",
+        entityTypes: ["IfcWall"],
+        conditions: [
+          { id: "c1", kind: "attribute", propertySet: null, name: "Tag", value: null, cardinality: "optional" },
+          {
+            id: "c2",
+            kind: "attribute",
+            propertySet: null,
+            name: "Description",
+            value: { kind: "simple", value: "TODO" },
+            cardinality: "prohibited",
+          },
+        ],
+      },
+    ]);
+
+    expect(xml).toContain('<attribute cardinality="optional">');
+    expect(xml).toContain('<attribute cardinality="prohibited">');
+    expect(xml).toContain("<value><simpleValue>TODO</simpleValue></value>");
+  });
+
   it("uppercases applicability entity names", () => {
     const xml = buildIdsXml(DRAFTS);
     expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');

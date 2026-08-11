@@ -2,6 +2,7 @@ import { XMLBuilder, XMLParser } from "fast-xml-parser";
 import type { UnsupportedConstruct } from "./parse-ids.js";
 import type {
   ConditionDraft,
+  ConditionalCardinality,
   ImportedRuleSource,
   PassThrough,
   RuleDraft,
@@ -317,6 +318,19 @@ const FACET_CHILDREN: Record<string, string[]> = {
 };
 
 /**
+ * Whether the source states one of the three cardinalities `ids.xsd` gives an attribute or a
+ * property.
+ *
+ * Whether a facet must be there and what it may say are two separate questions in IDS, so all three
+ * are read whatever value stands beside them — including `prohibited` with a value, which says
+ * "must not be Steel" rather than "must not be present at all". Anything outside the three is a
+ * file the schema does not allow, and importing it would mean choosing a cardinality for the author.
+ */
+function isConditionalCardinality(value: string): value is ConditionalCardinality {
+  return value === "required" || value === "optional" || value === "prohibited";
+}
+
+/**
  * A condition the builder can display, or `null` when any part of the facet is outside its model —
  * in which case the caller keeps the whole facet verbatim rather than importing a weakened copy.
  */
@@ -354,27 +368,19 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
     return refused(`Carries <${tagOf(unknownChild)}>, which the builder cannot show.`);
   }
 
-  const cardinality = attributeOrNull(node, "cardinality");
-  // "optional" has no builder equivalent, and importing it as required would export a stricter
-  // file than the one that came in.
-  if (cardinality !== null && cardinality !== "required" && cardinality !== "prohibited") {
-    return refused(`Is cardinality="${cardinality}", which the builder has no equivalent for.`);
+  const stated = attributeOrNull(node, "cardinality");
+  if (stated !== null && !isConditionalCardinality(stated)) {
+    return refused(`Is cardinality="${stated}", which ids.xsd does not give this facet.`);
   }
 
   const value = readValueDraft(children);
   if ("refused" in value) return value;
 
-  // The builder's prohibited row carries no value, so "must not be this value" would export as the
-  // far broader "must not be present at all".
-  if (cardinality === "prohibited" && value.value !== null) {
-    return refused("States a prohibited value, which the builder can only express as \u201cmust not be filled in\u201d.");
-  }
-
   const common = {
     id: draftId("c"),
     value: value.value,
-    cardinality: cardinality === "prohibited" ? ("prohibited" as const) : ("required" as const),
-    explicitCardinality: cardinality !== null,
+    cardinality: stated ?? "required",
+    explicitCardinality: stated !== null,
   };
 
   if (tag === "attribute") {

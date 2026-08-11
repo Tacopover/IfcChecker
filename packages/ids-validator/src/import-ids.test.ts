@@ -176,6 +176,32 @@ describe("idsXmlToDrafts values", () => {
     ).toMatchObject({ cardinality: "prohibited", value: null, explicitCardinality: true });
   });
 
+  // IDS asks "must it be there" and "what may it say" separately, so every cardinality is read
+  // whatever value stands beside it. Both of these used to be kept verbatim, because the draft
+  // stored one friendly operator in place of the two answers.
+  it("reads an optional facet rather than choosing required or prohibited for the author", () => {
+    expect(
+      onlyCondition(
+        withRequirements(
+          `<property cardinality="optional"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`
+        )
+      )
+    ).toMatchObject({ cardinality: "optional", value: null, explicitCardinality: true });
+  });
+
+  it("reads a prohibited facet that names the one value it forbids", () => {
+    expect(
+      onlyCondition(
+        withRequirements(
+          `<attribute cardinality="prohibited"><name><simpleValue>Tag</simpleValue></name><value><simpleValue>TODO</simpleValue></value></attribute>`
+        )
+      )
+    ).toMatchObject({
+      cardinality: "prohibited",
+      value: { kind: "simple", value: "TODO" },
+    });
+  });
+
   it("carries the property data type, and its absence, rather than assuming a default", () => {
     const typed = onlyCondition(
       withRequirements(
@@ -206,14 +232,9 @@ describe("idsXmlToDrafts pass-through", () => {
       "property",
     ],
     [
-      "an optional cardinality, which would otherwise export as stricter than it came in",
-      `<property cardinality="optional"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
+      "a cardinality ids.xsd does not allow, rather than picking one of the three",
+      `<property cardinality="mandatory"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
       "property",
-    ],
-    [
-      "a prohibited value, which notExists would widen to prohibiting the property entirely",
-      `<attribute cardinality="prohibited"><name><simpleValue>Tag</simpleValue></name><value><simpleValue>TODO</simpleValue></value></attribute>`,
-      "attribute",
     ],
     [
       "an author's annotation, which the builder has nowhere to show",
@@ -263,12 +284,8 @@ describe("idsXmlToDrafts pass-through", () => {
       /Combines several restrictions/,
     ],
     [
-      `<property cardinality="optional"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
-      /cardinality="optional"/,
-    ],
-    [
-      `<attribute cardinality="prohibited"><name><simpleValue>Tag</simpleValue></name><value><simpleValue>TODO</simpleValue></value></attribute>`,
-      /prohibited value/,
+      `<property cardinality="mandatory"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
+      /ids\.xsd does not give this facet/,
     ],
     [
       `<attribute instructions="Ask the architect."><name><simpleValue>Name</simpleValue></name></attribute>`,
@@ -291,13 +308,13 @@ describe("idsXmlToDrafts pass-through", () => {
       "Name",
       "Reference",
       "Status",
+      "AcousticRating",
       "Description",
     ]);
     expect(rule.imported?.passThrough.map((entry) => [entry.construct, entry.afterIndex])).toEqual([
       ["classification", 3],
       ["property", 3],
-      ["property", 3],
-      ["material", 4],
+      ["material", 5],
     ]);
   });
 });
