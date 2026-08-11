@@ -92,6 +92,9 @@ let violationsOut = 0;
 const driftExamples = [];
 const refusalReasons = new Map();
 const passThroughConstructs = new Map();
+// `readFacet` reports the first reason that fires and stops, so removing one exposes the next.
+// The construct alone cannot show that; the reason is what says which piece of work is left.
+const passThroughReasons = new Map();
 const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1);
 
 for (const file of files) {
@@ -115,7 +118,10 @@ for (const file of files) {
   refusedSpecifications += imported.refused.length;
   for (const rule of imported.rules) {
     passThroughFacets += rule.imported?.passThrough.length ?? 0;
-    for (const entry of rule.imported?.passThrough ?? []) bump(passThroughConstructs, entry.construct);
+    for (const entry of rule.imported?.passThrough ?? []) {
+      bump(passThroughConstructs, entry.construct);
+      bump(passThroughReasons, `${entry.construct}: ${entry.reason ?? "no reason recorded"}`);
+    }
   }
   for (const entry of imported.refused) {
     for (const reason of entry.reasons) bump(refusalReasons, `${reason.section}/${reason.construct}`);
@@ -167,6 +173,7 @@ const rank = (map) =>
   [...map.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => `  ${String(count).padStart(6)}  ${key}`);
 console.log(`\nwhy a specification was refused (reasons, not specifications):\n${rank(refusalReasons).join("\n")}`);
 console.log(`\nfacets passed through verbatim, by construct:\n${rank(passThroughConstructs).join("\n")}`);
+console.log(`\nfacets passed through verbatim, by reason:\n${rank(passThroughReasons).join("\n")}`);
 if (driftExamples.length) console.log(`\nfirst drifted files:\n  ${driftExamples.join("\n  ")}`);
 if (facetLossExamples.length) {
   console.log(`\nfirst files losing a facet:\n  ${facetLossExamples.join("\n  ")}`);

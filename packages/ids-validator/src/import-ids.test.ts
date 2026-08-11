@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { idsXmlToDrafts } from "./import-ids.js";
 import type { IdsImportResult } from "./import-ids.js";
-import type { ConditionDraft, RuleDraft } from "./rule-draft.js";
+import type { ConditionDraft, FacetDraft, RuleDraft } from "./rule-draft.js";
 import { friendlyReadingOf, isConditionFacet } from "./rule-draft.js";
 
 function document(specifications: string): string {
@@ -30,13 +30,17 @@ function onlyRule(result: IdsImportResult): RuleDraft {
   return result.rules[0];
 }
 
-function onlyCondition(xml: string): ConditionDraft {
+function onlyFacet(xml: string): FacetDraft {
   const rule = onlyRule(idsXmlToDrafts(xml));
   expect(rule.imported?.passThrough).toEqual([]);
   expect(rule.conditions).toHaveLength(1);
-  const [facet] = rule.conditions;
-  // The draft model holds all six facets; the importer reads two of them and keeps the rest
-  // verbatim. An assertion rather than a cast, so that stops being true loudly.
+  return rule.conditions[0];
+}
+
+function onlyCondition(xml: string): ConditionDraft {
+  const facet = onlyFacet(xml);
+  // The two kinds a condition row can edit. An assertion rather than a cast, so a reader that
+  // starts handing back another kind here fails loudly instead of being cast into shape.
   if (!isConditionFacet(facet)) throw new Error(`imported a <${facet.kind}>, which it should not`);
   return facet;
 }
@@ -298,10 +302,60 @@ describe("idsXmlToDrafts values", () => {
   });
 });
 
+describe("idsXmlToDrafts classification", () => {
+  it("reads both parameters, each as the value the file states", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<classification><value><xs:restriction base="xs:string"><xs:pattern value="21\\.\\d+" /></xs:restriction></value><system><simpleValue>NL/SfB</simpleValue></system></classification>`
+        )
+      )
+    ).toMatchObject({
+      kind: "classification",
+      system: { kind: "simple", value: "NL/SfB" },
+      value: { kind: "pattern", source: "21\\.\\d+" },
+    });
+  });
+
+  // <value> is optional: "must be classified in this system, whatever the code says".
+  it("reads a classification that names only its system", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<classification><system><simpleValue>Uniclass</simpleValue></system></classification>`
+        )
+      )
+    ).toMatchObject({ kind: "classification", value: null, cardinality: "required" });
+  });
+
+  it("carries the cardinality, the uri and the instructions the source states", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<classification cardinality="optional" uri="https://example.org/nlsfb" instructions="Ask the architect."><system><simpleValue>NL/SfB</simpleValue></system></classification>`
+        )
+      )
+    ).toMatchObject({
+      kind: "classification",
+      cardinality: "optional",
+      explicitCardinality: true,
+      uri: "https://example.org/nlsfb",
+      instructions: "Ask the architect.",
+    });
+  });
+});
+
 describe("idsXmlToDrafts pass-through", () => {
   it.each([
     [
       "a facet outside the builder's model",
+      `<material><value><simpleValue>Concrete</simpleValue></value></material>`,
+      "material",
+    ],
+    // ids.xsd makes <system> mandatory, so this is a document the schema does not describe. A draft
+    // cannot state none, and inventing one would author the rule on the file's behalf.
+    [
+      "a classification that names no system",
       `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
       "classification",
     ],
@@ -341,8 +395,12 @@ describe("idsXmlToDrafts pass-through", () => {
   // them checks less than it looks like it does. Each refusal names the one thing that stopped it.
   it.each([
     [
+      `<material><value><simpleValue>Concrete</simpleValue></value></material>`,
+      /cannot show a <material> requirement/,
+    ],
+    [
       `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
-      /attribute or a property; <classification> is neither/,
+      /States no <system>/,
     ],
     // One sentence used to cover all of these. Over the corpus it was wrong about 8 of the facets
     // it refused, and the message is what tells the user which piece of work their file waits on.
@@ -402,9 +460,19 @@ describe("idsXmlToDrafts pass-through", () => {
       "AcousticRating",
       "Description",
     ]);
+    // The classification is read into the rule now, so it counts as a preceding facet rather than
+    // sitting beside them: the material it used to share the list with moves from 6 to 7.
+    expect(rule.conditions.map((facet) => facet.kind)).toEqual([
+      "attribute",
+      "property",
+      "property",
+      "classification",
+      "property",
+      "property",
+      "attribute",
+    ]);
     expect(rule.imported?.passThrough.map((entry) => [entry.construct, entry.afterIndex])).toEqual([
-      ["classification", 3],
-      ["material", 6],
+      ["material", 7],
     ]);
   });
 });

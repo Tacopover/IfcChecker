@@ -2,8 +2,10 @@ import { XMLBuilder, XMLParser } from "fast-xml-parser";
 import type { UnsupportedConstruct } from "./parse-ids.js";
 import type {
   BoundDraft,
+  ClassificationFacetDraft,
   ConditionDraft,
   ConditionalCardinality,
+  FacetDraft,
   ImportedRuleSource,
   LengthDraft,
   PassThrough,
@@ -197,7 +199,7 @@ function readSpecification(
   }
 
   const requirementsNode = findChild(children, "requirements");
-  const conditions: ConditionDraft[] = [];
+  const conditions: FacetDraft[] = [];
   const passThrough: PassThrough[] = [];
 
   for (const facetNode of elementsOf(requirementsNode ? childrenOf(requirementsNode) : [])) {
@@ -317,12 +319,14 @@ function readApplicability(
 const FACET_ATTRIBUTES: Record<string, string[]> = {
   attribute: ["@_cardinality", "@_instructions"],
   property: ["@_cardinality", "@_dataType", "@_uri", "@_instructions"],
+  classification: ["@_cardinality", "@_uri", "@_instructions"],
 };
 
 /** Child elements a facet may carry and still be fully representable. */
 const FACET_CHILDREN: Record<string, string[]> = {
   attribute: ["name", "value"],
   property: ["propertySet", "baseName", "value"],
+  classification: ["value", "system"],
 };
 
 /**
@@ -355,12 +359,22 @@ function refused(reason: string): FacetRefusal {
   return { refused: reason };
 }
 
-function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
-  const tag = tagOf(node);
-  if (tag !== "attribute" && tag !== "property") {
-    return refused(`The builder can show an attribute or a property; <${tag ?? "this facet"}> is neither.`);
-  }
+/**
+ * The parts every facet carries, once the attributes and children it may hold are checked against
+ * what `ids.xsd` gives its own kind.
+ *
+ * `stated` is the raw `cardinality` attribute rather than a value of either enumeration: the two
+ * alphabets differ per facet — `partOf` has no `optional` — so each reader below checks it against
+ * its own.
+ */
+interface FacetShell {
+  id: string;
+  instructions: string | null;
+  explicitCardinality: boolean;
+  stated: string | null;
+}
 
+function readFacetShell(node: OrderedNode, tag: string): FacetShell | FacetRefusal {
   const unknownAttribute = Object.keys(attributesOf(node)).find(
     (key) => !FACET_ATTRIBUTES[tag].includes(key)
   );
@@ -368,8 +382,7 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
     return refused(`Carries ${unknownAttribute.replace(/^@_/, "")}, which the builder cannot show.`);
   }
 
-  const children = childrenOf(node);
-  const unknownChild = elementsOf(children).find(
+  const unknownChild = elementsOf(childrenOf(node)).find(
     (child) => !FACET_CHILDREN[tag].includes(tagOf(child) ?? "")
   );
   if (unknownChild !== undefined) {
@@ -377,19 +390,45 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
   }
 
   const stated = attributeOrNull(node, "cardinality");
-  if (stated !== null && !isConditionalCardinality(stated)) {
-    return refused(`Is cardinality="${stated}", which ids.xsd does not give this facet.`);
+  return {
+    id: draftId("c"),
+    instructions: attributeOrNull(node, "instructions"),
+    explicitCardinality: stated !== null,
+    stated,
+  };
+}
+
+function readFacet(node: OrderedNode): FacetDraft | FacetRefusal {
+  const tag = tagOf(node);
+  switch (tag) {
+    case "attribute":
+    case "property":
+      return readSlotFacet(node, tag);
+    case "classification":
+      return readClassificationFacet(node);
+    default:
+      return refused(`The builder cannot show a <${tag ?? "this facet"}> requirement.`);
+  }
+}
+
+/** The two facets that name one value slot on the element and constrain what it holds. */
+function readSlotFacet(node: OrderedNode, tag: "attribute" | "property"): ConditionDraft | FacetRefusal {
+  const shell = readFacetShell(node, tag);
+  if ("refused" in shell) return shell;
+  if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
+    return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
   }
 
+  const children = childrenOf(node);
   const value = readValueDraft(children);
   if ("refused" in value) return value;
 
   const common = {
-    id: draftId("c"),
+    id: shell.id,
     value: value.value,
-    cardinality: stated ?? "required",
-    explicitCardinality: stated !== null,
-    instructions: attributeOrNull(node, "instructions"),
+    cardinality: shell.stated ?? "required",
+    explicitCardinality: shell.explicitCardinality,
+    instructions: shell.instructions,
   };
 
   if (tag === "attribute") {
@@ -411,6 +450,37 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
     name,
     dataType: attributeOrNull(node, "dataType"),
     uri: attributeOrNull(node, "uri"),
+  };
+}
+
+function readClassificationFacet(node: OrderedNode): ClassificationFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "classification");
+  if ("refused" in shell) return shell;
+  if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
+    return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
+  }
+
+  const children = childrenOf(node);
+  const value = readValueDraft(children);
+  if ("refused" in value) return value;
+
+  // `ids.xsd` makes <system> mandatory, so a classification without one is a document the schema
+  // does not describe. A draft cannot state none, and inventing one would author the rule.
+  const system = readValueDraft(children, "system");
+  if ("refused" in system) return system;
+  if (system.value === null) {
+    return refused("States no <system>, so the classification system it requires is unknown.");
+  }
+
+  return {
+    id: shell.id,
+    kind: "classification",
+    system: system.value,
+    value: value.value,
+    uri: attributeOrNull(node, "uri"),
+    cardinality: shell.stated ?? "required",
+    explicitCardinality: shell.explicitCardinality,
+    instructions: shell.instructions,
   };
 }
 
@@ -458,11 +528,18 @@ function refuseRestrictionFacet(tag: string): FacetRefusal {
   return refused(`Restricts its value with <xs:${tag}>, which the builder cannot show.`);
 }
 
-/** The value a facet states, or the reason it cannot be shown. `null` is "no restriction at all". */
+/**
+ * The value under one of a facet's parameters, or the reason it cannot be shown. `null` is "the
+ * parameter is absent", which for `<value>` means no restriction at all.
+ *
+ * Named because a facet may state several: a classification constrains its `<system>` and its
+ * `<value>` independently, and each is an `idsValue` in its own right.
+ */
 function readValueDraft(
-  facetChildren: OrderedNode[]
+  facetChildren: OrderedNode[],
+  parameter = "value"
 ): { value: ValueDraft | null } | FacetRefusal {
-  const valueNode = findChild(facetChildren, "value");
+  const valueNode = findChild(facetChildren, parameter);
   if (!valueNode) return { value: null };
 
   const valueChildren = elementsOf(childrenOf(valueNode));
