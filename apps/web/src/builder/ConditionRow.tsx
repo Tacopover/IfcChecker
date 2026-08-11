@@ -364,6 +364,14 @@ export function ConditionRow({
         </button>
       </span>
 
+      {(condition.instructions || condition.uri) && (
+        <span className="cond-note">
+          {condition.instructions}
+          {/* Shown as text, never as a link: the address comes from a file someone else wrote. */}
+          {condition.uri && <span className="cond-uri">{condition.uri}</span>}
+        </span>
+      )}
+
       {error && (
         <span className="cond-error" id={errorId}>
           {error}

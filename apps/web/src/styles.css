@@ -1072,6 +1072,23 @@ caption {
   font-style: italic;
 }
 
+/* The author's own prose, and where the requirement is defined. An imported facet
+   carrying these used to appear in the kept-but-not-shown list, where the user could
+   at least see something was there; now that it imports, the row has to show them. */
+.cond-note {
+  flex-basis: 100%;
+  margin: 0.15rem 0 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.cond-uri {
+  margin-left: 0.4rem;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  word-break: break-all;
+}
+
 /* A pattern the RegExp engine rejects would otherwise fail every element with
    no visible reason, so the row has to say so itself. */
 .cond-error {

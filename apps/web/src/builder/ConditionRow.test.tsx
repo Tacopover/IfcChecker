@@ -242,6 +242,31 @@ describe("ConditionRow", () => {
     expect(screen.getByLabelText("Field name")).toHaveValue("FireRating");
   });
 
+  // Before the importer read these, a facet carrying them stayed in the kept-but-not-shown list,
+  // where the user could at least see something was there. Importing it must not make it invisible.
+  it("shows the author's instructions and the uri the requirement is defined at", () => {
+    render(
+      <Harness
+        initial={{
+          ...CONDITION,
+          instructions: "Ask the architect.",
+          uri: "https://example.org/rule",
+        }}
+      />
+    );
+
+    expect(screen.getByText("Ask the architect.")).toBeInTheDocument();
+    expect(screen.getByText("https://example.org/rule")).toBeInTheDocument();
+    // Text, not a link: the address comes from a file someone else wrote.
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("shows no note for a condition carrying neither", () => {
+    const { container } = render(<Harness />);
+
+    expect(container.querySelector(".cond-note")).toBeNull();
+  });
+
   it("duplicates and deletes itself", async () => {
     const user = userEvent.setup();
     const onDuplicate = vi.fn();
