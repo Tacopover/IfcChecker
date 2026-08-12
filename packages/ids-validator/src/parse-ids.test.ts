@@ -284,21 +284,38 @@ describe("parseIdsXml", () => {
     expect(isEvaluable(spec)).toBe(false);
   });
 
+  // A facet from some later revision of IDS. The five `ids.xsd` allows beside <entity> are all read
+  // now, so a future one is what is left to test the dispatch's refusing arm with — and the claim it
+  // pins is unchanged: "walls that are also X" is not "walls", so the kept entity name is not the
+  // whole story and the specification must not run.
   it("reports an unrecognized applicability facet and marks the applicability incomplete", () => {
-    const xmlWithMaterial = SAMPLE_IDS.replace(
+    const xmlWithZone = SAMPLE_IDS.replace(
+      "</applicability>",
+      "<zone><name><simpleValue>Z1</simpleValue></name></zone></applicability>"
+    );
+
+    const [spec] = parseIdsXml(xmlWithZone);
+
+    expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "applicability", construct: "zone" })
+    );
+    expect(spec.applicabilityComplete).toBe(false);
+    expect(isEvaluable(spec)).toBe(false);
+  });
+
+  it("reads an applicability material into a facet", () => {
+    const xml = SAMPLE_IDS.replace(
       "</applicability>",
       "<material><value><simpleValue>Concrete</simpleValue></value></material></applicability>"
     );
 
-    const [spec] = parseIdsXml(xmlWithMaterial);
+    const [spec] = parseIdsXml(xml);
 
-    expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
-    expect(spec.unsupported).toContainEqual(
-      expect.objectContaining({ section: "applicability", construct: "material" })
-    );
-    // "Walls made of concrete" is not "walls" — the kept entity name is not the whole story.
-    expect(spec.applicabilityComplete).toBe(false);
-    expect(isEvaluable(spec)).toBe(false);
+    expect(spec.applicability.facets).toEqual([
+      { kind: "material", value: { kind: "exact", value: "Concrete" }, cardinality: "required" },
+    ]);
+    expect(spec.applicabilityComplete).toBe(true);
   });
 
   // `ids.xsd` makes <entity> minOccurs="0", so "no entity element" and "an entity element naming

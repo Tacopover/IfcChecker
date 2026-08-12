@@ -190,6 +190,24 @@ describe("idsXmlToDrafts applicability", () => {
     ]);
   });
 
+  it("reads an applicability material, including one that names no material at all", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Anything with a material" ifcVersion="IFC4">
+          <applicability>
+            <material><value><simpleValue>Concrete</simpleValue></value></material>
+            <material />
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.applicabilityFacets?.map((facet) => facet.kind === "material" && facet.value)).toEqual(
+      [{ kind: "simple", value: "Concrete" }, null]
+    );
+  });
+
   // `ids.xsd` makes the applicability's <entity> minOccurs="0", so "every element carrying this
   // property" is a complete rule. It used to be refused for naming no type.
   it("reads an applicability that states a property and no entity at all", () => {

@@ -655,6 +655,14 @@ function readApplicabilityFacet(
 
   if (tag === "classification") return parseClassificationFacet(node, unsupported, "applicability");
 
+  if (tag === "material") {
+    return {
+      kind: "material",
+      value: parseRestriction(childrenOf(node, "material"), "value", unsupported, "applicability"),
+      cardinality: readCardinality(node),
+    };
+  }
+
   return refuse(tag, `Selects elements by <${tag}>, which cannot be represented.`);
 }
 
