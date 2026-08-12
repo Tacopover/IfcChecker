@@ -10,6 +10,11 @@ import { stating } from "../test/conditions";
 
 const SOURCE: FieldsForResult = {
   total: 10,
+  // The three rail sections a classification, material or partOf row reads. Empty here: this file
+  // is about the two kinds the condition row shows, and neither consults them.
+  classifications: [],
+  materials: [],
+  wholes: [],
   attributes: [
     { name: "Tag", propertySet: null, hits: 9, coverage: 0.9, values: [{ value: "W-1", count: 1 }], dataTypes: [] },
     { name: "Name", propertySet: null, hits: 10, coverage: 1, values: [{ value: "Wall", count: 10 }], dataTypes: [] },
