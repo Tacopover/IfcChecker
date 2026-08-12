@@ -241,7 +241,14 @@ const IMPORTED_IDS = `<?xml version="1.0" encoding="UTF-8"?>
       <requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>
     </specification>
     <specification name="Doors are named" ifcVersion="IFC4">
-      <applicability><entity><name><simpleValue>IFCDOOR</simpleValue></name></entity></applicability>
+      <applicability>
+        <entity><name><simpleValue>IFCDOOR</simpleValue></name></entity>
+        <property dataType="IFCBOOLEAN">
+          <propertySet><simpleValue>Pset_DoorCommon</simpleValue></propertySet>
+          <baseName><simpleValue>IsExternal</simpleValue></baseName>
+          <value><simpleValue>TRUE</simpleValue></value>
+        </property>
+      </applicability>
       <requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>
     </specification>
   </specifications>
@@ -274,6 +281,20 @@ describe("RuleBuilderPage importing an IDS file", () => {
     expect(screen.getByText("Kept, not editable")).toBeInTheDocument();
     expect(
       screen.getByText(/Gives its entity types as a pattern rather than plain names\./)
+    ).toBeInTheDocument();
+  });
+
+  // An applicability facet decides which elements the rule reaches, so the type chips alone are
+  // not the whole story. It is read-only, like the four requirement kinds with no controls yet.
+  it("shows what else the rule selects by, beside its type chips", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+    await user.click(screen.getByRole("button", { name: "Expand Doors are named" }));
+
+    expect(
+      screen.getByText(/only those whose IsExternal in Pset_DoorCommon is TRUE/)
     ).toBeInTheDocument();
   });
 

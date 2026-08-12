@@ -13,6 +13,14 @@ function rekey(result: IdsImportResult): IdsImportResult {
       ...rule,
       id: nextDraftId("r"),
       conditions: rule.conditions.map((condition) => ({ ...condition, id: nextDraftId("c") })),
+      ...(rule.applicabilityFacets
+        ? {
+            applicabilityFacets: rule.applicabilityFacets.map((facet) => ({
+              ...facet,
+              id: nextDraftId("c"),
+            })),
+          }
+        : {}),
     })),
   };
 }
