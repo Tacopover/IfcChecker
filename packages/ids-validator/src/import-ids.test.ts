@@ -128,6 +128,36 @@ describe("idsXmlToDrafts applicability", () => {
     ]);
   });
 
+  it("reads an applicability attribute, restriction-valued and all", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Origin markers" ifcVersion="IFC4">
+          <applicability>
+            <entity><name><simpleValue>IFCBUILDINGELEMENTPROXY</simpleValue></name></entity>
+            <attribute>
+              <name><simpleValue>Name</simpleValue></name>
+              <value><xs:restriction base="xs:string"><xs:pattern value=".*nulpunt.*" /></xs:restriction></value>
+            </attribute>
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.applicabilityFacets).toEqual([
+      {
+        id: expect.any(String),
+        kind: "attribute",
+        propertySet: null,
+        name: { kind: "simple", value: "Name" },
+        value: { kind: "affix", operator: "contains", literal: "nulpunt" },
+        cardinality: "required",
+        explicitCardinality: false,
+        instructions: null,
+      },
+    ]);
+  });
+
   // `ids.xsd` makes the applicability's <entity> minOccurs="0", so "every element carrying this
   // property" is a complete rule. It used to be refused for naming no type.
   it("reads an applicability that states a property and no entity at all", () => {

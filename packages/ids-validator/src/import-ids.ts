@@ -348,6 +348,7 @@ function readApplicabilityFacet(
   tag: string | null
 ): ApplicabilityFacetDraft | FacetRefusal {
   switch (tag) {
+    case "attribute":
     case "property":
       return readSlotFacet(node, tag, "applicability");
     default:
