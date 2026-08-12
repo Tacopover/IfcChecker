@@ -7,11 +7,22 @@ export interface ParsedBound {
   inclusive: boolean;
 }
 
+/**
+ * How many characters a value may hold. `exact` is `xs:length`, which XSD lets an author state
+ * beside `xs:minLength` and `xs:maxLength`, so all three edges are kept rather than folded into one.
+ */
+export interface ParsedLength {
+  exact: number | null;
+  min: number | null;
+  max: number | null;
+}
+
 export type ParsedRestriction =
   | { kind: "exact"; value: string }
   | { kind: "enum"; values: string[] }
   | { kind: "pattern"; source: string; regex: RegExp }
-  | { kind: "bounds"; min: ParsedBound | null; max: ParsedBound | null };
+  | { kind: "bounds"; min: ParsedBound | null; max: ParsedBound | null }
+  | ({ kind: "length" } & ParsedLength);
 
 export type FacetCardinality = "required" | "optional" | "prohibited";
 
@@ -258,6 +269,9 @@ const RESTRICTION_FACETS_READ = [
   "maxInclusive",
   "minExclusive",
   "maxExclusive",
+  "length",
+  "minLength",
+  "maxLength",
 ];
 
 /** The four bound facets, paired with the edge each one sets. */
@@ -290,6 +304,37 @@ function readBounds(restrictionChildren: OrderedNode[]): ParsedRestriction | nul
   }
 
   return min === null && max === null ? null : { kind: "bounds", min, max };
+}
+
+/** The three length facets, paired with the edge each one sets. */
+const LENGTH_FACETS = [
+  { tag: "length", edge: "exact" },
+  { tag: "minLength", edge: "min" },
+  { tag: "maxLength", edge: "max" },
+] as const;
+
+/**
+ * How long the value may be, or `null` when the restriction says nothing about its length.
+ *
+ * A facet whose `value` is not a whole count leaves its edge unset, the same rule `readBounds`
+ * applies: a `NaN` edge answers `false` to every comparison and would reject silently rather than
+ * being reported as the unreadable facet it is.
+ */
+function readLength(restrictionChildren: OrderedNode[]): ParsedRestriction | null {
+  const edges: ParsedLength = { exact: null, min: null, max: null };
+
+  for (const { tag, edge } of LENGTH_FACETS) {
+    const node = nodesNamed(restrictionChildren, tag)[0];
+    if (!node) continue;
+    const raw = String(attributesOf(node)["@_value"] ?? "").trim();
+    const count = Number(raw);
+    if (raw === "" || !Number.isInteger(count) || count < 0) continue;
+    edges[edge] = count;
+  }
+
+  return edges.exact === null && edges.min === null && edges.max === null
+    ? null
+    : { kind: "length", ...edges };
 }
 
 /**
@@ -337,6 +382,20 @@ function parseRestriction(
       });
     }
     return bounds;
+  }
+
+  const length = readLength(restrictionChildren);
+  if (length) {
+    // Same rule as the range above: XSD would intersect the two, and a dropped enumeration is a
+    // constraint we stop enforcing.
+    if (nodesNamed(restrictionChildren, "enumeration").length > 0) {
+      unsupported.push({
+        section: "requirements",
+        construct: "xs:enumeration",
+        description: "Combines an enumeration with a length; only the length is checked.",
+      });
+    }
+    return length;
   }
 
   // A restriction built only from facets we cannot read leaves no permitted values, so every

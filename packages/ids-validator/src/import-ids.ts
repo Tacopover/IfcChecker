@@ -2,11 +2,18 @@ import { XMLBuilder, XMLParser } from "fast-xml-parser";
 import type { UnsupportedConstruct } from "./parse-ids.js";
 import type {
   BoundDraft,
+  ClassificationFacetDraft,
   ConditionDraft,
   ConditionalCardinality,
+  EntityFacetDraft,
+  FacetDraft,
   ImportedRuleSource,
+  LengthDraft,
+  MaterialFacetDraft,
+  PartOfFacetDraft,
   PassThrough,
   RuleDraft,
+  SimpleCardinality,
   ValueDraft,
 } from "./rule-draft.js";
 import { patternValueDraft } from "./rule-draft.js";
@@ -196,7 +203,7 @@ function readSpecification(
   }
 
   const requirementsNode = findChild(children, "requirements");
-  const conditions: ConditionDraft[] = [];
+  const conditions: FacetDraft[] = [];
   const passThrough: PassThrough[] = [];
 
   for (const facetNode of elementsOf(requirementsNode ? childrenOf(requirementsNode) : [])) {
@@ -316,13 +323,47 @@ function readApplicability(
 const FACET_ATTRIBUTES: Record<string, string[]> = {
   attribute: ["@_cardinality", "@_instructions"],
   property: ["@_cardinality", "@_dataType", "@_uri", "@_instructions"],
+  classification: ["@_cardinality", "@_uri", "@_instructions"],
+  partOf: ["@_cardinality", "@_relation", "@_instructions"],
+  material: ["@_cardinality", "@_uri", "@_instructions"],
+  // No cardinality: ids.xsd gives the requirements-side entity none, and says why in a comment —
+  // the list of IFC classes is finite and mandated, so a prohibited form would be superfluous.
+  entity: ["@_instructions"],
 };
+
+/** What an `entityType` element holds, wherever `ids.xsd` nests one. */
+const ENTITY_CHILDREN = ["name", "predefinedType"];
 
 /** Child elements a facet may carry and still be fully representable. */
 const FACET_CHILDREN: Record<string, string[]> = {
   attribute: ["name", "value"],
   property: ["propertySet", "baseName", "value"],
+  classification: ["value", "system"],
+  partOf: ["entity"],
+  material: ["value"],
+  entity: ENTITY_CHILDREN,
 };
+
+/**
+ * What a draft of IDS carried and 1.0 does not, keyed by the facet that carries it.
+ *
+ * These are the one group of refusals that is final. A 1.0 `<property>` names its field with
+ * `<baseName>` and types it with `dataType`; `<name>` and `measure` are the 0.9-era spellings, and
+ * the corpus holds 13 facets still using them, all in one file. Keeping those verbatim is the
+ * correct and permanent answer for them, so the reason says so rather than implying that a control
+ * for them is on its way.
+ */
+const PRE_1_0_ATTRIBUTES: Record<string, string[]> = { property: ["@_measure"] };
+const PRE_1_0_CHILDREN: Record<string, string[]> = { property: ["name"] };
+
+/** The reason a construct is kept, saying outright when no version of the builder will show it. */
+function refuseConstruct(construct: string, permanent: boolean): FacetRefusal {
+  return refused(
+    permanent
+      ? `Carries ${construct}, which IDS 1.0 does not have. It is kept exactly as written, on purpose.`
+      : `Carries ${construct}, which the builder cannot show.`
+  );
+}
 
 /**
  * Whether the source states one of the three cardinalities `ids.xsd` gives an attribute or a
@@ -335,6 +376,17 @@ const FACET_CHILDREN: Record<string, string[]> = {
  */
 function isConditionalCardinality(value: string): value is ConditionalCardinality {
   return value === "required" || value === "optional" || value === "prohibited";
+}
+
+/**
+ * Whether the source states one of the two cardinalities `ids.xsd` gives a `partOf`.
+ *
+ * `simpleCardinality` has no `optional`, so a `cardinality="optional"` on a partOf is a document
+ * the schema does not describe. Reading it as one of the other two would answer a question the
+ * author did not ask.
+ */
+function isSimpleCardinality(value: string): value is SimpleCardinality {
+  return value === "required" || value === "prohibited";
 }
 
 /**
@@ -354,41 +406,192 @@ function refused(reason: string): FacetRefusal {
   return { refused: reason };
 }
 
-function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
-  const tag = tagOf(node);
-  if (tag !== "attribute" && tag !== "property") {
-    return refused(`The builder can show an attribute or a property; <${tag ?? "this facet"}> is neither.`);
-  }
+/**
+ * The parts every facet carries, once the attributes and children it may hold are checked against
+ * what `ids.xsd` gives its own kind.
+ *
+ * `stated` is the raw `cardinality` attribute rather than a value of either enumeration: the two
+ * alphabets differ per facet — `partOf` has no `optional` — so each reader below checks it against
+ * its own.
+ */
+interface FacetShell {
+  id: string;
+  instructions: string | null;
+  explicitCardinality: boolean;
+  stated: string | null;
+}
 
+function readFacetShell(node: OrderedNode, tag: string): FacetShell | FacetRefusal {
   const unknownAttribute = Object.keys(attributesOf(node)).find(
     (key) => !FACET_ATTRIBUTES[tag].includes(key)
   );
   if (unknownAttribute !== undefined) {
-    return refused(`Carries ${unknownAttribute.replace(/^@_/, "")}, which the builder cannot show.`);
+    return refuseConstruct(
+      unknownAttribute.replace(/^@_/, ""),
+      PRE_1_0_ATTRIBUTES[tag]?.includes(unknownAttribute) ?? false
+    );
   }
 
-  const children = childrenOf(node);
-  const unknownChild = elementsOf(children).find(
+  const unknownChild = elementsOf(childrenOf(node)).find(
     (child) => !FACET_CHILDREN[tag].includes(tagOf(child) ?? "")
   );
   if (unknownChild !== undefined) {
-    return refused(`Carries <${tagOf(unknownChild)}>, which the builder cannot show.`);
+    const child = tagOf(unknownChild) ?? "";
+    return refuseConstruct(`<${child}>`, PRE_1_0_CHILDREN[tag]?.includes(child) ?? false);
   }
 
   const stated = attributeOrNull(node, "cardinality");
-  if (stated !== null && !isConditionalCardinality(stated)) {
-    return refused(`Is cardinality="${stated}", which ids.xsd does not give this facet.`);
+  return {
+    id: draftId("c"),
+    instructions: attributeOrNull(node, "instructions"),
+    explicitCardinality: stated !== null,
+    stated,
+  };
+}
+
+function readFacet(node: OrderedNode): FacetDraft | FacetRefusal {
+  const tag = tagOf(node);
+  switch (tag) {
+    case "attribute":
+    case "property":
+      return readSlotFacet(node, tag);
+    case "classification":
+      return readClassificationFacet(node);
+    case "partOf":
+      return readPartOfFacet(node);
+    case "material":
+      return readMaterialFacet(node);
+    case "entity":
+      return readEntityFacet(node);
+    default:
+      return refused(`The builder cannot show a <${tag ?? "this facet"}> requirement.`);
+  }
+}
+
+/**
+ * The two parameters an `entityType` element states, wherever `ids.xsd` nests one.
+ *
+ * `<name>` is mandatory and the drafts that hold one type it as a plain `ValueDraft`, so a nameless
+ * entity is kept verbatim rather than imported as an entity that requires nothing.
+ */
+function readNestedEntity(
+  entityNode: OrderedNode,
+  subject: string
+): { name: ValueDraft; predefinedType: ValueDraft | null } | FacetRefusal {
+  const children = childrenOf(entityNode);
+  const unknownChild = elementsOf(children).find(
+    (child) => !ENTITY_CHILDREN.includes(tagOf(child) ?? "")
+  );
+  if (unknownChild !== undefined) {
+    return refused(`${subject} carries <${tagOf(unknownChild)}>, which the builder cannot show.`);
   }
 
+  const name = readValueDraft(children, "name");
+  if ("refused" in name) return name;
+  if (name.value === null) {
+    return refused(`${subject} names no IFC class, so what it requires is unknown.`);
+  }
+
+  const predefinedType = readValueDraft(children, "predefinedType");
+  if ("refused" in predefinedType) return predefinedType;
+
+  return { name: name.value, predefinedType: predefinedType.value };
+}
+
+/**
+ * The IFC class the element must be.
+ *
+ * The one facet with no cardinality at all, so `readFacetShell` refuses a `cardinality` attribute
+ * here through the same unknown-attribute check that catches a `uri` on an attribute.
+ */
+function readEntityFacet(node: OrderedNode): EntityFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "entity");
+  if ("refused" in shell) return shell;
+
+  const entity = readNestedEntity(node, "This entity requirement");
+  if ("refused" in entity) return entity;
+
+  return {
+    id: shell.id,
+    kind: "entity",
+    name: entity.name,
+    predefinedType: entity.predefinedType,
+    instructions: shell.instructions,
+  };
+}
+
+/**
+ * A material requirement. `<value>` is optional, and a facet without one asks only whether the
+ * element is made of anything at all — which is a real check, not an empty one.
+ */
+function readMaterialFacet(node: OrderedNode): MaterialFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "material");
+  if ("refused" in shell) return shell;
+  if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
+    return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
+  }
+
+  const value = readValueDraft(childrenOf(node));
+  if ("refused" in value) return value;
+
+  return {
+    id: shell.id,
+    kind: "material",
+    value: value.value,
+    uri: attributeOrNull(node, "uri"),
+    cardinality: shell.stated ?? "required",
+    explicitCardinality: shell.explicitCardinality,
+    instructions: shell.instructions,
+  };
+}
+
+function readPartOfFacet(node: OrderedNode): PartOfFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "partOf");
+  if ("refused" in shell) return shell;
+  if (shell.stated !== null && !isSimpleCardinality(shell.stated)) {
+    return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
+  }
+
+  const entityNode = findChild(childrenOf(node), "entity");
+  if (!entityNode) {
+    return refused("States no <entity>, so the whole it must be part of is unknown.");
+  }
+  const entity = readNestedEntity(entityNode, "The whole it must be part of");
+  if ("refused" in entity) return entity;
+
+  return {
+    id: shell.id,
+    kind: "partOf",
+    // The source attribute verbatim: one member of the schema's enumeration is two relationship
+    // names in a single value, so splitting here would leave the exporter guessing how to join
+    // them back. `compileFacet` splits.
+    relation: attributeOrNull(node, "relation"),
+    entityName: entity.name,
+    predefinedType: entity.predefinedType,
+    cardinality: shell.stated ?? "required",
+    explicitCardinality: shell.explicitCardinality,
+    instructions: shell.instructions,
+  };
+}
+
+/** The two facets that name one value slot on the element and constrain what it holds. */
+function readSlotFacet(node: OrderedNode, tag: "attribute" | "property"): ConditionDraft | FacetRefusal {
+  const shell = readFacetShell(node, tag);
+  if ("refused" in shell) return shell;
+  if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
+    return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
+  }
+
+  const children = childrenOf(node);
   const value = readValueDraft(children);
   if ("refused" in value) return value;
 
   const common = {
-    id: draftId("c"),
+    id: shell.id,
     value: value.value,
-    cardinality: stated ?? "required",
-    explicitCardinality: stated !== null,
-    instructions: attributeOrNull(node, "instructions"),
+    cardinality: shell.stated ?? "required",
+    explicitCardinality: shell.explicitCardinality,
+    instructions: shell.instructions,
   };
 
   if (tag === "attribute") {
@@ -413,12 +616,50 @@ function readFacet(node: OrderedNode): ConditionDraft | FacetRefusal {
   };
 }
 
+function readClassificationFacet(node: OrderedNode): ClassificationFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "classification");
+  if ("refused" in shell) return shell;
+  if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
+    return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
+  }
+
+  const children = childrenOf(node);
+  const value = readValueDraft(children);
+  if ("refused" in value) return value;
+
+  // `ids.xsd` makes <system> mandatory, so a classification without one is a document the schema
+  // does not describe. A draft cannot state none, and inventing one would author the rule.
+  const system = readValueDraft(children, "system");
+  if ("refused" in system) return system;
+  if (system.value === null) {
+    return refused("States no <system>, so the classification system it requires is unknown.");
+  }
+
+  return {
+    id: shell.id,
+    kind: "classification",
+    system: system.value,
+    value: value.value,
+    uri: attributeOrNull(node, "uri"),
+    cardinality: shell.stated ?? "required",
+    explicitCardinality: shell.explicitCardinality,
+    instructions: shell.instructions,
+  };
+}
+
 /** The four bound facets, paired with the edge each one sets. */
 const BOUND_FACETS = [
   { tag: "minInclusive", edge: "min", inclusive: true },
   { tag: "minExclusive", edge: "min", inclusive: false },
   { tag: "maxInclusive", edge: "max", inclusive: true },
   { tag: "maxExclusive", edge: "max", inclusive: false },
+] as const;
+
+/** The three length facets, paired with the edge each one sets. */
+const LENGTH_FACETS = [
+  { tag: "length", edge: "exact" },
+  { tag: "minLength", edge: "min" },
+  { tag: "maxLength", edge: "max" },
 ] as const;
 
 /**
@@ -430,9 +671,8 @@ const RESTRICTION_FACETS_READ = [
   "pattern",
   "enumeration",
   ...BOUND_FACETS.map((facet) => facet.tag),
+  ...LENGTH_FACETS.map((facet) => facet.tag),
 ];
-
-const LENGTH_FACETS = ["length", "minLength", "maxLength"];
 
 /**
  * Why a restriction could not be read, named by the one thing that stopped it.
@@ -442,24 +682,27 @@ const LENGTH_FACETS = ["length", "minLength", "maxLength"];
  * `xs:double` base, and the rest two `xs:pattern` children. Each of those is a different piece of
  * work, and the message is what tells the user which one their file is waiting on.
  *
- * The range half of that sentence is gone — ranges are read now. A length is still refused, because
- * `ParsedRestriction` has no length variant to compile one into.
+ * Both halves of that sentence are gone — ranges and lengths are read now.
  */
 function refuseRestrictionFacet(tag: string): FacetRefusal {
   if (tag === "annotation") {
     return refused("Documents its value with an <xs:annotation>, which the builder cannot show.");
   }
-  if (LENGTH_FACETS.includes(tag)) {
-    return refused("Restricts the length of its value, which the builder cannot show.");
-  }
   return refused(`Restricts its value with <xs:${tag}>, which the builder cannot show.`);
 }
 
-/** The value a facet states, or the reason it cannot be shown. `null` is "no restriction at all". */
+/**
+ * The value under one of a facet's parameters, or the reason it cannot be shown. `null` is "the
+ * parameter is absent", which for `<value>` means no restriction at all.
+ *
+ * Named because a facet may state several: a classification constrains its `<system>` and its
+ * `<value>` independently, and each is an `idsValue` in its own right.
+ */
 function readValueDraft(
-  facetChildren: OrderedNode[]
+  facetChildren: OrderedNode[],
+  parameter = "value"
 ): { value: ValueDraft | null } | FacetRefusal {
-  const valueNode = findChild(facetChildren, "value");
+  const valueNode = findChild(facetChildren, parameter);
   if (!valueNode) return { value: null };
 
   const valueChildren = elementsOf(childrenOf(valueNode));
@@ -487,10 +730,13 @@ function readValueDraft(
   const bounds = children.filter((child) =>
     BOUND_FACETS.some((facet) => facet.tag === tagOf(child))
   );
+  const lengths = children.filter((child) =>
+    LENGTH_FACETS.some((facet) => facet.tag === tagOf(child))
+  );
 
   // XSD would intersect two families, and a `ValueDraft` states one thing. Dropping either half
   // would export a rule that checks less than the file asks for.
-  const families = [patterns.length, enumerations.length, bounds.length].filter(
+  const families = [patterns.length, enumerations.length, bounds.length, lengths.length].filter(
     (count) => count > 0
   );
   if (families.length !== 1 || patterns.length > 1) {
@@ -500,8 +746,8 @@ function readValueDraft(
   // A range keeps whatever base the author wrote, right down to a capitalised `xs:Decimal`.
   if (bounds.length > 0) return readBoundsDraft(base ?? "xs:double", bounds);
 
-  // A pattern and an enumeration are string constructs, so anything left here is based on a type
-  // we would retype on the way back out.
+  // A pattern, an enumeration and a length are all string constructs, so anything left here is
+  // based on a type we would retype on the way back out.
   if (base !== null && base.slice(base.indexOf(":") + 1) !== "string") {
     return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
   }
@@ -509,6 +755,7 @@ function readValueDraft(
   if (patterns.length === 1) {
     return { value: patternValueDraft(attributeOrNull(patterns[0], "value") ?? "") };
   }
+  if (lengths.length > 0) return readLengthDraft(lengths);
   return {
     value: {
       kind: "enum",
@@ -544,4 +791,30 @@ function readBoundsDraft(
   }
 
   return { value: { kind: "bounds", base, ...edges } };
+}
+
+/**
+ * The character counts a restriction states, each kept as the author wrote it.
+ *
+ * Stricter than `readBoundsDraft` about a value it cannot read, and deliberately: a length stating
+ * no readable edge compiles to a restriction that admits everything, so importing one would turn a
+ * malformed file into a rule that passes every element. Keeping it verbatim says so instead.
+ */
+function readLengthDraft(lengthNodes: OrderedNode[]): { value: ValueDraft } | FacetRefusal {
+  const edges: LengthDraft = { exact: null, min: null, max: null };
+
+  for (const node of lengthNodes) {
+    const facet = LENGTH_FACETS.find((candidate) => candidate.tag === tagOf(node));
+    if (!facet) continue;
+    if (edges[facet.edge] !== null) {
+      return refused(`States <xs:${facet.tag}> twice, so the builder cannot show it as one length.`);
+    }
+    const count = attributeOrNull(node, "value") ?? "";
+    if (!/^\d+$/.test(count.trim())) {
+      return refused(`Gives <xs:${facet.tag}> the value "${count}", which is not a character count.`);
+    }
+    edges[facet.edge] = count;
+  }
+
+  return { value: { kind: "length", ...edges } };
 }

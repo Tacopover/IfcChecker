@@ -393,3 +393,52 @@ describe("parseIdsXml — numeric bounds", () => {
     ]);
   });
 });
+
+describe("parseIdsXml — length", () => {
+  const lengthAttribute = (facets: string) =>
+    parseIdsXml(
+      specificationXml(
+        `<attribute><name><simpleValue>Name</simpleValue></name>
+           <value><xs:restriction base="xs:string">${facets}</xs:restriction></value>
+         </attribute>`
+      )
+    )[0];
+
+  it("reads the three length facets", () => {
+    expect(slotRestriction(lengthAttribute(`<xs:length value="2" />`).requirements[0])).toEqual({
+      kind: "length",
+      exact: 2,
+      min: null,
+      max: null,
+    });
+    const range = lengthAttribute(`<xs:minLength value="2" /><xs:maxLength value="3" />`);
+    expect(slotRestriction(range.requirements[0])).toEqual({
+      kind: "length",
+      exact: null,
+      min: 2,
+      max: 3,
+    });
+  });
+
+  // A length used to land in RESTRICTION_FACETS_READ's blind spot, and the empty enumeration left
+  // behind failed every element — which happened to agree with the suite's three `fail-` cases.
+  it("no longer reports a length as an unsupported construct", () => {
+    expect(lengthAttribute(`<xs:minLength value="2" />`).unsupported).toEqual([]);
+  });
+
+  // Same rule as a bound whose value is not a number: the edge is dropped rather than becoming a
+  // comparison that answers false to everything.
+  it("leaves an edge unset when its value is not a whole count", () => {
+    expect(
+      slotRestriction(lengthAttribute(`<xs:minLength value="two" /><xs:maxLength value="3" />`).requirements[0])
+    ).toEqual({ kind: "length", exact: null, min: null, max: 3 });
+  });
+
+  it("reports an enumeration it cannot intersect with the length", () => {
+    const spec = lengthAttribute(`<xs:minLength value="2" /><xs:enumeration value="AB" />`);
+    expect(slotRestriction(spec.requirements[0])).toMatchObject({ kind: "length" });
+    expect(spec.unsupported).toEqual([
+      expect.objectContaining({ construct: "xs:enumeration", section: "requirements" }),
+    ]);
+  });
+});

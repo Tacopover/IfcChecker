@@ -71,6 +71,22 @@ function restrictionPartsOf(
           .join(""),
       };
     }
+    // A length counts characters, so its base is the string base every other text restriction has.
+    case "length": {
+      const edges: Array<[string, string | null]> = [
+        ["length", value.exact],
+        ["minLength", value.min],
+        ["maxLength", value.max],
+      ];
+      return {
+        base: "xs:string",
+        body: edges
+          .map(([tag, count]) =>
+            count === null ? "" : `\n${itemIndent}<xs:${tag} value="${escapeXml(count)}" />`
+          )
+          .join(""),
+      };
+    }
   }
 }
 

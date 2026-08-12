@@ -547,6 +547,46 @@ describe("evaluateRequirement — numeric bounds", () => {
   });
 });
 
+describe("evaluateRequirement — length", () => {
+  const named = (name: string) => makeElement({ attributes: { Tag: { value: name } } });
+  const lengthFacet = (exact: number | null, min: number | null, max: number | null) =>
+    attributeFacet({ name: "Tag", restriction: { kind: "length", exact, min, max } });
+
+  it("accepts only the exact character count xs:length states", () => {
+    expect(evaluateRequirement(named("AB"), lengthFacet(2, null, null)).passed).toBe(true);
+    expect(evaluateRequirement(named("A"), lengthFacet(2, null, null)).passed).toBe(false);
+    expect(evaluateRequirement(named("ABC"), lengthFacet(2, null, null)).passed).toBe(false);
+  });
+
+  it("includes both edges of a minLength/maxLength pair", () => {
+    const between = lengthFacet(null, 2, 3);
+    expect(evaluateRequirement(named("A"), between).passed).toBe(false);
+    expect(evaluateRequirement(named("AB"), between).passed).toBe(true);
+    expect(evaluateRequirement(named("ABC"), between).passed).toBe(true);
+    expect(evaluateRequirement(named("ABCD"), between).passed).toBe(false);
+  });
+
+  // XSD lets an author write all three, and keeping only one of them would stop enforcing a
+  // constraint the file states.
+  it("checks every edge the restriction states", () => {
+    expect(evaluateRequirement(named("AB"), lengthFacet(2, 3, null)).passed).toBe(false);
+  });
+
+  // A unit conversion rewrites 2 as 2000, which is four characters rather than one. The count is
+  // taken on what the file wrote.
+  it("counts the characters the file wrote, not the converted number", () => {
+    const element = makeElement({
+      propertySets: { Pset_WallCommon: { Foo: { value: 2, dataType: "IFCLENGTHMEASURE" } } },
+    });
+    const facet = propertyFacet({
+      baseName: "Foo",
+      dataType: "IFCLENGTHMEASURE",
+      restriction: { kind: "length", exact: 1, min: null, max: null },
+    });
+    expect(evaluateRequirement(element, facet, { IFCLENGTHMEASURE: 1000 }).passed).toBe(true);
+  });
+});
+
 describe("evaluateRequirement — floating-point equality tolerance", () => {
   const storedReal = (value: number) =>
     makeElement({ propertySets: { Pset_WallCommon: { Foo: { value, dataType: "IFCREAL" } } } });

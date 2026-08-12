@@ -36,6 +36,19 @@ export interface BoundDraft {
   inclusive: boolean;
 }
 
+/**
+ * How many characters a value may hold, each count as the author wrote it.
+ *
+ * Strings for the same reason `BoundDraft.value` is one: the draft carries what the file says, and
+ * a count read through a `number` would hand `"02"` back as `"2"`. `exact` is `xs:length`, which
+ * XSD lets an author state beside the two bounds rather than instead of them.
+ */
+export interface LengthDraft {
+  exact: string | null;
+  min: string | null;
+  max: string | null;
+}
+
 /** The friendly operators that are a pattern underneath. */
 export type AffixOperator = "contains" | "startsWith" | "endsWith";
 
@@ -61,7 +74,8 @@ export type ValueDraft =
   | { kind: "enum"; values: string[] }
   | { kind: "pattern"; source: string }
   | { kind: "affix"; operator: AffixOperator; literal: string }
-  | { kind: "bounds"; base: string; min: BoundDraft | null; max: BoundDraft | null };
+  | { kind: "bounds"; base: string; min: BoundDraft | null; max: BoundDraft | null }
+  | ({ kind: "length" } & LengthDraft);
 
 /**
  * What every facet in `<requirements>` carries. `instructions` is the only field `ids.xsd` gives
@@ -334,6 +348,19 @@ function compileBound(bound: BoundDraft | null): ParsedBound | null {
   return { value, inclusive: bound.inclusive };
 }
 
+/**
+ * A character count the validator can compare, or `null` for an edge it cannot.
+ *
+ * `parseRestriction` applies the same rule to a file. The importer never stores an edge this
+ * rejects, so a compiled length always states at least one — a length stating none would admit
+ * every value, which is the direction a check must never be wrong in.
+ */
+function compileCount(count: string | null): number | null {
+  if (count === null) return null;
+  const value = Number(count);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 /** What the validator checks this value against. Total: every `ValueDraft` compiles. */
 export function compileValue(value: ValueDraft): ParsedRestriction;
 export function compileValue(value: ValueDraft | null): ParsedRestriction | null;
@@ -353,6 +380,13 @@ export function compileValue(value: ValueDraft | null): ParsedRestriction | null
       const max = compileBound(value.max);
       return { kind: "bounds", min, max };
     }
+    case "length":
+      return {
+        kind: "length",
+        exact: compileCount(value.exact),
+        min: compileCount(value.min),
+        max: compileCount(value.max),
+      };
   }
 }
 
@@ -369,9 +403,9 @@ export interface FriendlyReading {
  * The friendly reading of a condition, or `null` when no operator states what it says.
  *
  * `null` is not a fault — it is the honest answer for the things the eight operators cannot
- * express: a numeric range, an optional facet, and a prohibited value ("must not be Steel", which
- * `notExists` would widen into "must not be present at all"). The row shows those rather than
- * mislabelling them.
+ * express: a numeric range, a length, an optional facet, and a prohibited value ("must not be
+ * Steel", which `notExists` would widen into "must not be present at all"). The row shows those
+ * rather than mislabelling them.
  */
 export function friendlyReadingOf(condition: ConditionDraft): FriendlyReading | null {
   const none = { text: "", values: [] };
@@ -392,6 +426,7 @@ export function friendlyReadingOf(condition: ConditionDraft): FriendlyReading | 
     case "pattern":
       return { operator: "matches", text: condition.value.source, values: [] };
     case "bounds":
+    case "length":
       return null;
   }
 }

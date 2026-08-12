@@ -147,6 +147,38 @@ describe("ids.xsd conformance of what we emit", () => {
   it("emits a schema-valid document for every facet kind at once", async () => {
     expect(await idsXsdViolations(buildIdsXml(EVERY_FACET))).toEqual([]);
   });
+
+  // A length has no friendly operator, so the generated documents above never reach it. Only an
+  // imported file produces one, and it has to go back out as a document a checker still reads.
+  it("emits a schema-valid document for a length restriction", async () => {
+    const xml = buildIdsXml([
+      {
+        id: "r1",
+        name: "Length",
+        entityTypes: ["IfcWall"],
+        conditions: [
+          {
+            id: "c1",
+            kind: "attribute",
+            propertySet: null,
+            name: "Name",
+            value: { kind: "length", exact: null, min: "2", max: "3" },
+            cardinality: "required",
+          },
+          {
+            id: "c2",
+            kind: "attribute",
+            propertySet: null,
+            name: "Tag",
+            value: { kind: "length", exact: "2", min: null, max: null },
+            cardinality: "required",
+          },
+        ],
+      },
+    ]);
+
+    expect(await idsXsdViolations(xml)).toEqual([]);
+  });
 });
 
 /**

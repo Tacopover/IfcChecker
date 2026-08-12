@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { idsXmlToDrafts } from "./import-ids.js";
 import type { IdsImportResult } from "./import-ids.js";
-import type { ConditionDraft, RuleDraft } from "./rule-draft.js";
+import type { ConditionDraft, FacetDraft, RuleDraft } from "./rule-draft.js";
 import { friendlyReadingOf, isConditionFacet } from "./rule-draft.js";
 
 function document(specifications: string): string {
@@ -30,13 +30,17 @@ function onlyRule(result: IdsImportResult): RuleDraft {
   return result.rules[0];
 }
 
-function onlyCondition(xml: string): ConditionDraft {
+function onlyFacet(xml: string): FacetDraft {
   const rule = onlyRule(idsXmlToDrafts(xml));
   expect(rule.imported?.passThrough).toEqual([]);
   expect(rule.conditions).toHaveLength(1);
-  const [facet] = rule.conditions;
-  // The draft model holds all six facets; the importer reads two of them and keeps the rest
-  // verbatim. An assertion rather than a cast, so that stops being true loudly.
+  return rule.conditions[0];
+}
+
+function onlyCondition(xml: string): ConditionDraft {
+  const facet = onlyFacet(xml);
+  // The two kinds a condition row can edit. An assertion rather than a cast, so a reader that
+  // starts handing back another kind here fails loudly instead of being cast into shape.
   if (!isConditionFacet(facet)) throw new Error(`imported a <${facet.kind}>, which it should not`);
   return facet;
 }
@@ -230,6 +234,22 @@ describe("idsXmlToDrafts values", () => {
     expect(value).toMatchObject({ kind: "bounds", base: "xs:Decimal" });
   });
 
+  it("reads a length, keeping each count as the author wrote it", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:minLength value="2" /><xs:maxLength value="03" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "length", exact: null, min: "2", max: "03" });
+  });
+
+  it("reads an exact length beside the two bounds, because XSD allows all three", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:length value="2" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "length", exact: "2", min: null, max: null });
+  });
+
   // Prose that constrains nothing, and so reaches no compiled requirement. It is still the sentence
   // saying why the rule is there, and an import that dropped it would hand back a poorer file.
   it("carries the author's instructions on either kind of facet", () => {
@@ -282,16 +302,199 @@ describe("idsXmlToDrafts values", () => {
   });
 });
 
+describe("idsXmlToDrafts classification", () => {
+  it("reads both parameters, each as the value the file states", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<classification><value><xs:restriction base="xs:string"><xs:pattern value="21\\.\\d+" /></xs:restriction></value><system><simpleValue>NL/SfB</simpleValue></system></classification>`
+        )
+      )
+    ).toMatchObject({
+      kind: "classification",
+      system: { kind: "simple", value: "NL/SfB" },
+      value: { kind: "pattern", source: "21\\.\\d+" },
+    });
+  });
+
+  // <value> is optional: "must be classified in this system, whatever the code says".
+  it("reads a classification that names only its system", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<classification><system><simpleValue>Uniclass</simpleValue></system></classification>`
+        )
+      )
+    ).toMatchObject({ kind: "classification", value: null, cardinality: "required" });
+  });
+
+  it("carries the cardinality, the uri and the instructions the source states", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<classification cardinality="optional" uri="https://example.org/nlsfb" instructions="Ask the architect."><system><simpleValue>NL/SfB</simpleValue></system></classification>`
+        )
+      )
+    ).toMatchObject({
+      kind: "classification",
+      cardinality: "optional",
+      explicitCardinality: true,
+      uri: "https://example.org/nlsfb",
+      instructions: "Ask the architect.",
+    });
+  });
+});
+
+describe("idsXmlToDrafts requirement-side entity", () => {
+  it("reads the class it names and the predefined type beside it", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<entity instructions="Walls only."><name><xs:restriction base="xs:string"><xs:enumeration value="IFCWALL" /><xs:enumeration value="IFCWALLSTANDARDCASE" /></xs:restriction></name><predefinedType><simpleValue>SOLIDWALL</simpleValue></predefinedType></entity>`
+        )
+      )
+    ).toMatchObject({
+      kind: "entity",
+      name: { kind: "enum", values: ["IFCWALL", "IFCWALLSTANDARDCASE"] },
+      predefinedType: { kind: "simple", value: "SOLIDWALL" },
+      instructions: "Walls only.",
+    });
+  });
+
+  // ids.xsd gives the requirements-side entity no cardinality at all, so one is a document the
+  // schema does not describe and choosing a meaning for it would author the rule.
+  it("keeps an entity carrying a cardinality verbatim", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        withRequirements(
+          `<entity cardinality="prohibited"><name><simpleValue>IFCWALL</simpleValue></name></entity>`
+        )
+      )
+    );
+
+    expect(rule.conditions).toEqual([]);
+    expect(rule.imported?.passThrough[0].reason).toMatch(/Carries cardinality/);
+  });
+
+  it("keeps an entity naming no class verbatim rather than requiring nothing", () => {
+    const rule = onlyRule(idsXmlToDrafts(withRequirements(`<entity />`)));
+
+    expect(rule.conditions).toEqual([]);
+    expect(rule.imported?.passThrough[0].reason).toMatch(/names no IFC class/);
+  });
+});
+
+describe("idsXmlToDrafts material", () => {
+  it("reads the material it names, with the uri and cardinality beside it", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<material cardinality="prohibited" uri="https://example.org/materials"><value><simpleValue>Asbestos</simpleValue></value></material>`
+        )
+      )
+    ).toMatchObject({
+      kind: "material",
+      value: { kind: "simple", value: "Asbestos" },
+      uri: "https://example.org/materials",
+      cardinality: "prohibited",
+      explicitCardinality: true,
+    });
+  });
+
+  // <value> is optional, and a material facet without one is a real check — "must be made of
+  // something" — rather than an empty one.
+  it("reads a material facet that names no material at all", () => {
+    expect(onlyFacet(withRequirements(`<material />`))).toMatchObject({
+      kind: "material",
+      value: null,
+      cardinality: "required",
+      explicitCardinality: false,
+    });
+  });
+});
+
+describe("idsXmlToDrafts partOf", () => {
+  it("reads the nested entity and keeps the relation attribute as written", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<partOf relation="IFCRELAGGREGATES"><entity><name><simpleValue>IFCBUILDINGSTOREY</simpleValue></name></entity></partOf>`
+        )
+      )
+    ).toMatchObject({
+      kind: "partOf",
+      relation: "IFCRELAGGREGATES",
+      entityName: { kind: "simple", value: "IFCBUILDINGSTOREY" },
+      predefinedType: null,
+      cardinality: "required",
+    });
+  });
+
+  // One member of the schema's relations enumeration is two names in a single attribute value, so
+  // the draft keeps the attribute rather than a split list. compileFacet splits.
+  it("keeps a two-name relation as the one attribute the author wrote", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<partOf relation="IFCRELVOIDSELEMENT IFCRELFILLSELEMENT"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></partOf>`
+        )
+      )
+    ).toMatchObject({ kind: "partOf", relation: "IFCRELVOIDSELEMENT IFCRELFILLSELEMENT" });
+  });
+
+  it("reads the whole's predefined type, and a relation the source omitted as none", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<partOf><entity><name><simpleValue>IFCSPACE</simpleValue></name><predefinedType><simpleValue>INTERNAL</simpleValue></predefinedType></entity></partOf>`
+        )
+      )
+    ).toMatchObject({
+      kind: "partOf",
+      relation: null,
+      predefinedType: { kind: "simple", value: "INTERNAL" },
+    });
+  });
+
+  // simpleCardinality has no `optional`, so reading it as one of the other two would answer a
+  // question the author never asked.
+  it.each(["prohibited", "optional"])("handles cardinality=%s the way ids.xsd defines it", (stated) => {
+    const xml = withRequirements(
+      `<partOf cardinality="${stated}"><entity><name><simpleValue>IFCSPACE</simpleValue></name></entity></partOf>`
+    );
+
+    if (stated === "prohibited") {
+      expect(onlyFacet(xml)).toMatchObject({ kind: "partOf", cardinality: "prohibited" });
+      return;
+    }
+    const rule = onlyRule(idsXmlToDrafts(xml));
+    expect(rule.conditions).toEqual([]);
+    expect(rule.imported?.passThrough[0].reason).toMatch(/ids\.xsd does not give this facet/);
+  });
+});
+
 describe("idsXmlToDrafts pass-through", () => {
   it.each([
+    // All six facets ids.xsd defines are read now, so the only thing left for the default branch
+    // is a construct from a later IDS than we know. That is what the pass-through machinery exists
+    // to survive, and it should stay covered.
     [
-      "a facet outside the builder's model",
+      "a facet from a later IDS than we know",
+      `<geometry><value><simpleValue>Solid</simpleValue></value></geometry>`,
+      "geometry",
+    ],
+    // ids.xsd makes <system> mandatory, so this is a document the schema does not describe. A draft
+    // cannot state none, and inventing one would author the rule on the file's behalf.
+    [
+      "a classification that names no system",
       `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
       "classification",
     ],
+    // A length stating no readable edge compiles to a restriction that admits everything, so
+    // importing one would turn a malformed file into a rule that passes every element.
     [
-      "a length, which no parsed restriction can hold",
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="3" /></xs:restriction></value></attribute>`,
+      "a length whose count is not a number",
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="three" /></xs:restriction></value></attribute>`,
       "attribute",
     ],
     [
@@ -323,14 +526,18 @@ describe("idsXmlToDrafts pass-through", () => {
   // them checks less than it looks like it does. Each refusal names the one thing that stopped it.
   it.each([
     [
+      `<geometry><value><simpleValue>Solid</simpleValue></value></geometry>`,
+      /cannot show a <geometry> requirement/,
+    ],
+    [
       `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
-      /attribute or a property; <classification> is neither/,
+      /States no <system>/,
     ],
     // One sentence used to cover all of these. Over the corpus it was wrong about 8 of the facets
     // it refused, and the message is what tells the user which piece of work their file waits on.
     [
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="3" /></xs:restriction></value></attribute>`,
-      /length of its value/,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="three" /></xs:restriction></value></attribute>`,
+      /not a character count/,
     ],
     [
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
@@ -361,11 +568,21 @@ describe("idsXmlToDrafts pass-through", () => {
     ],
     [
       `<attribute uri="https://example.org/rule"><name><simpleValue>Name</simpleValue></name></attribute>`,
-      /Carries uri/,
+      /Carries uri, which the builder cannot show/,
     ],
     [
       `<attribute><name><xs:restriction base="xs:string"><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`,
       /attribute name as a pattern/,
+    ],
+    // The 0.9-era spellings of baseName and dataType. Their refusal is final, so it says so rather
+    // than implying a control for them is on its way.
+    [
+      `<property measure="IfcBoolean"><propertySet><simpleValue>P</simpleValue></propertySet><name><simpleValue>IsExternal</simpleValue></name></property>`,
+      /Carries measure, which IDS 1\.0 does not have\. It is kept exactly as written, on purpose\./,
+    ],
+    [
+      `<property><propertySet><simpleValue>P</simpleValue></propertySet><name><simpleValue>IsExternal</simpleValue></name></property>`,
+      /Carries <name>, which IDS 1\.0 does not have\. It is kept exactly as written, on purpose\./,
     ],
   ])("says why it kept a facet rather than only which one", (facet, expected) => {
     const rule = onlyRule(idsXmlToDrafts(withRequirements(facet)));
@@ -384,9 +601,21 @@ describe("idsXmlToDrafts pass-through", () => {
       "AcousticRating",
       "Description",
     ]);
+    // The classification and the material are read into the rule now, so they count as preceding
+    // facets rather than sitting beside them. What is left verbatim is the one facet that really is
+    // outside the model: a property whose baseName is a pattern.
+    expect(rule.conditions.map((facet) => facet.kind)).toEqual([
+      "attribute",
+      "property",
+      "property",
+      "classification",
+      "property",
+      "property",
+      "attribute",
+      "material",
+    ]);
     expect(rule.imported?.passThrough.map((entry) => [entry.construct, entry.afterIndex])).toEqual([
-      ["classification", 3],
-      ["material", 6],
+      ["property", 8],
     ]);
   });
 });
