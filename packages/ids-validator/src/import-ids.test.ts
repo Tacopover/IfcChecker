@@ -578,6 +578,12 @@ describe("idsXmlToDrafts pass-through", () => {
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="three" /></xs:restriction></value></attribute>`,
       /not a character count/,
     ],
+    // The same rule, and for the same reason: a range with no readable edge compiles to
+    // `{min: null, max: null}`, which admits every number.
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minInclusive value="abc" /></xs:restriction></value></attribute>`,
+      /Gives <xs:minInclusive> the value "abc", which is not a number\./,
+    ],
     [
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
       /xs:annotation/,

@@ -777,6 +777,13 @@ function readValueDraft(
  * Two children setting the same edge — `minInclusive` beside `minExclusive`, or the same tag twice
  * — refuse rather than resolve. A `ValueDraft` holds one bound per edge, so keeping the first would
  * export the file with the other constraint quietly removed.
+ *
+ * An edge whose value is not a number refuses too, the same rule `readLengthDraft` applies. A
+ * restriction whose only bound is unreadable compiles to `{min: null, max: null}`, and
+ * `withinBounds` answers **true** to every number — so importing one would turn a malformed file
+ * into a rule that passes every element, while `parseIdsXml` reads the same file as an empty
+ * enumeration that fails every element. Refusing keeps the two readers agreeing, and keeps a bounds
+ * draft always stating at least one edge the validator can compare.
  */
 function readBoundsDraft(
   base: string,
@@ -791,10 +798,11 @@ function readBoundsDraft(
       const edge = facet.edge === "min" ? "lower" : "upper";
       return refused(`States its ${edge} bound twice, so the builder cannot show it as one range.`);
     }
-    edges[facet.edge] = {
-      value: attributeOrNull(node, "value") ?? "",
-      inclusive: facet.inclusive,
-    };
+    const value = attributeOrNull(node, "value") ?? "";
+    if (value.trim() === "" || !Number.isFinite(Number(value))) {
+      return refused(`Gives <xs:${facet.tag}> the value "${value}", which is not a number.`);
+    }
+    edges[facet.edge] = { value, inclusive: facet.inclusive };
   }
 
   return { value: { kind: "bounds", base, ...edges } };
