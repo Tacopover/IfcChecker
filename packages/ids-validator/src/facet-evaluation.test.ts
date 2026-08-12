@@ -62,25 +62,41 @@ describe("matchesApplicability", () => {
   });
 });
 
-function attributeFacet(overrides: Partial<ParsedAttributeFacet> = {}): ParsedAttributeFacet {
+/** A plain name, which is what nearly every case below states, or a restriction spelled out. */
+function nameOf(name: string | ParsedRestriction): ParsedRestriction {
+  return typeof name === "string" ? { kind: "exact", value: name } : name;
+}
+
+type NameOverride = string | ParsedRestriction;
+
+function attributeFacet(
+  overrides: Omit<Partial<ParsedAttributeFacet>, "name"> & { name?: NameOverride } = {}
+): ParsedAttributeFacet {
+  const { name = "Name", ...rest } = overrides;
   return {
     kind: "attribute",
-    name: "Name",
+    name: nameOf(name),
     restriction: null,
     cardinality: "required",
-    ...overrides,
+    ...rest,
   };
 }
 
-function propertyFacet(overrides: Partial<ParsedPropertyFacet> = {}): ParsedPropertyFacet {
+function propertyFacet(
+  overrides: Omit<Partial<ParsedPropertyFacet>, "propertySet" | "baseName"> & {
+    propertySet?: NameOverride;
+    baseName?: NameOverride;
+  } = {}
+): ParsedPropertyFacet {
+  const { propertySet = "Pset_WallCommon", baseName = "FireRating", ...rest } = overrides;
   return {
     kind: "property",
-    propertySet: "Pset_WallCommon",
-    baseName: "FireRating",
+    propertySet: nameOf(propertySet),
+    baseName: nameOf(baseName),
     dataType: "IFCLABEL",
     restriction: null,
     cardinality: "required",
-    ...overrides,
+    ...rest,
   };
 }
 
@@ -240,6 +256,98 @@ describe("evaluateRequirement — property facet", () => {
   });
 });
 
+// `ids.xsd` types <name>, <propertySet> and <baseName> as idsValue, so a facet may name the slots
+// it is about with a pattern or a list. IDS then requires every slot it reaches to satisfy the
+// value — `ifctester` collects the matches and stops at the first that fails.
+describe("evaluateRequirement — a name given as a restriction", () => {
+  const anyName = patternRestriction(".*Name.*");
+
+  it("reaches an attribute the element holds under a name the pattern admits", () => {
+    const element = makeElement({ attributes: { LayerSetName: { value: "Foo" } } });
+    expect(evaluateRequirement(element, attributeFacet({ name: anyName })).passed).toBe(true);
+  });
+
+  // The three identity fields are not in the attribute bag, so a restriction has to be offered them
+  // separately. The suite states a wall whose Name is set and whose Description is not as a
+  // document that must pass a facet naming both.
+  it("reaches the top-level Name, and ignores a matched attribute the model leaves empty", () => {
+    const facet = attributeFacet({ name: { kind: "enum", values: ["Name", "Description"] } });
+    const named = makeElement({ name: "Foo", attributes: { Description: { value: null } } });
+    const described = makeElement({ name: null, attributes: { Description: { value: "Bar" } } });
+
+    expect(evaluateRequirement(named, facet).passed).toBe(true);
+    expect(evaluateRequirement(described, facet).passed).toBe(true);
+  });
+
+  it("fails when every attribute the name reaches is empty", () => {
+    const element = makeElement({ name: null, attributes: { Description: { value: null } } });
+    const facet = attributeFacet({ name: { kind: "enum", values: ["Name", "Description"] } });
+
+    const result = evaluateRequirement(element, facet);
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain("Name, Description");
+  });
+
+  it("requires every matched property to satisfy the value, not just one", () => {
+    const facet = propertyFacet({
+      propertySet: "Foo_Bar",
+      baseName: patternRestriction("Foo.*"),
+      dataType: null,
+      restriction: { kind: "exact", value: "x" },
+    });
+    const agreeing = makeElement({
+      propertySets: { Foo_Bar: { Foobar: { value: "x" }, Foobaz: { value: "x" } } },
+    });
+    const disagreeing = makeElement({
+      propertySets: { Foo_Bar: { Foobar: { value: "x" }, Foobaz: { value: "y" } } },
+    });
+
+    expect(evaluateRequirement(agreeing, facet).passed).toBe(true);
+    const failure = evaluateRequirement(disagreeing, facet);
+    expect(failure.passed).toBe(false);
+    // Named after the slot the model holds, not after the pattern that reached it.
+    expect(failure.message).toContain('Property "Foobaz"');
+  });
+
+  // Each matching set is asked separately. Folding them into one list would find the property in
+  // whichever set has it and approve a set that has none — the suite states that as a failure.
+  it("requires every matched property set to hold the property", () => {
+    const facet = propertyFacet({
+      propertySet: patternRestriction("Foo_.*"),
+      baseName: "Foo",
+      dataType: null,
+    });
+    const complete = makeElement({
+      propertySets: { Foo_Bar: { Foo: { value: "Bar" } }, Foo_Baz: { Foo: { value: "Bar" } } },
+    });
+    const partial = makeElement({
+      propertySets: { Foo_Bar: { Foo: { value: "Bar" } }, Foo_Baz: { Other: { value: "Bar" } } },
+    });
+
+    expect(evaluateRequirement(complete, facet).passed).toBe(true);
+    const failure = evaluateRequirement(partial, facet);
+    expect(failure.passed).toBe(false);
+    expect(failure.message).toContain("Foo_Baz");
+  });
+
+  it("names the restriction when nothing at all matched", () => {
+    const facet = propertyFacet({ propertySet: patternRestriction("Foo_.*"), baseName: "Foo" });
+    const result = evaluateRequirement(makeElement({ propertySets: {} }), facet);
+
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain('matching "Foo_.*"');
+  });
+
+  it("still prohibits a value found under any name the restriction reaches", () => {
+    const facet = attributeFacet({ name: anyName, cardinality: "prohibited" });
+    const empty = makeElement({ attributes: { LayerSetName: { value: null } } });
+    const filled = makeElement({ attributes: { LayerSetName: { value: "Foo" } } });
+
+    expect(evaluateRequirement(empty, facet).passed).toBe(true);
+    expect(evaluateRequirement(filled, facet).passed).toBe(false);
+  });
+});
+
 describe("evaluateRequirement — dataType", () => {
   const facet = propertyFacet({ baseName: "Duration", dataType: "IFCTIMEMEASURE" });
   const elementWith = (dataType?: string) =>
@@ -274,7 +382,7 @@ describe("evaluateRequirement — dataType", () => {
 
 describe("evaluateRequirement — optional cardinality", () => {
   const facet = attributeFacet({ name: "Name", restriction: { kind: "exact", value: "Foobar" } });
-  const optional = attributeFacet({ ...facet, cardinality: "optional" });
+  const optional: ParsedAttributeFacet = { ...facet, cardinality: "optional" };
 
   it("passes when the model does not state the value", () => {
     expect(evaluateRequirement(makeElement({ name: null }), optional).passed).toBe(true);

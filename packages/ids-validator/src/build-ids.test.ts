@@ -17,30 +17,62 @@ function slotRestriction(facet: ParsedRequirementFacet): ParsedRestriction | nul
   return facet.restriction;
 }
 
-import type { ConditionDraft, ConditionOperator, RuleDraft } from "./rule-draft.js";
-import { cardinalityForOperator, compileDraft, valueDraftForOperator } from "./rule-draft.js";
+import type {
+  ConditionDraft,
+  ConditionOperator,
+  ConditionalCardinality,
+  RuleDraft,
+  ValueDraft,
+} from "./rule-draft.js";
+import {
+  cardinalityForOperator,
+  compileDraft,
+  plainName,
+  valueDraftForOperator,
+} from "./rule-draft.js";
 
 /**
  * A condition written the way the builder's rows are: an operator plus whatever it needs. The two
  * fields it sets are derived by the same functions the page uses, so these cases stay a test of
  * what the exporter writes rather than of how the draft happens to be shaped.
  */
-function condition(
-  overrides: Partial<ConditionDraft> & {
-    operator?: ConditionOperator;
-    text?: string;
-    values?: string[];
-  } = {}
-): ConditionDraft {
-  const { operator = "exists", text = "", values = [], ...rest } = overrides;
+/**
+ * Spelled out rather than derived from `Partial<ConditionDraft>`, because `name` and `propertySet`
+ * are written here as the plain names a builder row states, and the draft holds a `ValueDraft`.
+ */
+interface ConditionOverrides {
+  id?: string;
+  kind?: ConditionDraft["kind"];
+  name?: string;
+  propertySet?: string | null;
+  value?: ValueDraft | null;
+  cardinality?: ConditionalCardinality;
+  dataType?: string | null;
+  uri?: string | null;
+  instructions?: string | null;
+  explicitCardinality?: boolean;
+  operator?: ConditionOperator;
+  text?: string;
+  values?: string[];
+}
+
+function condition(overrides: ConditionOverrides = {}): ConditionDraft {
+  const {
+    operator = "exists",
+    text = "",
+    values = [],
+    name = "Name",
+    propertySet = null,
+    ...rest
+  } = overrides;
   return {
     id: "c1",
     kind: "attribute",
-    propertySet: null,
-    name: "Name",
     value: valueDraftForOperator(operator, text, values),
     cardinality: cardinalityForOperator(operator),
     ...rest,
+    name: plainName(name),
+    propertySet: propertySet === null ? null : plainName(propertySet),
     // `kind` widens back to the union through the spread, and a partial of a discriminated union
     // cannot narrow it again. Asserted here so the call sites stay one line each.
   } as ConditionDraft;
@@ -185,12 +217,19 @@ describe("buildIdsXml", () => {
         name: "Both halves",
         entityTypes: ["IfcWall"],
         conditions: [
-          { id: "c1", kind: "attribute", propertySet: null, name: "Tag", value: null, cardinality: "optional" },
+          {
+            id: "c1",
+            kind: "attribute",
+            propertySet: null,
+            name: plainName("Tag"),
+            value: null,
+            cardinality: "optional",
+          },
           {
             id: "c2",
             kind: "attribute",
             propertySet: null,
-            name: "Description",
+            name: plainName("Description"),
             value: { kind: "simple", value: "TODO" },
             cardinality: "prohibited",
           },
@@ -352,7 +391,7 @@ describe("buildIdsXml / compileDraft round-trip", () => {
             id: "c1",
             kind: "attribute",
             propertySet: null,
-            name: "Name",
+            name: plainName("Name"),
             value: { kind: "length", exact: null, min: "2", max: "03" },
             cardinality: "required",
           },

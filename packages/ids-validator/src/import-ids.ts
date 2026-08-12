@@ -595,22 +595,29 @@ function readSlotFacet(node: OrderedNode, tag: "attribute" | "property"): Condit
   };
 
   if (tag === "attribute") {
-    const name = readSimpleValue(descend(children, "name"));
-    if (name === null) return refused("Gives its attribute name as a pattern rather than a plain name.");
-    return { ...common, kind: "attribute", propertySet: null, name };
+    const name = readValueDraft(children, "name");
+    if ("refused" in name) return name;
+    if (name.value === null) {
+      return refused("Names no attribute, so what it requires is unknown.");
+    }
+    return { ...common, kind: "attribute", propertySet: null, name: name.value };
   }
 
-  const propertySet = readSimpleValue(descend(children, "propertySet"));
-  const name = readSimpleValue(descend(children, "baseName"));
-  if (propertySet === null || name === null) {
-    return refused("Gives its property set or property name as a pattern rather than a plain name.");
+  // `ids.xsd` makes both mandatory, so a property missing one is a document the schema does not
+  // describe. The draft cannot state none, and inventing one would author the rule.
+  const propertySet = readValueDraft(children, "propertySet");
+  if ("refused" in propertySet) return propertySet;
+  const name = readValueDraft(children, "baseName");
+  if ("refused" in name) return name;
+  if (propertySet.value === null || name.value === null) {
+    return refused("Names no property set or no property, so what it requires is unknown.");
   }
 
   return {
     ...common,
     kind: "property",
-    propertySet,
-    name,
+    propertySet: propertySet.value,
+    name: name.value,
     dataType: attributeOrNull(node, "dataType"),
     uri: attributeOrNull(node, "uri"),
   };
@@ -770,6 +777,13 @@ function readValueDraft(
  * Two children setting the same edge — `minInclusive` beside `minExclusive`, or the same tag twice
  * — refuse rather than resolve. A `ValueDraft` holds one bound per edge, so keeping the first would
  * export the file with the other constraint quietly removed.
+ *
+ * An edge whose value is not a number refuses too, the same rule `readLengthDraft` applies. A
+ * restriction whose only bound is unreadable compiles to `{min: null, max: null}`, and
+ * `withinBounds` answers **true** to every number — so importing one would turn a malformed file
+ * into a rule that passes every element, while `parseIdsXml` reads the same file as an empty
+ * enumeration that fails every element. Refusing keeps the two readers agreeing, and keeps a bounds
+ * draft always stating at least one edge the validator can compare.
  */
 function readBoundsDraft(
   base: string,
@@ -784,10 +798,11 @@ function readBoundsDraft(
       const edge = facet.edge === "min" ? "lower" : "upper";
       return refused(`States its ${edge} bound twice, so the builder cannot show it as one range.`);
     }
-    edges[facet.edge] = {
-      value: attributeOrNull(node, "value") ?? "",
-      inclusive: facet.inclusive,
-    };
+    const value = attributeOrNull(node, "value") ?? "";
+    if (value.trim() === "" || !Number.isFinite(Number(value))) {
+      return refused(`Gives <xs:${facet.tag}> the value "${value}", which is not a number.`);
+    }
+    edges[facet.edge] = { value, inclusive: facet.inclusive };
   }
 
   return { value: { kind: "bounds", base, ...edges } };

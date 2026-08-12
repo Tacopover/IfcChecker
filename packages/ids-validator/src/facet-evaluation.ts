@@ -33,6 +33,27 @@ export interface FacetCheckResult {
 type SlotFacet = ParsedAttributeFacet | ParsedPropertyFacet;
 
 /**
+ * One value slot a facet named, carrying the name the *model* spells it with.
+ *
+ * A facet may name its attribute or its property with a pattern, so the name in the message has to
+ * come from the element rather than from the rule — "Property matching Foo.* is wrong" says less
+ * than "Property Foobaz is wrong".
+ */
+interface MatchedSlot {
+  name: string;
+  /** The set the property was found in. Absent on an attribute, which is in no set. */
+  propertySet?: string;
+  value: NormalizedValue;
+}
+
+/** The matched slots that share a property set, or the whole attribute match as one group. */
+interface SlotGroup {
+  /** How a message names the group when nothing in it states a value. */
+  missing: string;
+  slots: MatchedSlot[];
+}
+
+/**
  * The three identity fields live on the element rather than in its attribute bag, so they are
  * wrapped here to give every read the same shape. They carry no measure type by construction.
  */
@@ -41,6 +62,16 @@ const TOP_LEVEL_ATTRIBUTE_READERS: Record<string, (element: NormalizedElement) =
   NAME: (element) => element.name,
   PREDEFINEDTYPE: (element) => element.predefinedType,
 };
+
+/**
+ * The same three, spelled as IFC spells them.
+ *
+ * A pattern-valued name is matched against the names an element actually has, and neither adapter
+ * puts these three in `attributes` — they are fields on `NormalizedElement`. Without them a facet
+ * naming `Name` and `Description` together would see only `Description`, and the suite states that
+ * exact document as one that must pass.
+ */
+const TOP_LEVEL_ATTRIBUTE_NAMES = ["GlobalId", "Name", "PredefinedType"];
 
 /**
  * An applicability entity name matches exactly, the same way a requirement's does.
@@ -81,13 +112,78 @@ function readAttributeValue(element: NormalizedElement, attributeName: string): 
   return null;
 }
 
-function readFacetValue(element: NormalizedElement, facet: SlotFacet): NormalizedValue | null {
-  if (facet.kind === "attribute") {
-    return readAttributeValue(element, facet.name);
+/**
+ * Every attribute slot the facet's `<name>` reaches.
+ *
+ * An exact name reads the one slot it names, keeping the case-insensitive fallback above. Anything
+ * else is matched against the names the element has, which is what `ifctester` does: it walks
+ * `get_info()` and keeps the keys the restriction admits.
+ */
+function attributeSlotsOf(element: NormalizedElement, name: ParsedRestriction): MatchedSlot[] {
+  if (name.kind === "exact") {
+    const value = readAttributeValue(element, name.value);
+    return value === null ? [] : [{ name: name.value, value }];
   }
-  const propertySet = element.propertySets[facet.propertySet];
-  const value = propertySet ? propertySet[facet.baseName] : undefined;
-  return value === undefined ? null : value;
+
+  const slots: MatchedSlot[] = [];
+  const candidates = new Set([...TOP_LEVEL_ATTRIBUTE_NAMES, ...Object.keys(element.attributes)]);
+  for (const candidate of candidates) {
+    if (!admitsString(name, candidate)) continue;
+    const value = readAttributeValue(element, candidate);
+    if (value !== null) slots.push({ name: candidate, value });
+  }
+  return slots;
+}
+
+/** Every property set the facet's `<propertySet>` reaches, each with the name the model gave it. */
+function matchingPropertySets(
+  element: NormalizedElement,
+  propertySet: ParsedRestriction
+): Array<[string, Record<string, NormalizedValue>]> {
+  if (propertySet.kind === "exact") {
+    const set = element.propertySets[propertySet.value];
+    return set === undefined ? [] : [[propertySet.value, set]];
+  }
+  return Object.entries(element.propertySets).filter(([name]) => admitsString(propertySet, name));
+}
+
+/** Every property inside one set that the facet's `<baseName>` reaches. */
+function propertySlotsIn(
+  setName: string,
+  set: Record<string, NormalizedValue>,
+  baseName: ParsedRestriction
+): MatchedSlot[] {
+  if (baseName.kind === "exact") {
+    const value = set[baseName.value];
+    return value === undefined ? [] : [{ name: baseName.value, propertySet: setName, value }];
+  }
+  return Object.entries(set)
+    .filter(([name]) => admitsString(baseName, name))
+    .map(([name, value]) => ({ name, propertySet: setName, value }));
+}
+
+/**
+ * The slots the facet is about, grouped the way IDS judges them.
+ *
+ * An attribute facet is one group: the suite's "name restrictions will match any result" pairs a
+ * wall stating `Name` with one stating `Description` against the same two-name facet, and both
+ * pass, so an empty slot beside a filled one is not a failure.
+ *
+ * A property facet is **one group per matching property set**, because IDS asks each of them
+ * separately. The suite pins it: a wall with `Foo_Bar` holding `Foo` and `Foo_Baz` holding nothing
+ * of the sort must *fail* a facet whose set is `Foo_.*` and whose property is `Foo`. Folding the
+ * two sets into one group would find `Foo` somewhere and approve it.
+ */
+function slotGroupsOf(element: NormalizedElement, facet: SlotFacet): SlotGroup[] {
+  if (facet.kind === "attribute") {
+    const slots = attributeSlotsOf(element, facet.name);
+    return slots.length === 0 ? [] : [{ missing: `${facetLabel(facet)} is missing`, slots }];
+  }
+
+  return matchingPropertySets(element, facet.propertySet).map(([setName, set]) => ({
+    missing: `Property ${nameLabel(facet.baseName)} is missing in property set "${setName}"`,
+    slots: propertySlotsIn(setName, set, facet.baseName),
+  }));
 }
 
 /** An empty string counts as unfilled — that is what a modeller means by "not filled in". */
@@ -95,16 +191,28 @@ function isFilledIn(slot: NormalizedValue | null): boolean {
   return slot !== null && slot !== undefined && slot.value !== null && String(slot.value) !== "";
 }
 
+/** What the facet says it is about, as the file wrote it — a plain name, or the restriction. */
+function nameLabel(restriction: ParsedRestriction): string {
+  return restriction.kind === "exact" ? `"${restriction.value}"` : restrictionLabel(restriction);
+}
+
 function facetLabel(facet: SlotFacet): string {
   return facet.kind === "attribute"
-    ? `Attribute "${facet.name}"`
-    : `Property "${facet.baseName}" in property set "${facet.propertySet}"`;
+    ? `Attribute ${nameLabel(facet.name)}`
+    : `Property ${nameLabel(facet.baseName)} in property set ${nameLabel(facet.propertySet)}`;
+}
+
+/** The same, for one slot the element really holds, so the message names the real field. */
+function slotLabel(facet: SlotFacet, slot: MatchedSlot): string {
+  return facet.kind === "attribute"
+    ? `Attribute "${slot.name}"`
+    : `Property "${slot.name}" in property set "${slot.propertySet}"`;
 }
 
 function missingMessage(facet: SlotFacet): string {
   return facet.kind === "attribute"
-    ? `Attribute "${facet.name}" is missing`
-    : `Property "${facet.baseName}" is missing in property set "${facet.propertySet}"`;
+    ? `${facetLabel(facet)} is missing`
+    : `Property ${nameLabel(facet.baseName)} is missing in property set ${nameLabel(facet.propertySet)}`;
 }
 
 /**
@@ -173,11 +281,11 @@ function matchesLiteral(raw: PropertyValue, literal: string, wholeNumber: boolea
 function holdsWholeNumber(
   element: NormalizedElement,
   facet: SlotFacet,
-  slot: NormalizedValue
+  slot: MatchedSlot
 ): boolean {
   return facet.kind === "property"
-    ? slot.dataType?.toUpperCase() === "IFCINTEGER"
-    : isIntegerAttribute(element.ifcType, facet.name);
+    ? slot.value.dataType?.toUpperCase() === "IFCINTEGER"
+    : isIntegerAttribute(element.ifcType, slot.name);
 }
 
 /**
@@ -279,7 +387,7 @@ function lengthLabel(length: ParsedLength): string {
 }
 
 function restrictionFailure(
-  facet: SlotFacet,
+  label: string,
   restriction: ParsedRestriction,
   slot: NormalizedValue,
   wholeNumber: boolean,
@@ -292,33 +400,33 @@ function restrictionFailure(
     case "exact":
       return candidates.some((held) => matchesLiteral(held, restriction.value, wholeNumber))
         ? null
-        : `${facetLabel(facet)} value "${value}" must be "${restriction.value}"`;
+        : `${label} value "${value}" must be "${restriction.value}"`;
     case "enum":
       return candidates.some((held) =>
         restriction.values.some((allowed) => matchesLiteral(held, allowed, wholeNumber))
       )
         ? null
-        : `${facetLabel(facet)} value "${value}" is not one of: ${restriction.values.join(", ")}`;
+        : `${label} value "${value}" is not one of: ${restriction.values.join(", ")}`;
     case "pattern":
       // IDS: a pattern applies to strings and nothing else. Stringifying first
       // made `.*` match a number, which is the specification's own example of
       // what must fail.
       if (typeof raw !== "string") {
-        return `${facetLabel(facet)} holds ${typeof raw === "number" ? "a number" : "a boolean"} (${value}), and a pattern can only be matched against a string`;
+        return `${label} holds ${typeof raw === "number" ? "a number" : "a boolean"} (${value}), and a pattern can only be matched against a string`;
       }
       return restriction.regex.test(value)
         ? null
-        : `${facetLabel(facet)} value "${value}" does not match required pattern "${restriction.source}"`;
+        : `${label} value "${value}" does not match required pattern "${restriction.source}"`;
     case "bounds":
       return candidates.some((held) => withinBounds(held, restriction.min, restriction.max))
         ? null
-        : `${facetLabel(facet)} value "${value}" is not ${boundsLabel(restriction.min, restriction.max)}`;
+        : `${label} value "${value}" is not ${boundsLabel(restriction.min, restriction.max)}`;
     case "length":
       // Counted on the candidates as the file wrote them, not on `candidates`: a unit conversion
       // rewrites 2 as 2000 and would change the number of characters the author sees.
       return candidatesOf(slot).some((held) => withinLength(String(held), restriction))
         ? null
-        : `${facetLabel(facet)} value "${value}" is not ${lengthLabel(restriction)}`;
+        : `${label} value "${value}" is not ${lengthLabel(restriction)}`;
   }
 }
 
@@ -546,6 +654,88 @@ function evaluateEntity(element: NormalizedElement, facet: ParsedEntityFacet): F
       };
 }
 
+/**
+ * Whether the element satisfies an attribute or property requirement.
+ *
+ * The facet names a *set* of slots, which is one slot in every file the builder writes and in
+ * nearly every file in the wild — but a pattern-valued name reaches several, and IDS then requires
+ * **every one of them** to satisfy the value. `ifctester` collects the matches and breaks out of
+ * the loop on the first that fails; the suite states three documents whose only failing property is
+ * the second one matched.
+ *
+ * Slots the model leaves empty are dropped before the value is judged, not failed: a facet naming
+ * `Name` and `Description` is satisfied by an element that fills in one of them. At least one must
+ * survive, which is what keeps "the element has none of these" a failure.
+ */
+function evaluateSlotFacet(
+  element: NormalizedElement,
+  facet: SlotFacet,
+  unitScales: UnitScales
+): FacetCheckResult {
+  const groups = slotGroupsOf(element, facet);
+  const filled = groups.map((group) => group.slots.filter((slot) => isFilledIn(slot.value)));
+
+  if (facet.cardinality === "prohibited") {
+    const held = filled.flat()[0];
+    return held === undefined
+      ? { passed: true, message: "" }
+      : {
+          passed: false,
+          message: `${slotLabel(facet, held)} must not be filled in, but has value "${String(held.value.value)}"`,
+        };
+  }
+
+  // An optional requirement is checked only where the model states the value at all. The line is
+  // between absent and empty, not between absent and satisfactory: the suite pairs a wall whose
+  // Name is `$` (passes) with one whose Name is `''` (fails) against the same optional facet. An
+  // empty string is a value the author wrote, so it is judged.
+  const statesAValue = groups.some((group) => group.slots.some((slot) => slot.value.value !== null));
+  if (facet.cardinality === "optional" && !statesAValue) {
+    return { passed: true, message: "" };
+  }
+
+  if (groups.length === 0) {
+    return { passed: false, message: missingMessage(facet) };
+  }
+
+  for (const [index, group] of groups.entries()) {
+    if (filled[index].length === 0) {
+      return { passed: false, message: group.missing };
+    }
+
+    for (const slot of filled[index]) {
+      // `dataType` was carried through import and export and then ignored, so a specification
+      // asking for an IFCTIMEMEASURE was satisfied by a stored IFCMASSMEASURE of the same number.
+      //
+      // Only enforced where the parser reports the stored type. A multi-valued property carries its
+      // candidates instead of a measure type, and a value with no measure semantics carries none
+      // either — failing on "we do not know" would reject the list and enumerated properties the
+      // suite requires to pass, which trades one wrong answer for several.
+      if (facet.kind === "property" && facet.dataType !== null && slot.value.dataType !== undefined) {
+        if (slot.value.dataType.toUpperCase() !== facet.dataType.toUpperCase()) {
+          return {
+            passed: false,
+            message: `${slotLabel(facet, slot)} is stored as ${slot.value.dataType}, but the specification requires ${facet.dataType}`,
+          };
+        }
+      }
+
+      if (facet.restriction) {
+        const failure = restrictionFailure(
+          slotLabel(facet, slot),
+          facet.restriction,
+          slot.value,
+          holdsWholeNumber(element, facet, slot),
+          unitScales
+        );
+        if (failure) return { passed: false, message: failure };
+      }
+    }
+  }
+
+  return { passed: true, message: "" };
+}
+
 export function evaluateRequirement(
   element: NormalizedElement,
   facet: ParsedRequirementFacet,
@@ -556,58 +746,5 @@ export function evaluateRequirement(
   if (facet.kind === "material") return evaluateMaterial(element, facet);
   if (facet.kind === "partOf") return evaluatePartOf(element, facet);
   if (facet.kind === "entity") return evaluateEntity(element, facet);
-
-  const slot = readFacetValue(element, facet);
-  const filledIn = isFilledIn(slot);
-
-  if (facet.cardinality === "prohibited") {
-    return filledIn
-      ? {
-          passed: false,
-          message: `${facetLabel(facet)} must not be filled in, but has value "${String(slot?.value)}"`,
-        }
-      : { passed: true, message: "" };
-  }
-
-  // An optional requirement is checked only where the model states the value at all. The line is
-  // between absent and empty, not between absent and satisfactory: the suite pairs a wall whose
-  // Name is `$` (passes) with one whose Name is `''` (fails) against the same optional facet. An
-  // empty string is a value the author wrote, so it is judged.
-  if (facet.cardinality === "optional" && (slot === null || slot.value === null)) {
-    return { passed: true, message: "" };
-  }
-
-  if (!filledIn) {
-    return { passed: false, message: missingMessage(facet) };
-  }
-
-  // `dataType` was carried through import and export and then ignored, so a specification asking
-  // for an IFCTIMEMEASURE was satisfied by a stored IFCMASSMEASURE of the same number.
-  //
-  // Only enforced where the parser reports the stored type. A multi-valued property carries its
-  // candidates instead of a measure type, and a value with no measure semantics carries none
-  // either — failing on "we do not know" would reject the list and enumerated properties the suite
-  // requires to pass, which trades one wrong answer for several.
-  if (facet.kind === "property" && facet.dataType !== null && slot?.dataType !== undefined) {
-    if (slot.dataType.toUpperCase() !== facet.dataType.toUpperCase()) {
-      return {
-        passed: false,
-        message: `${facetLabel(facet)} is stored as ${slot.dataType}, but the specification requires ${facet.dataType}`,
-      };
-    }
-  }
-
-  if (facet.restriction) {
-    const value = slot as NormalizedValue;
-    const failure = restrictionFailure(
-      facet,
-      facet.restriction,
-      value,
-      holdsWholeNumber(element, facet, value),
-      unitScales
-    );
-    if (failure) return { passed: false, message: failure };
-  }
-
-  return { passed: true, message: "" };
+  return evaluateSlotFacet(element, facet, unitScales);
 }

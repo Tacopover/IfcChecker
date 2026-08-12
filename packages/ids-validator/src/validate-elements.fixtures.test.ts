@@ -41,41 +41,35 @@ describe("validateBySpecification against a rule set it only partly understands"
   const idsXml = readFileSync(join(FIXTURES_DIR, "partly-understood.ids"), "utf-8");
   const elements = loadElements("partly-understood.json");
 
-  it("refuses the two specifications it cannot judge, and runs the ones it can", () => {
+  it("refuses the specification it cannot judge, and runs the ones it can", () => {
     const outcomes = validateBySpecification(elements, idsXml);
 
     expect(outcomes.map((outcome) => [outcome.name, outcome.checked])).toEqual([
       ["lokale positie", false],
       ["Bouwlaagindeling en -naamgeving", true],
       ["Classificatiesystematiek", true],
-      ["Brandwerendheid", false],
+      ["Brandwerendheid", true],
     ]);
   });
 
-  it("names the construct behind each refusal", () => {
-    const [byApplicability, , , byRequirement] = validateBySpecification(elements, idsXml);
+  it("names the construct behind the refusal", () => {
+    const [byApplicability] = validateBySpecification(elements, idsXml);
 
     expect(byApplicability.unsupported).toContainEqual(
       expect.objectContaining({ section: "applicability", construct: "attribute" })
     );
-    // Its applicability is a plain entity name, which is readable — it is refused on the other
-    // side, because its one requirement names a property by pattern rather than by name.
-    expect(byRequirement.unsupported).not.toContainEqual(
-      expect.objectContaining({ section: "applicability" })
-    );
-    expect(byRequirement.unsupported).toContainEqual(
-      expect.objectContaining({ section: "requirements", construct: "property/name" })
-    );
   });
 
-  // Reading the enumeration is what makes this reachable: the specification now selects elements,
-  // and with every requirement dropped it would have found nothing wrong with any of them.
-  it("refuses a readable applicability whose every requirement had to be dropped", () => {
-    const [, , , byRequirement] = validateBySpecification(elements, idsXml);
+  // "Brandwerendheid" names its property `Fire.*` rather than `FireRating`, and was refused on the
+  // requirements side until that was readable. It is judged on its merits now: the one wall the
+  // fixture holds carries no property set at all, so it fails. The refusal invariant this used to
+  // stand for is pinned in `parse-ids.test.ts`, against an entity naming no readable class.
+  it("checks a property named by pattern, now that it can read one", () => {
+    const [, , , byPattern] = validateBySpecification(elements, idsXml);
 
-    expect(byRequirement.checked).toBe(false);
-    expect(byRequirement.applicableCount).toBe(0);
-    expect(byRequirement.passedCount).toBe(0);
+    expect(byPattern.unsupported).toEqual([]);
+    expect(byPattern.applicableCount).toBe(1);
+    expect(byPattern.failedCount).toBe(1);
   });
 
   // The regression this fixture exists for. Every specification here used to parse, match nothing

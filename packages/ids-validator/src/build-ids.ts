@@ -9,6 +9,7 @@ import {
   BUILDER_PROPERTY_DATA_TYPE,
   affixPatternSource,
   applicabilityEntityNamesOf,
+  plainName,
 } from "./rule-draft.js";
 
 export interface IdsDocumentInfo {
@@ -131,7 +132,7 @@ function facetXml(facet: FacetDraft): string {
     case "attribute":
       return (
         `      <attribute${cardinalityXml(facet)}${instructions}>` +
-        `\n        <name><simpleValue>${escapeXml(facet.name)}</simpleValue></name>` +
+        idsValueXml("name", facet.name) +
         idsValueXml("value", facet.value) +
         `\n      </attribute>`
       );
@@ -143,8 +144,10 @@ function facetXml(facet: FacetDraft): string {
       const dataTypeAttribute = dataType === null ? "" : ` dataType="${escapeXml(dataType)}"`;
       return (
         `      <property${dataTypeAttribute}${attributeXml("uri", facet.uri)}${cardinalityXml(facet)}${instructions}>` +
-        `\n        <propertySet><simpleValue>${escapeXml(facet.propertySet ?? "")}</simpleValue></propertySet>` +
-        `\n        <baseName><simpleValue>${escapeXml(facet.name)}</simpleValue></baseName>` +
+        // `<propertySet>` is mandatory, so a rule stating none writes an empty one rather than
+        // omitting the element and producing a document no conforming reader accepts.
+        idsValueXml("propertySet", facet.propertySet ?? plainName("")) +
+        idsValueXml("baseName", facet.name) +
         idsValueXml("value", facet.value) +
         `\n      </property>`
       );

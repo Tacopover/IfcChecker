@@ -26,17 +26,32 @@ export type ParsedRestriction =
 
 export type FacetCardinality = "required" | "optional" | "prohibited";
 
+/**
+ * An attribute the element must carry.
+ *
+ * `name` is a restriction rather than a plain name because `ids.xsd` types it as an `idsValue`, so
+ * a facet may name the attributes it is about with an `xs:pattern` or an `xs:enumeration`. A facet
+ * naming several is one requirement over all of them, not several requirements.
+ */
 export interface ParsedAttributeFacet {
   kind: "attribute";
-  name: string;
+  name: ParsedRestriction;
   restriction: ParsedRestriction | null;
   cardinality: FacetCardinality;
 }
 
+/**
+ * A property the element must carry, in a property set it must have.
+ *
+ * Both names are restrictions, for the same reason an attribute's is: `ids.xsd` types
+ * `<propertySet>` and `<baseName>` as `idsValue`, and the conformance suite writes each of them as
+ * a pattern. Two independent restrictions rather than one, because a facet may pattern-match the
+ * set and name the property exactly, or the other way round.
+ */
 export interface ParsedPropertyFacet {
   kind: "property";
-  propertySet: string;
-  baseName: string;
+  propertySet: ParsedRestriction;
+  baseName: ParsedRestriction;
   dataType: string | null;
   restriction: ParsedRestriction | null;
   cardinality: FacetCardinality;
@@ -616,7 +631,7 @@ function readRequirements(
       unsupported.push({
         section: "requirements",
         construct: `${tag}/name`,
-        description: `Names its <${tag}> with a pattern or list rather than a plain name, so it is not checked.`,
+        description: `States no readable name for its <${tag}>, so what it is about is unknown.`,
       });
   }
 
@@ -649,7 +664,7 @@ function parseAttributeFacet(
   unsupported: UnsupportedConstruct[]
 ): ParsedAttributeFacet | null {
   const children = childrenOf(node, "attribute");
-  const name = readSimpleValue(descend(children, "name"));
+  const name = parseRestriction(children, "name", unsupported);
   if (name === null) return null;
   return {
     kind: "attribute",
@@ -704,8 +719,8 @@ function parsePropertyFacet(
   unsupported: UnsupportedConstruct[]
 ): ParsedPropertyFacet | null {
   const children = childrenOf(node, "property");
-  const propertySet = readSimpleValue(descend(children, "propertySet"));
-  const baseName = readSimpleValue(descend(children, "baseName"));
+  const propertySet = parseRestriction(children, "propertySet", unsupported);
+  const baseName = parseRestriction(children, "baseName", unsupported);
   if (propertySet === null || baseName === null) return null;
   return {
     kind: "property",

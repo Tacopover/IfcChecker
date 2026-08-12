@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ConditionDraft, RefusedSpecification, RuleDraft } from "@ifc-qa/ids-validator";
+import { plainName } from "@ifc-qa/ids-validator";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
 import { ModelTree } from "./ModelTree.js";
@@ -210,11 +211,20 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     name: string;
   }) {
     if (!selectionName) return;
-    const common = { id: nextDraftId("c"), name: field.name, value: null, cardinality: "required" } as const;
+    const common = {
+      id: nextDraftId("c"),
+      name: plainName(field.name),
+      value: null,
+      cardinality: "required",
+    } as const;
     const condition: ConditionDraft =
       field.kind === "attribute"
         ? { ...common, kind: "attribute", propertySet: null }
-        : { ...common, kind: "property", propertySet: field.propertySet };
+        : {
+            ...common,
+            kind: "property",
+            propertySet: field.propertySet === null ? null : plainName(field.propertySet),
+          };
     const target = rules.find((rule) => rule.id === activeRuleId) ?? rules[0] ?? null;
 
     if (!target) {

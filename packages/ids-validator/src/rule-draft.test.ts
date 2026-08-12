@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { ConditionDraft, ConditionOperator, RuleDraft, ValueDraft } from "./rule-draft.js";
+import type {
+  ConditionDraft,
+  ConditionOperator,
+  ConditionalCardinality,
+  RuleDraft,
+  ValueDraft,
+} from "./rule-draft.js";
 import {
   affixReadingOf,
   applicabilityEntityNamesOf,
@@ -9,25 +15,47 @@ import {
   escapeRegExp,
   friendlyReadingOf,
   patternValueDraft,
+  plainName,
   valueDraftForOperator,
 } from "./rule-draft.js";
 
-function condition(
-  overrides: Partial<ConditionDraft> & {
-    operator?: ConditionOperator;
-    text?: string;
-    values?: string[];
-  } = {}
-): ConditionDraft {
-  const { operator = "exists", text = "", values = [], ...rest } = overrides;
+/**
+ * Spelled out rather than derived from `Partial<ConditionDraft>`, because `name` and `propertySet`
+ * are written here as the plain names a builder row states, and the draft holds a `ValueDraft`.
+ */
+interface ConditionOverrides {
+  id?: string;
+  kind?: ConditionDraft["kind"];
+  name?: string;
+  propertySet?: string | null;
+  value?: ValueDraft | null;
+  cardinality?: ConditionalCardinality;
+  dataType?: string | null;
+  uri?: string | null;
+  instructions?: string | null;
+  explicitCardinality?: boolean;
+  operator?: ConditionOperator;
+  text?: string;
+  values?: string[];
+}
+
+function condition(overrides: ConditionOverrides = {}): ConditionDraft {
+  const {
+    operator = "exists",
+    text = "",
+    values = [],
+    name = "Name",
+    propertySet = null,
+    ...rest
+  } = overrides;
   return {
     id: "c1",
     kind: "attribute",
-    propertySet: null,
-    name: "Name",
     value: valueDraftForOperator(operator, text, values),
     cardinality: cardinalityForOperator(operator),
     ...rest,
+    name: plainName(name),
+    propertySet: propertySet === null ? null : plainName(propertySet),
     // `kind` widens back to the union through the spread, and a partial of a discriminated union
     // cannot narrow it again. Asserted here so the call sites stay one line each.
   } as ConditionDraft;
@@ -323,15 +351,20 @@ describe("compileDraft", () => {
     expect(spec.requirements).toEqual([
       {
         kind: "property",
-        propertySet: "MEP_Data",
-        baseName: "SystemAbbreviation",
+        propertySet: { kind: "exact", value: "MEP_Data" },
+        baseName: { kind: "exact", value: "SystemAbbreviation" },
         // Nothing was chosen, so nothing is declared: a dataType the model does not hold fails
         // every element, and only the file can say which one it holds.
         dataType: null,
         restriction: null,
         cardinality: "required",
       },
-      { kind: "attribute", name: "Tag", restriction: null, cardinality: "required" },
+      {
+        kind: "attribute",
+        name: { kind: "exact", value: "Tag" },
+        restriction: null,
+        cardinality: "required",
+      },
     ]);
   });
 
@@ -342,7 +375,7 @@ describe("compileDraft", () => {
 
     expect(spec.requirements[0]).toEqual({
       kind: "attribute",
-      name: "Tag",
+      name: { kind: "exact", value: "Tag" },
       restriction: null,
       cardinality: "prohibited",
     });
@@ -354,7 +387,7 @@ describe("compileDraft", () => {
     ]);
     const [facet] = spec.requirements;
     if (facet.kind !== "property") throw new Error("expected a property facet");
-    expect(facet.propertySet).toBe("");
+    expect(facet.propertySet).toEqual({ kind: "exact", value: "" });
   });
 
   it("returns one specification per rule and an empty list for no rules", () => {

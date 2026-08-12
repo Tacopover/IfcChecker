@@ -68,14 +68,14 @@ describe("parseIdsXml", () => {
     expect(spec.requirements).toEqual([
       {
         kind: "attribute",
-        name: "Name",
+        name: { kind: "exact", value: "Name" },
         restriction: { kind: "pattern", source: "W-\\d+", regex: expect.any(RegExp) },
         cardinality: "required",
       },
       {
         kind: "property",
-        propertySet: "Pset_WallCommon",
-        baseName: "FireRating",
+        propertySet: { kind: "exact", value: "Pset_WallCommon" },
+        baseName: { kind: "exact", value: "FireRating" },
         dataType: "IFCLABEL",
         restriction: null,
         cardinality: "required",
@@ -216,6 +216,55 @@ describe("parseIdsXml", () => {
     expect(spec.applicabilityEntityNames).toEqual([]);
     expect(spec.unsupported).toContainEqual(
       expect.objectContaining({ section: "applicability", construct: "entity/name" })
+    );
+    expect(isEvaluable(spec)).toBe(false);
+  });
+
+  // An applicability has to enumerate the classes it selects, so a pattern there is refused. A
+  // requirement only asks about the element in hand, so the same construct is fully understood —
+  // and `ids.xsd` types all three of these names as `idsValue`, exactly like a value.
+  it("reads an attribute name given as a restriction, unlike an applicability entity name", () => {
+    const [spec] = parseIdsXml(
+      specificationXml(`<attribute>
+        <name><xs:restriction base="xs:string"><xs:pattern value=".*Name.*" /></xs:restriction></name>
+      </attribute>`)
+    );
+
+    const [facet] = spec.requirements;
+    expect(facet.kind === "attribute" && facet.name).toEqual(
+      expect.objectContaining({ kind: "pattern", source: ".*Name.*" })
+    );
+    expect(spec.unsupported).toEqual([]);
+    expect(isEvaluable(spec)).toBe(true);
+  });
+
+  it("reads a property set and a base name given as restrictions", () => {
+    const [spec] = parseIdsXml(
+      specificationXml(`<property>
+        <propertySet><xs:restriction base="xs:string"><xs:pattern value="Foo_.*" /></xs:restriction></propertySet>
+        <baseName><xs:restriction base="xs:string"><xs:enumeration value="A" /><xs:enumeration value="B" /></xs:restriction></baseName>
+      </property>`)
+    );
+
+    const [facet] = spec.requirements;
+    if (facet.kind !== "property") throw new Error("expected a property facet");
+    expect(facet.propertySet).toEqual(expect.objectContaining({ kind: "pattern", source: "Foo_.*" }));
+    expect(facet.baseName).toEqual({ kind: "enum", values: ["A", "B"] });
+    expect(spec.unsupported).toEqual([]);
+    expect(isEvaluable(spec)).toBe(true);
+  });
+
+  it("refuses a property that states no readable property set", () => {
+    const [spec] = parseIdsXml(
+      specificationXml(`<property>
+        <propertySet />
+        <baseName><simpleValue>FireRating</simpleValue></baseName>
+      </property>`)
+    );
+
+    expect(spec.requirements).toEqual([]);
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "requirements", construct: "property/name" })
     );
     expect(isEvaluable(spec)).toBe(false);
   });

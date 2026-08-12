@@ -2,14 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { parseIdsXml, type PropertyFacetDraft, type RuleDraft } from "@ifc-qa/ids-validator";
+import { plainName } from "@ifc-qa/ids-validator";
 import { IdsXmlPreview } from "./IdsXmlPreview";
 import { stating } from "../test/conditions";
 
 const FIRE_RATING: PropertyFacetDraft = {
   id: "c1",
   kind: "property",
-  propertySet: "Pset_WallCommon",
-  name: "FireRating",
+  propertySet: plainName("Pset_WallCommon"),
+  name: plainName("FireRating"),
   ...stating("oneOf", "", ["60", "90"]),
 };
 
@@ -42,8 +43,8 @@ describe("IdsXmlPreview", () => {
     ]);
     expect(specification.requirements[0]).toMatchObject({
       kind: "property",
-      propertySet: "Pset_WallCommon",
-      baseName: "FireRating",
+      propertySet: { kind: "exact", value: "Pset_WallCommon" },
+      baseName: { kind: "exact", value: "FireRating" },
       restriction: { kind: "enum", values: ["60", "90"] },
     });
   });

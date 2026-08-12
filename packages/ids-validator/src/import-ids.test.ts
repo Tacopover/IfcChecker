@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { idsXmlToDrafts } from "./import-ids.js";
 import type { IdsImportResult } from "./import-ids.js";
 import type { ConditionDraft, FacetDraft, RuleDraft } from "./rule-draft.js";
-import { friendlyReadingOf, isConditionFacet } from "./rule-draft.js";
+import { friendlyReadingOf, isConditionFacet, plainNameOf } from "./rule-draft.js";
 
 function document(specifications: string): string {
   return [
@@ -114,10 +114,49 @@ describe("idsXmlToDrafts values", () => {
   it("reads a facet with no value as no restriction at all", () => {
     expect(attributeValue("")).toMatchObject({
       kind: "attribute",
-      name: "Name",
+      name: { kind: "simple", value: "Name" },
       value: null,
       cardinality: "required",
     });
+  });
+
+  // `ids.xsd` types <name>, <propertySet> and <baseName> as idsValue, so they take the same five
+  // forms a value does. The builder writes a plain one; a real file may name a set of fields.
+  it("reads an attribute name given as a pattern rather than keeping the facet verbatim", () => {
+    const condition = onlyCondition(
+      withRequirements(
+        `<attribute><name><xs:restriction base="xs:string"><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`
+      )
+    );
+
+    expect(condition.name).toEqual({ kind: "affix", operator: "startsWith", literal: "Na" });
+  });
+
+  it("reads a property set and a base name given as restrictions", () => {
+    const condition = onlyCondition(
+      withRequirements(
+        `<property>
+           <propertySet><xs:restriction base="xs:string"><xs:pattern value="Foo_\\d+" /></xs:restriction></propertySet>
+           <baseName><xs:restriction base="xs:string"><xs:enumeration value="A" /><xs:enumeration value="B" /></xs:restriction></baseName>
+         </property>`
+      )
+    );
+
+    expect(condition.propertySet).toEqual({ kind: "pattern", source: "Foo_\\d+" });
+    expect(condition.name).toEqual({ kind: "enum", values: ["A", "B"] });
+  });
+
+  it("keeps a facet whose name carries something the builder cannot show", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        withRequirements(
+          `<attribute><name><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why</xs:documentation></xs:annotation><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`
+        )
+      )
+    );
+
+    expect(rule.conditions).toEqual([]);
+    expect(rule.imported?.passThrough[0].reason).toMatch(/xs:annotation/);
   });
 
   it("reads a simpleValue and an enumeration into the value they state", () => {
@@ -539,6 +578,12 @@ describe("idsXmlToDrafts pass-through", () => {
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:minLength value="three" /></xs:restriction></value></attribute>`,
       /not a character count/,
     ],
+    // The same rule, and for the same reason: a range with no readable edge compiles to
+    // `{min: null, max: null}`, which admits every number.
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minInclusive value="abc" /></xs:restriction></value></attribute>`,
+      /Gives <xs:minInclusive> the value "abc", which is not a number\./,
+    ],
     [
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
       /xs:annotation/,
@@ -570,10 +615,6 @@ describe("idsXmlToDrafts pass-through", () => {
       `<attribute uri="https://example.org/rule"><name><simpleValue>Name</simpleValue></name></attribute>`,
       /Carries uri, which the builder cannot show/,
     ],
-    [
-      `<attribute><name><xs:restriction base="xs:string"><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`,
-      /attribute name as a pattern/,
-    ],
     // The 0.9-era spellings of baseName and dataType. Their refusal is final, so it says so rather
     // than implying a control for them is on its way.
     [
@@ -593,7 +634,9 @@ describe("idsXmlToDrafts pass-through", () => {
   it("records how many conditions preceded each passed-through facet", () => {
     const [rule] = idsXmlToDrafts(MIXED).rules;
 
-    expect(rule.conditions.filter(isConditionFacet).map((condition) => condition.name)).toEqual([
+    expect(
+      rule.conditions.filter(isConditionFacet).map((condition) => plainNameOf(condition.name))
+    ).toEqual([
       "Name",
       "Reference",
       "Status",

@@ -1,5 +1,12 @@
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import type { ConditionDraft, ConditionOperator, RuleDraft } from "@ifc-qa/ids-validator";
+import type {
+  ConditionDraft,
+  ConditionOperator,
+  ConditionalCardinality,
+  RuleDraft,
+  ValueDraft,
+} from "@ifc-qa/ids-validator";
+import { plainName } from "@ifc-qa/ids-validator";
 import { describe, expect, it } from "vitest";
 import { MAX_COLLECTED_FAILURES, evaluateRuleDraft } from "./evaluateDraft.js";
 import { stating } from "../test/conditions";
@@ -20,22 +27,43 @@ function element(ifcType: string, overrides: Overrides = {}): NormalizedElement 
   };
 }
 
-function condition(
-  overrides: Partial<ConditionDraft> & {
-    operator?: ConditionOperator;
-    text?: string;
-    values?: string[];
-  } = {}
-): ConditionDraft {
+/**
+ * Spelled out rather than derived from `Partial<ConditionDraft>`, because `name` and `propertySet`
+ * are written here as the plain names a builder row states, and the draft holds a `ValueDraft`.
+ */
+interface ConditionOverrides {
+  id?: string;
+  kind?: ConditionDraft["kind"];
+  name?: string;
+  propertySet?: string | null;
+  value?: ValueDraft | null;
+  cardinality?: ConditionalCardinality;
+  dataType?: string | null;
+  uri?: string | null;
+  instructions?: string | null;
+  explicitCardinality?: boolean;
+  operator?: ConditionOperator;
+  text?: string;
+  values?: string[];
+}
+
+function condition(overrides: ConditionOverrides = {}): ConditionDraft {
   nextId += 1;
-  const { operator = "exists", text = "", values = [], ...rest } = overrides;
+  const {
+    operator = "exists",
+    text = "",
+    values = [],
+    name = "Name",
+    propertySet = null,
+    ...rest
+  } = overrides;
   return {
     id: `c${nextId}`,
     kind: "attribute",
-    propertySet: null,
-    name: "Name",
     ...stating(operator, text, values),
     ...rest,
+    name: plainName(name),
+    propertySet: propertySet === null ? null : plainName(propertySet),
     // `kind` widens back to the union through the spread, and a partial of a discriminated union
     // cannot narrow it again. Asserted here so the call sites stay one line each.
   } as ConditionDraft;
@@ -54,7 +82,7 @@ const NAMED_WALLS: NormalizedElement[] = [
 ];
 
 describe("evaluateRuleDraft — operators", () => {
-  const cases: Array<[ConditionOperator, Partial<ConditionDraft>, number]> = [
+  const cases: Array<[ConditionOperator, ReturnType<typeof stating>, number]> = [
     ["exists", stating("exists"), 3],
     ["equals", stating("equals", "EXT-Brick-100"), 1],
     ["oneOf", stating("oneOf", "", ["EXT-Brick-100", "INT-Gypsum-050"]), 2],
