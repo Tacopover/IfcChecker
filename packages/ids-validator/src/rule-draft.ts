@@ -101,7 +101,12 @@ export interface AttributeFacetDraft extends FacetDraftCommon {
   kind: "attribute";
   /** Always `null`. Present so the two editable kinds share one shape for the builder's rows. */
   propertySet: null;
-  name: string;
+  /**
+   * Which attributes the facet is about. A `ValueDraft` rather than a plain name because `ids.xsd`
+   * types `<name>` as an `idsValue`, so a file may name them with a pattern or a list — and one
+   * naming several is one requirement over all of them.
+   */
+  name: ValueDraft;
   /** What the value must be, or `null` for no restriction at all — "whatever it says is fine". */
   value: ValueDraft | null;
   cardinality: ConditionalCardinality;
@@ -109,8 +114,9 @@ export interface AttributeFacetDraft extends FacetDraftCommon {
 
 export interface PropertyFacetDraft extends FacetDraftCommon {
   kind: "property";
-  propertySet: string | null;
-  name: string;
+  /** `null` is the builder having no set to state; it exports as an empty `<propertySet>`. */
+  propertySet: ValueDraft | null;
+  name: ValueDraft;
   value: ValueDraft | null;
   cardinality: ConditionalCardinality;
   /**
@@ -194,6 +200,23 @@ export type ConditionDraft = AttributeFacetDraft | PropertyFacetDraft;
 /** Whether this facet is one of the two a condition row can show. */
 export function isConditionFacet(facet: FacetDraft): facet is ConditionDraft {
   return facet.kind === "attribute" || facet.kind === "property";
+}
+
+/** A name the user picked from their own model, which is always one plain name. */
+export function plainName(value: string): ValueDraft {
+  return { kind: "simple", value };
+}
+
+/**
+ * The one name a facet parameter states, or `null` when it states a restriction instead.
+ *
+ * The builder's selects, the model lookups behind them and the failing-elements table all read one
+ * slot off the element, and a pattern names no single slot. `null` is what makes them say so rather
+ * than look up the empty string and report every element as missing the field.
+ */
+export function plainNameOf(value: ValueDraft | null): string | null {
+  if (value === null) return null;
+  return value.kind === "simple" ? value.value : null;
 }
 
 /** Source XML we cannot represent, re-emitted verbatim so importing a file never destroys it. */
@@ -469,15 +492,16 @@ export function compileFacet(facet: FacetDraft): ParsedRequirementFacet {
     case "attribute":
       return {
         kind: "attribute",
-        name: { kind: "exact", value: facet.name },
+        name: compileValue(facet.name),
         restriction: compileValue(facet.value),
         cardinality: facet.cardinality satisfies FacetCardinality,
       };
     case "property":
       return {
         kind: "property",
-        propertySet: { kind: "exact", value: facet.propertySet ?? "" },
-        baseName: { kind: "exact", value: facet.name },
+        // A rule with no set states an empty one, which matches no property set the model holds.
+        propertySet: compileValue(facet.propertySet ?? plainName("")),
+        baseName: compileValue(facet.name),
         dataType: facet.dataType === undefined ? BUILDER_PROPERTY_DATA_TYPE : facet.dataType,
         restriction: compileValue(facet.value),
         cardinality: facet.cardinality,

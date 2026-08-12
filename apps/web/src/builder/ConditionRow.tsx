@@ -1,6 +1,12 @@
 import { useMemo } from "react";
-import type { ConditionDraft, ConditionOperator } from "@ifc-qa/ids-validator";
-import { cardinalityForOperator, friendlyReadingOf, valueDraftForOperator } from "@ifc-qa/ids-validator";
+import type { ConditionDraft, ConditionOperator, ValueDraft } from "@ifc-qa/ids-validator";
+import {
+  cardinalityForOperator,
+  friendlyReadingOf,
+  plainName,
+  plainNameOf,
+  valueDraftForOperator,
+} from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
 import { ValuePicker, type ObservedValue } from "./ValuePicker.js";
 import { conditionProblem, OPERATORS_NEEDING_TEXT } from "./completeness.js";
@@ -22,8 +28,43 @@ const MAX_SUGGESTIONS = 40;
 /** The value a `dataType` select carries when the facet should declare none. */
 export const NO_DATA_TYPE = "";
 
-function propertyFieldIn(source: FieldsForResult, propertySet: string | null, name: string) {
+function propertyFieldIn(source: FieldsForResult, propertySet: string | null, name: string | null) {
+  if (name === null) return undefined;
   return source.propertySets.find((set) => set.name === propertySet)?.fields.find((field) => field.name === name);
+}
+
+/**
+ * The plain names a condition points at, or `null` where it names a restriction instead.
+ *
+ * Everything the row looks up in the model — the field list, the observed values, the stored type —
+ * needs one name to look up. A pattern names a set of them, so each of those has to say "not this
+ * time" rather than search for a name nobody wrote.
+ */
+function plainNamesOf(condition: ConditionDraft): { propertySet: string | null; name: string | null } {
+  return {
+    propertySet: condition.kind === "property" ? plainNameOf(condition.propertySet) : null,
+    name: plainNameOf(condition.name),
+  };
+}
+
+/** How a name the row cannot edit reads as a phrase, mirroring the operator labels above. */
+export function nameSummary(value: ValueDraft): string {
+  switch (value.kind) {
+    case "simple":
+      return value.value;
+    case "enum":
+      return `one of ${value.values.join(", ")}`;
+    case "pattern":
+      return `matching ${value.source}`;
+    case "affix": {
+      const label = OPERATORS.find((operator) => operator.id === value.operator)?.label ?? "";
+      return `${label.replace(/^must /, "")} ${value.literal}`;
+    }
+    case "bounds":
+      return "in a numeric range";
+    case "length":
+      return "of a given length";
+  }
 }
 
 /**
@@ -39,7 +80,8 @@ export function dataTypeOptionsFor(
   condition: ConditionDraft
 ): Array<{ value: string; label: string }> {
   if (condition.kind !== "property") return [];
-  const observed = propertyFieldIn(source, condition.propertySet, condition.name)?.dataTypes ?? [];
+  const { propertySet, name } = plainNamesOf(condition);
+  const observed = propertyFieldIn(source, propertySet, name)?.dataTypes ?? [];
   const options = observed.map((entry) => ({
     value: entry.value,
     label: `${entry.value} (${entry.count})`,
@@ -59,19 +101,21 @@ export function dataTypeOptionsFor(
 export function dataTypeFromModel(
   source: FieldsForResult,
   propertySet: string | null,
-  name: string
+  name: string | null
 ): string | null {
   const observed = propertyFieldIn(source, propertySet, name)?.dataTypes ?? [];
   return observed.length === 1 ? observed[0].value : null;
 }
 
 export function observedValuesFor(source: FieldsForResult, condition: ConditionDraft): ObservedValue[] {
+  const { propertySet, name } = plainNamesOf(condition);
+  if (name === null) return [];
   const field =
     condition.kind === "attribute"
-      ? source.attributes.find((entry) => entry.name === condition.name)
+      ? source.attributes.find((entry) => entry.name === name)
       : source.propertySets
-          .find((set) => set.name === condition.propertySet)
-          ?.fields.find((entry) => entry.name === condition.name);
+          .find((set) => set.name === propertySet)
+          ?.fields.find((entry) => entry.name === name);
   return field?.values ?? [];
 }
 
@@ -83,8 +127,8 @@ export function defaultConditionFor(source: FieldsForResult): ConditionDraft {
     return {
       id: nextDraftId("c"),
       kind: "property",
-      propertySet: set.name,
-      name,
+      propertySet: plainName(set.name),
+      name: plainName(name),
       value: null,
       cardinality: "required",
       dataType: dataTypeFromModel(source, set.name, name),
@@ -94,7 +138,7 @@ export function defaultConditionFor(source: FieldsForResult): ConditionDraft {
     id: nextDraftId("c"),
     kind: "attribute",
     propertySet: null,
-    name: source.attributes[0]?.name ?? "Name",
+    name: plainName(source.attributes[0]?.name ?? "Name"),
     value: null,
     cardinality: "required",
   };
@@ -155,11 +199,14 @@ export function ConditionRow({
   const reading = friendlyReadingOf(condition);
   // ids.xsd gives uri to the property and not to the attribute, so the row asks before showing it.
   const uri = condition.kind === "property" ? condition.uri : null;
+  // A restriction-valued name shows as a phrase instead of a select: it names a set of fields, and
+  // a select over the model's field list cannot state one. The rest of the row still works.
+  const { propertySet: plainSet, name: plainField } = plainNamesOf(condition);
 
   const nameOptions =
     condition.kind === "attribute"
       ? source.attributes.map((field) => field.name)
-      : (source.propertySets.find((set) => set.name === condition.propertySet)?.fields ?? []).map(
+      : (source.propertySets.find((set) => set.name === plainSet)?.fields ?? []).map(
           (field) => field.name
         );
 
@@ -184,8 +231,8 @@ export function ConditionRow({
       onChange({
         ...shared(),
         kind,
-        propertySet: set?.name ?? null,
-        name,
+        propertySet: set ? plainName(set.name) : null,
+        name: plainName(name),
         value: retargetedValue(),
         dataType: dataTypeFromModel(source, set?.name ?? null, name),
       });
@@ -196,7 +243,7 @@ export function ConditionRow({
       ...shared(),
       kind,
       propertySet: null,
-      name: source.attributes[0]?.name ?? "Name",
+      name: plainName(source.attributes[0]?.name ?? "Name"),
       value: retargetedValue(),
     });
   }
@@ -204,11 +251,11 @@ export function ConditionRow({
   function changePropertySet(propertySet: string) {
     if (condition.kind !== "property") return;
     const set = source.propertySets.find((entry) => entry.name === propertySet);
-    const name = set?.fields[0]?.name ?? condition.name;
+    const name = set?.fields[0]?.name ?? plainField ?? "";
     onChange({
       ...condition,
-      propertySet,
-      name,
+      propertySet: plainName(propertySet),
+      name: plainName(name),
       value: retargetedValue(),
       dataType: dataTypeFromModel(source, propertySet, name),
     });
@@ -216,14 +263,14 @@ export function ConditionRow({
 
   function changeFieldName(name: string) {
     if (condition.kind === "attribute") {
-      onChange({ ...condition, name, value: retargetedValue() });
+      onChange({ ...condition, name: plainName(name), value: retargetedValue() });
       return;
     }
     onChange({
       ...condition,
-      name,
+      name: plainName(name),
       value: retargetedValue(),
-      dataType: dataTypeFromModel(source, condition.propertySet, name),
+      dataType: dataTypeFromModel(source, plainSet, name),
     });
   }
 
@@ -258,37 +305,49 @@ export function ConditionRow({
 
       {condition.kind === "property" && (
         <>
-          <select
-            className="tok"
-            aria-label="Property set"
-            value={condition.propertySet ?? ""}
-            onChange={(event) => changePropertySet(event.target.value)}
-          >
-            {optionsWith(
-              source.propertySets.map((set) => set.name),
-              condition.propertySet
-            ).map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {condition.propertySet !== null && plainSet === null ? (
+            <span className="tok cond-unshown" aria-label="Property set">
+              property sets {nameSummary(condition.propertySet)}
+            </span>
+          ) : (
+            <select
+              className="tok"
+              aria-label="Property set"
+              value={plainSet ?? ""}
+              onChange={(event) => changePropertySet(event.target.value)}
+            >
+              {optionsWith(
+                source.propertySets.map((set) => set.name),
+                plainSet
+              ).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
           <span className="glue">·</span>
         </>
       )}
 
-      <select
-        className="tok"
-        aria-label="Field name"
-        value={condition.name}
-        onChange={(event) => changeFieldName(event.target.value)}
-      >
-        {optionsWith(nameOptions, condition.name).map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      {plainField === null ? (
+        <span className="tok cond-unshown" aria-label="Field name">
+          fields {nameSummary(condition.name)}
+        </span>
+      ) : (
+        <select
+          className="tok"
+          aria-label="Field name"
+          value={plainField}
+          onChange={(event) => changeFieldName(event.target.value)}
+        >
+          {optionsWith(nameOptions, plainField).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      )}
 
       {condition.kind === "property" && (
         <select

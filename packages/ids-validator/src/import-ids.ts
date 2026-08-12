@@ -595,22 +595,29 @@ function readSlotFacet(node: OrderedNode, tag: "attribute" | "property"): Condit
   };
 
   if (tag === "attribute") {
-    const name = readSimpleValue(descend(children, "name"));
-    if (name === null) return refused("Gives its attribute name as a pattern rather than a plain name.");
-    return { ...common, kind: "attribute", propertySet: null, name };
+    const name = readValueDraft(children, "name");
+    if ("refused" in name) return name;
+    if (name.value === null) {
+      return refused("Names no attribute, so what it requires is unknown.");
+    }
+    return { ...common, kind: "attribute", propertySet: null, name: name.value };
   }
 
-  const propertySet = readSimpleValue(descend(children, "propertySet"));
-  const name = readSimpleValue(descend(children, "baseName"));
-  if (propertySet === null || name === null) {
-    return refused("Gives its property set or property name as a pattern rather than a plain name.");
+  // `ids.xsd` makes both mandatory, so a property missing one is a document the schema does not
+  // describe. The draft cannot state none, and inventing one would author the rule.
+  const propertySet = readValueDraft(children, "propertySet");
+  if ("refused" in propertySet) return propertySet;
+  const name = readValueDraft(children, "baseName");
+  if ("refused" in name) return name;
+  if (propertySet.value === null || name.value === null) {
+    return refused("Names no property set or no property, so what it requires is unknown.");
   }
 
   return {
     ...common,
     kind: "property",
-    propertySet,
-    name,
+    propertySet: propertySet.value,
+    name: name.value,
     dataType: attributeOrNull(node, "dataType"),
     uri: attributeOrNull(node, "uri"),
   };

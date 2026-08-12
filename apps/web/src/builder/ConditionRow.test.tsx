@@ -2,7 +2,8 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ConditionDraft } from "@ifc-qa/ids-validator";
+import type { ConditionDraft, PropertyFacetDraft } from "@ifc-qa/ids-validator";
+import { plainName } from "@ifc-qa/ids-validator";
 import { ConditionRow, defaultConditionFor } from "./ConditionRow";
 import type { FieldsForResult } from "./introspect";
 import { stating } from "../test/conditions";
@@ -58,11 +59,11 @@ const SOURCE: FieldsForResult = {
   ],
 };
 
-const CONDITION: ConditionDraft = {
+const CONDITION: PropertyFacetDraft = {
   id: "c1",
   kind: "property",
-  propertySet: "Pset_WallCommon",
-  name: "FireRating",
+  propertySet: plainName("Pset_WallCommon"),
+  name: plainName("FireRating"),
   ...stating("exists"),
   // What the builder now writes when the field is picked: the type the model reports.
   dataType: "IFCLABEL",
@@ -281,6 +282,52 @@ describe("ConditionRow", () => {
   });
 });
 
+// `ids.xsd` types the names as `idsValue`, so an imported facet may name a set of fields. The row
+// keeps its operator and its value box; only the two selects have nothing to select.
+describe("a name given as a restriction", () => {
+  it("shows the property set and the field as phrases instead of selects", () => {
+    render(
+      <Harness
+        initial={{
+          ...CONDITION,
+          propertySet: { kind: "pattern", source: "Foo_.*" },
+          name: { kind: "enum", values: ["A", "B"] },
+        }}
+      />
+    );
+
+    expect(screen.getByLabelText("Property set").tagName).toBe("SPAN");
+    expect(screen.getByLabelText("Property set")).toHaveTextContent("matching Foo_.*");
+    expect(screen.getByLabelText("Field name").tagName).toBe("SPAN");
+    expect(screen.getByLabelText("Field name")).toHaveTextContent("one of A, B");
+  });
+
+  it("still shows the operator and lets the value be edited", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={{ ...CONDITION, name: { kind: "pattern", source: "Fire.*" }, ...stating("equals", "60") }}
+      />
+    );
+
+    expect(screen.getByLabelText("Operator")).toHaveValue("equals");
+    await user.type(screen.getByLabelText("Value"), "0");
+    expect(screen.getByLabelText("Value")).toHaveValue("600");
+  });
+
+  // The rail's suggestions come from one field, and there is no one field here. An empty list
+  // beats offering the values of whichever field the pattern happened to be typed near.
+  it("declares no stored type and offers no observed values", () => {
+    render(<Harness initial={{ ...CONDITION, name: { kind: "pattern", source: "Fire.*" } }} />);
+
+    const picker = screen.getByLabelText("Stored as");
+    expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
+      "any type",
+      "IFCLABEL (not in file)",
+    ]);
+  });
+});
+
 describe("the stored-as picker", () => {
   // A declared type the model does not hold fails every element, silently. Declaring IFCLABEL on
   // everything cost 668 passing elements on the reference model, so the type has to come from the
@@ -350,8 +397,8 @@ describe("defaultConditionFor", () => {
   it("points at the first property set of the selection", () => {
     expect(defaultConditionFor(SOURCE)).toMatchObject({
       kind: "property",
-      propertySet: "Pset_WallCommon",
-      name: "FireRating",
+      propertySet: plainName("Pset_WallCommon"),
+      name: plainName("FireRating"),
       value: null,
       cardinality: "required",
       dataType: "IFCLABEL",
@@ -362,7 +409,7 @@ describe("defaultConditionFor", () => {
     expect(defaultConditionFor({ ...SOURCE, propertySets: [] })).toMatchObject({
       kind: "attribute",
       propertySet: null,
-      name: "Tag",
+      name: plainName("Tag"),
     });
   });
 });

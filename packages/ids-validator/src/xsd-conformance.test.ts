@@ -5,7 +5,7 @@ import { EVERY_FACET } from "./every-facet.fixture.js";
 import { idsSchemaViolations } from "./ids-schema-shape.js";
 import { idsXmlToDrafts } from "./import-ids.js";
 import type { ConditionDraft, ConditionOperator, RuleDraft } from "./rule-draft.js";
-import { cardinalityForOperator, valueDraftForOperator } from "./rule-draft.js";
+import { cardinalityForOperator, plainName, valueDraftForOperator } from "./rule-draft.js";
 import { idsXsdViolations } from "./xsd-conformance.js";
 
 /**
@@ -76,7 +76,7 @@ function condition(
 ): ConditionDraft {
   const common = {
     id: `c${index}`,
-    name: text === "" ? "Unnamed" : `Name ${text}`,
+    name: plainName(text === "" ? "Unnamed" : `Name ${text}`),
     value: valueDraftForOperator(operator, text, [text, `${text} second`, "plain"]),
     cardinality: cardinalityForOperator(operator),
   };
@@ -85,7 +85,7 @@ function condition(
   return {
     ...common,
     kind,
-    propertySet: `Pset_${text === "" ? "Empty" : "Hostile"} & Set`,
+    propertySet: plainName(`Pset_${text === "" ? "Empty" : "Hostile"} & Set`),
     dataType: DATA_TYPES[index % DATA_TYPES.length],
   };
 }
@@ -161,7 +161,7 @@ describe("ids.xsd conformance of what we emit", () => {
             id: "c1",
             kind: "attribute",
             propertySet: null,
-            name: "Name",
+            name: plainName("Name"),
             value: { kind: "length", exact: null, min: "2", max: "3" },
             cardinality: "required",
           },
@@ -169,7 +169,7 @@ describe("ids.xsd conformance of what we emit", () => {
             id: "c2",
             kind: "attribute",
             propertySet: null,
-            name: "Tag",
+            name: plainName("Tag"),
             value: { kind: "length", exact: "2", min: null, max: null },
             cardinality: "required",
           },

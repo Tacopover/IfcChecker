@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ConditionDraft } from "@ifc-qa/ids-validator";
+import { plainName } from "@ifc-qa/ids-validator";
 import { FailingElementsTable, readConditionValue } from "./FailingElementsTable";
 import { stating } from "../test/conditions";
 
@@ -21,8 +22,8 @@ const CONDITIONS: ConditionDraft[] = [
   {
     id: "c1",
     kind: "property",
-    propertySet: "Pset_WallCommon",
-    name: "FireRating",
+    propertySet: plainName("Pset_WallCommon"),
+    name: plainName("FireRating"),
     ...stating("exists"),
   },
 ];
@@ -107,9 +108,22 @@ describe("readConditionValue", () => {
   it("reads top-level attributes the same way facet evaluation does", () => {
     const attribute: ConditionDraft = { ...CONDITIONS[0], kind: "attribute", propertySet: null };
 
-    expect(readConditionValue(element(), { ...attribute, name: "Name" })).toBe("Basic Wall");
-    expect(readConditionValue(element(), { ...attribute, name: "GlobalId" })).toBe("g1");
-    expect(readConditionValue(element(), { ...attribute, name: "tag" })).toBe("W-1");
-    expect(readConditionValue(element(), { ...attribute, name: "Missing" })).toBeNull();
+    const read = (name: string) =>
+      readConditionValue(element(), { ...attribute, name: plainName(name) });
+
+    expect(read("Name")).toEqual({ kind: "value", value: "Basic Wall" });
+    expect(read("GlobalId")).toEqual({ kind: "value", value: "g1" });
+    expect(read("tag")).toEqual({ kind: "value", value: "W-1" });
+    expect(read("Missing")).toEqual({ kind: "value", value: null });
+  });
+
+  // A pattern names a set of fields, and the column shows one. Its own case, not `null`, which the
+  // column already spells "not set" — the opposite claim about the element.
+  it("reads no single slot for a name given as a pattern", () => {
+    const attribute: ConditionDraft = { ...CONDITIONS[0], kind: "attribute", propertySet: null };
+
+    expect(
+      readConditionValue(element(), { ...attribute, name: { kind: "pattern", source: ".*Name.*" } })
+    ).toEqual({ kind: "notOneSlot" });
   });
 });

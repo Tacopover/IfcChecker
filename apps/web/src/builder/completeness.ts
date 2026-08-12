@@ -5,6 +5,7 @@ import type {
   RuleDraft,
   ValueDraft,
 } from "@ifc-qa/ids-validator";
+import { plainNameOf } from "@ifc-qa/ids-validator";
 
 /** Operators whose meaning lives entirely in the text box beside them. */
 export const OPERATORS_NEEDING_TEXT: ReadonlySet<ConditionOperator> = new Set<ConditionOperator>([
@@ -53,6 +54,9 @@ function statesNoText(value: ValueDraft): boolean {
  */
 function valuesOf(facet: FacetDraft): Array<ValueDraft | null> {
   switch (facet.kind) {
+    // Deliberately not the names, though `ids.xsd` types them as `idsValue` too: the builder only
+    // ever writes a plain one, and `readValueDraft` refuses an empty restriction at import, so
+    // neither of the shapes this function guards against can reach a name.
     case "attribute":
     case "property":
     case "material":
@@ -89,7 +93,8 @@ export function conditionProblem(facet: FacetDraft): string | null {
 
 /** What to call this facet in a message about it. */
 function labelOf(facet: FacetDraft): string {
-  return facet.kind === "attribute" || facet.kind === "property" ? facet.name : facet.kind;
+  if (facet.kind !== "attribute" && facet.kind !== "property") return facet.kind;
+  return plainNameOf(facet.name) ?? facet.kind;
 }
 
 /**

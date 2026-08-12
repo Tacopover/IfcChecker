@@ -5,10 +5,11 @@
   one specification whose applicability makes it unshowable at all.
   Trimmed from the patterns found across the goal 3a corpus; not copied from any single file.
 
-  The facet kept verbatim is a property whose baseName is a pattern — 15 corpus facets do this, and
-  it is deliberately out of scope. It has to be something really unrepresentable: the classification,
-  the material and the bound this file used to keep are all read now, and a fixture whose "kept"
-  facet has quietly become representable stops testing the thing it was written for.
+  The facet kept verbatim states two restriction families on one value — a range and an enumeration,
+  which XSD intersects and a ValueDraft cannot. 3 corpus facets do this. It has to be something
+  really unrepresentable: the classification, the material, the bound and the pattern-valued baseName
+  this file used to keep are all read now, and a fixture whose "kept" facet has quietly become
+  representable stops testing the thing it was written for.
 -->
 <ids xmlns="http://standards.buildingsmart.org/IDS"
      xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -71,11 +72,13 @@
         </material>
         <property>
           <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
-          <baseName>
-            <xs:restriction base="xs:string">
-              <xs:pattern value="LoadBearing|IsExternal" />
+          <baseName><simpleValue>LoadBearing</simpleValue></baseName>
+          <value>
+            <xs:restriction base="xs:double">
+              <xs:minInclusive value="0" />
+              <xs:enumeration value="1" />
             </xs:restriction>
-          </baseName>
+          </value>
         </property>
       </requirements>
     </specification>

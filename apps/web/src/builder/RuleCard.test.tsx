@@ -4,6 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { RuleDraft } from "@ifc-qa/ids-validator";
+import { plainName } from "@ifc-qa/ids-validator";
 import { RuleCard } from "./RuleCard";
 import { introspectModel } from "./introspect";
 import { stating } from "../test/conditions";
@@ -46,8 +47,8 @@ const RULE: RuleDraft = {
     {
       id: "c1",
       kind: "property",
-      propertySet: "Pset_WallCommon",
-      name: "FireRating",
+      propertySet: plainName("Pset_WallCommon"),
+      name: plainName("FireRating"),
       ...stating("exists"),
     },
   ],

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildIdsXml, type ConditionDraft, type RuleDraft } from "@ifc-qa/ids-validator";
+import { plainName } from "@ifc-qa/ids-validator";
 import {
   conditionProblem,
   exportBlockers,
@@ -12,8 +13,8 @@ import { stating } from "../test/conditions";
 const CONDITION: ConditionDraft = {
   id: "c1",
   kind: "property",
-  propertySet: "Pset_WallCommon",
-  name: "FireRating",
+  propertySet: plainName("Pset_WallCommon"),
+  name: plainName("FireRating"),
   ...stating("exists"),
 };
 
