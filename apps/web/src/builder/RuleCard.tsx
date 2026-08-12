@@ -8,6 +8,7 @@ import { ConditionRow, defaultConditionFor } from "./ConditionRow.js";
 import { ruleProblems } from "./completeness.js";
 import { FailingElementsTable } from "./FailingElementsTable.js";
 import { UnshownFacetRow } from "./UnshownFacetRow.js";
+import { ClassificationRow } from "./ClassificationRow.js";
 import { ApplicabilityFacetRow } from "./ApplicabilityFacetRow.js";
 import { nextDraftId } from "./draftIds.js";
 
@@ -232,6 +233,29 @@ export function RuleCard({
                   <ConditionRow
                     key={condition.id}
                     condition={condition}
+                    source={source}
+                    hits={perCondition[index] ?? 0}
+                    matched={matched}
+                    onChange={(next) =>
+                      updateConditions(
+                        rule.conditions.map((entry) => (entry.id === condition.id ? next : entry))
+                      )
+                    }
+                    onDuplicate={() =>
+                      updateConditions([
+                        ...rule.conditions.slice(0, index + 1),
+                        { ...condition, id: nextDraftId("c") },
+                        ...rule.conditions.slice(index + 1),
+                      ])
+                    }
+                    onDelete={() =>
+                      updateConditions(rule.conditions.filter((entry) => entry.id !== condition.id))
+                    }
+                  />
+                ) : condition.kind === "classification" ? (
+                  <ClassificationRow
+                    key={condition.id}
+                    facet={condition}
                     source={source}
                     hits={perCondition[index] ?? 0}
                     matched={matched}

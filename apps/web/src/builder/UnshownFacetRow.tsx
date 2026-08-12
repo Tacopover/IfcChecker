@@ -1,14 +1,15 @@
 import type { FacetDraft } from "@ifc-qa/ids-validator";
 
-/** A facet the draft model holds but a condition row cannot show. */
-export type UnshownFacet = Exclude<FacetDraft, { kind: "attribute" | "property" }>;
+/** A facet the draft model holds but no row can edit yet. */
+export type UnshownFacet = Exclude<
+  FacetDraft,
+  { kind: "attribute" | "property" | "classification" }
+>;
 
 function summaryOf(facet: UnshownFacet): string {
   switch (facet.kind) {
     case "entity":
       return "Must be one of these IFC classes";
-    case "classification":
-      return "Must carry a classification";
     case "material":
       return "Must be made of a material";
     case "partOf":
@@ -35,9 +36,10 @@ export interface UnshownFacetRowProps {
  * A requirement the rule really does check, shown read-only because the builder has no controls for
  * it yet.
  *
- * The importer keeps these four kinds verbatim today, so nothing puts one in a rule. The row exists
- * so that when it starts reading them, the facet appears in the rule it belongs to rather than
- * silently thinning the list — the same reason a range or a prohibited value already has a row.
+ * The importer reads all six kinds, so these do reach a rule. The row is what keeps one visible in
+ * the rule it belongs to rather than silently thinning the list — the same reason a range already
+ * has a row. Three kinds are left: `classification` has controls now, and each of the others gets
+ * them in turn.
  */
 export function UnshownFacetRow({ facet, hits, matched, onDelete }: UnshownFacetRowProps) {
   const scoreClass = matched === 0 ? "empty" : hits === matched ? "all-pass" : "has-fail";
