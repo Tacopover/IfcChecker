@@ -122,9 +122,10 @@ const SCENARIOS = {
       return h.all("table td").some(function (cell) { return cell.textContent === "succeeded"; });
     }, "parsed file row");
 
-    // Three specifications on purpose: one that every wall fails, one whose applicability names
-    // a type this model doesn't contain, and one that selects by property value — which the
-    // checker cannot represent, and which used to match nothing and read as a clean pass.
+    // Four specifications on purpose: one that every wall fails, one whose applicability names a
+    // type this model doesn't contain, one that selects by property value, and one whose
+    // applicability names its classes with a pattern — which the checker cannot enumerate, and
+    // which used to match nothing and read as a clean pass.
     var ids = [
       '<?xml version="1.0" encoding="utf-8"?>',
       '<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://standards.buildingsmart.org/IDS">',
@@ -148,6 +149,12 @@ const SCENARIOS = {
       '<baseName><simpleValue>LoadBearing</simpleValue></baseName>',
       '<value><simpleValue>TRUE</simpleValue></value></property>',
       '</applicability>',
+      '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
+      '</specification>',
+      '<specification name="Wall-ish classes are named" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded"><entity><name>',
+      '<xs:restriction base="xs:string"><xs:pattern value="IFCWALL.*" /></xs:restriction>',
+      '</name></entity></applicability>',
       '<requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>',
       '</specification>',
       '</specifications></ids>'
@@ -187,14 +194,23 @@ const SCENARIOS = {
     if (alerts.indexOf("requires at least one matching element") === -1) {
       throw new Error("a required rule that matched no elements did not say so — it reads as a clean model: " + alerts);
     }
-    if (h.text(".check-summary .summary-line").indexOf("2 failing") === -1) {
+    if (h.text(".check-summary .summary-line").indexOf("3 failing") === -1) {
       throw new Error("a required rule that matched nothing was not counted as failing: " + h.text(".check-summary .summary-line"));
+    }
+
+    // A rule that selects by property value used to be refused whole. It runs now, and this
+    // fixture states no LoadBearing anywhere — so it selects nothing and fails on its own
+    // applicability cardinality, which is the third of the three failures counted above. Real
+    // counts rather than the em-dashes an unchecked rule shows is the whole difference.
+    var selective = specRow("Load-bearing walls are named");
+    if (selective.applied !== "0" || selective.failed !== "0") {
+      throw new Error("an applicability property did not run as expected: " + JSON.stringify(selective));
     }
 
     // A rule the checker cannot represent must show no counts at all: a "0 failed" here would be
     // a measurement never taken, and is exactly how a false pass used to be reported.
     var refusedName = h.all(".check-summary .spec-name").filter(function (n) {
-      return n.textContent === "Load-bearing walls are named";
+      return n.textContent === "Wall-ish classes are named";
     })[0];
     if (!refusedName) throw new Error("no summary row for the unrepresentable rule");
     var refusedRow = refusedName.closest("tr");
