@@ -130,22 +130,33 @@ describe("ConditionRow", () => {
       (option) => option.textContent
     );
     expect(labels).toEqual([
-      "must be filled in",
-      "must be exactly",
-      "must be one of",
-      "must contain",
-      "must start with",
-      "must end with",
-      "must match pattern",
-      "must NOT be filled in",
+      "be filled in",
+      "be exactly",
+      "be one of",
+      "contain",
+      "start with",
+      "end with",
+      "match pattern",
     ]);
+  });
+
+  // The row reads as one sentence across two controls, and the second is what makes an optional
+  // facet and a prohibited value reachable at all — both used to render read-only.
+  it("states cardinality beside the operator rather than inside it", () => {
+    render(<Harness />);
+
+    const labels = Array.from(
+      screen.getByLabelText("Cardinality").querySelectorAll("option")
+    ).map((option) => option.textContent);
+
+    expect(labels).toEqual(["must", "if present, must", "must NOT"]);
   });
 
   it("marks a prohibited row so it does not read like the others", async () => {
     const user = userEvent.setup();
     const { container } = render(<Harness />);
 
-    await user.selectOptions(screen.getByLabelText("Operator"), "notExists");
+    await user.selectOptions(screen.getByLabelText("Cardinality"), "prohibited");
 
     expect(container.querySelector(".cond")).toHaveClass("prohibited");
   });
@@ -213,14 +224,14 @@ describe("ConditionRow", () => {
   });
 
   it("leaves an operator that needs no value unmarked", () => {
-    render(<Harness initial={{ ...CONDITION, ...stating("notExists") }} />);
+    render(<Harness initial={{ ...CONDITION, ...stating("exists", "", [], "prohibited") }} />);
 
     expect(screen.queryByText(/Enter a value/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Tick at least one value/)).not.toBeInTheDocument();
   });
 
-  // The draft model can hold values the eight operators cannot state. None is reachable from these
-  // controls yet, but a row that quietly showed one as "must be filled in" would be editing it.
+  // The draft model can hold two value shapes no operator states. Neither is reachable from these
+  // controls, but a row that quietly showed one as "must be filled in" would be editing it.
   it.each([
     [
       "a numeric range",
@@ -228,19 +239,46 @@ describe("ConditionRow", () => {
       /numeric range/,
     ],
     [
-      "a prohibited value",
-      { cardinality: "prohibited", value: { kind: "simple", value: "Steel" } },
-      /Must not hold this particular value/,
+      "a character count",
+      { value: { kind: "length", exact: null, min: "3", max: null } },
+      /how many characters/,
     ],
-    ["an optional facet", { cardinality: "optional" }, /Optional/],
   ] as const)("says what it is holding rather than mislabelling %s", (_label, overrides, expected) => {
     render(<Harness initial={{ ...CONDITION, ...overrides }} />);
 
     expect(screen.queryByLabelText("Operator")).toBeNull();
     expect(screen.queryByLabelText("Value")).toBeNull();
     expect(screen.getByText(expected)).toBeInTheDocument();
-    // The field it is about is still readable and still retargetable.
+    // The field it is about is still readable and still retargetable, and so is its cardinality.
     expect(screen.getByLabelText("Field name")).toHaveValue("FireRating");
+    expect(screen.getByLabelText("Cardinality")).toBeInTheDocument();
+  });
+
+  // The two the row used to show read-only. Both are ordinary IDS and both are now editable: an
+  // optional facet is checked only where the value is present, and a prohibited value says "must
+  // not be Steel" rather than "must not be present at all".
+  it.each([
+    ["a prohibited value", { cardinality: "prohibited", value: { kind: "simple", value: "Steel" } }, "prohibited", "equals"],
+    ["an optional facet", { cardinality: "optional", value: { kind: "simple", value: "REI60" } }, "optional", "equals"],
+  ] as const)("edits %s through the two controls", (_label, overrides, cardinality, operator) => {
+    render(<Harness initial={{ ...CONDITION, ...overrides }} />);
+
+    expect(screen.getByLabelText("Cardinality")).toHaveValue(cardinality);
+    expect(screen.getByLabelText("Operator")).toHaveValue(operator);
+    expect(screen.getByLabelText("Value")).toHaveValue(
+      overrides.value.kind === "simple" ? overrides.value.value : ""
+    );
+  });
+
+  // Changing one control must not silently change the other: picking a value for a prohibited facet
+  // is how "must not be Steel" is written, and resetting it to required would invert the rule.
+  it("keeps the cardinality when the operator changes", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...CONDITION, ...stating("exists", "", [], "prohibited") }} />);
+
+    await user.selectOptions(screen.getByLabelText("Operator"), "equals");
+
+    expect(screen.getByLabelText("Cardinality")).toHaveValue("prohibited");
   });
 
   // Before the importer read these, a facet carrying them stayed in the kept-but-not-shown list,

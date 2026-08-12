@@ -82,7 +82,7 @@ const NAMED_WALLS: NormalizedElement[] = [
 ];
 
 describe("evaluateRuleDraft — operators", () => {
-  const cases: Array<[ConditionOperator, ReturnType<typeof stating>, number]> = [
+  const cases: Array<[string, ReturnType<typeof stating>, number]> = [
     ["exists", stating("exists"), 3],
     ["equals", stating("equals", "EXT-Brick-100"), 1],
     ["oneOf", stating("oneOf", "", ["EXT-Brick-100", "INT-Gypsum-050"]), 2],
@@ -90,13 +90,13 @@ describe("evaluateRuleDraft — operators", () => {
     ["startsWith", stating("startsWith", "EXT"), 2],
     ["endsWith", stating("endsWith", "100"), 2],
     ["matches", stating("matches", "EXT-.*"), 2],
-    ["notExists", stating("notExists"), 1],
+    ["exists, prohibited", stating("exists", "", [], "prohibited"), 1],
   ];
 
-  for (const [operator, extra, expected] of cases) {
-    it(`counts ${operator} correctly`, () => {
+  for (const [label, extra, expected] of cases) {
+    it(`counts ${label} correctly`, () => {
       const evaluation = evaluateRuleDraft(
-        rule({ conditions: [condition({ operator, ...extra })] }),
+        rule({ conditions: [condition(extra)] }),
         NAMED_WALLS
       );
 
@@ -119,7 +119,7 @@ describe("evaluateRuleDraft — operators", () => {
   });
 });
 
-describe("evaluateRuleDraft — notExists is prohibited, not inverted-presence-only", () => {
+describe("evaluateRuleDraft — a prohibited condition is not inverted-presence-only", () => {
   const walls = [
     element("IFCWALL", { propertySets: { Pset_WallCommon: { Status: { value: "Demolish" } } } }),
     element("IFCWALL", { propertySets: { Pset_WallCommon: { Status: { value: "" } } } }),
@@ -131,7 +131,12 @@ describe("evaluateRuleDraft — notExists is prohibited, not inverted-presence-o
     const evaluation = evaluateRuleDraft(
       rule({
         conditions: [
-          condition({ kind: "property", propertySet: "Pset_WallCommon", name: "Status", operator: "notExists" }),
+          condition({
+            kind: "property",
+            propertySet: "Pset_WallCommon",
+            name: "Status",
+            cardinality: "prohibited",
+          }),
         ],
       }),
       walls

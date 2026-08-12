@@ -10,6 +10,15 @@ import type {
 import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
 import { concreteTypeNamesFor } from "./ifc-type-hierarchy.js";
 
+/**
+ * The readings of a condition's **value**, and nothing else.
+ *
+ * Cardinality is stated beside them rather than folded into them. IDS treats "must it be there" and
+ * "what may it say" as orthogonal — `prohibited` with a value says "must not be Steel", which no
+ * single operator can express — so an operator that also meant "not present" would make three of
+ * the nine combinations unreachable. `exists` is the reading for a facet stating no value at all,
+ * whatever its cardinality: required it means "must be filled in", prohibited "must not be".
+ */
 export type ConditionOperator =
   | "exists"
   | "equals"
@@ -17,8 +26,7 @@ export type ConditionOperator =
   | "contains"
   | "startsWith"
   | "endsWith"
-  | "matches"
-  | "notExists";
+  | "matches";
 
 /**
  * The cardinalities `ids.xsd` gives an attribute or a property (`conditionalCardinality`).
@@ -448,20 +456,17 @@ export interface FriendlyReading {
 }
 
 /**
- * The friendly reading of a condition, or `null` when no operator states what it says.
+ * The friendly reading of a condition's value, or `null` when no operator states what it says.
  *
- * `null` is not a fault — it is the honest answer for the things the eight operators cannot
- * express: a numeric range, a length, an optional facet, and a prohibited value ("must not be
- * Steel", which `notExists` would widen into "must not be present at all"). The row shows those
- * rather than mislabelling them.
+ * Cardinality is deliberately not consulted: it is a separate control on the row, so an optional
+ * facet and a prohibited value are both fully editable and only the value can be unreadable here.
+ *
+ * `null` is not a fault — it is the honest answer for the two value shapes the operators cannot
+ * express, a numeric range and a length. The row shows those rather than mislabelling them.
  */
 export function friendlyReadingOf(condition: ConditionDraft): FriendlyReading | null {
   const none = { text: "", values: [] };
 
-  if (condition.cardinality === "prohibited") {
-    return condition.value === null ? { operator: "notExists", ...none } : null;
-  }
-  if (condition.cardinality === "optional") return null;
   if (condition.value === null) return { operator: "exists", ...none };
 
   switch (condition.value.kind) {
@@ -487,7 +492,6 @@ export function valueDraftForOperator(
 ): ValueDraft | null {
   switch (operator) {
     case "exists":
-    case "notExists":
       return null;
     case "equals":
       return { kind: "simple", value: text };
@@ -500,9 +504,6 @@ export function valueDraftForOperator(
   }
 }
 
-export function cardinalityForOperator(operator: ConditionOperator): ConditionalCardinality {
-  return operator === "notExists" ? "prohibited" : "required";
-}
 
 /**
  * What the validator checks a facet against. Total over all six kinds, and it throws nothing.

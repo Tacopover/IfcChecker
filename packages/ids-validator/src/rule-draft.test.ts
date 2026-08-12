@@ -9,7 +9,6 @@ import type {
 import {
   affixReadingOf,
   applicabilityEntityNamesOf,
-  cardinalityForOperator,
   compileDraft,
   compileValue,
   escapeRegExp,
@@ -52,7 +51,7 @@ function condition(overrides: ConditionOverrides = {}): ConditionDraft {
     id: "c1",
     kind: "attribute",
     value: valueDraftForOperator(operator, text, values),
-    cardinality: cardinalityForOperator(operator),
+    cardinality: "required",
     ...rest,
     name: plainName(name),
     propertySet: propertySet === null ? null : plainName(propertySet),
@@ -85,9 +84,8 @@ describe("escapeRegExp", () => {
 });
 
 describe("compileValue", () => {
-  it("returns no restriction for exists and notExists", () => {
+  it("returns no restriction for exists", () => {
     expect(restrictionFor("exists")).toBeNull();
-    expect(restrictionFor("notExists")).toBeNull();
   });
 
   it("maps equals to an exact restriction and oneOf to an enum", () => {
@@ -173,14 +171,6 @@ describe("compileValue", () => {
   });
 });
 
-describe("cardinalityForOperator", () => {
-  it("only notExists is prohibited", () => {
-    expect(cardinalityForOperator("notExists")).toBe("prohibited");
-    expect(cardinalityForOperator("exists")).toBe("required");
-    expect(cardinalityForOperator("equals")).toBe("required");
-  });
-});
-
 describe("the friendly operators are a reading of the value, not the storage", () => {
   const OPERATORS: ConditionOperator[] = [
     "exists",
@@ -190,7 +180,6 @@ describe("the friendly operators are a reading of the value, not the storage", (
     "startsWith",
     "endsWith",
     "matches",
-    "notExists",
   ];
 
   // The row has to survive being read back: the operator select must stay where the user put it,
@@ -204,7 +193,7 @@ describe("the friendly operators are a reading of the value, not the storage", (
 
       expect(reading).toEqual({
         operator,
-        text: operator === "exists" || operator === "notExists" ? "" : text,
+        text: operator === "exists" ? "" : text,
         values,
       });
     }
@@ -223,7 +212,7 @@ describe("the friendly operators are a reading of the value, not the storage", (
     }
   });
 
-  it("has no reading for what the eight operators cannot say", () => {
+  it("has no reading for the two value shapes no operator states", () => {
     // A range.
     expect(
       friendlyReadingOf(condition({ value: { kind: "bounds", base: "xs:double", min: null, max: null } }))
@@ -232,13 +221,25 @@ describe("the friendly operators are a reading of the value, not the storage", (
     expect(
       friendlyReadingOf(condition({ value: { kind: "length", exact: "2", min: null, max: null } }))
     ).toBeNull();
-    // "Must not be Steel" — notExists would widen it to "must not be present at all".
-    expect(
-      friendlyReadingOf(
-        condition({ cardinality: "prohibited", value: { kind: "simple", value: "Steel" } })
-      )
-    ).toBeNull();
-    expect(friendlyReadingOf(condition({ cardinality: "optional" }))).toBeNull();
+  });
+
+  // The reading is of the value alone, so the row can state cardinality beside it. "Must not be
+  // Steel" is a prohibited facet that still names a value, and there is no operator for it —
+  // folding the two questions together is what used to leave it, and every optional facet,
+  // with no reading at all.
+  it("reads the value the same way whatever the cardinality states", () => {
+    const equalsSteel = { operator: "equals", text: "Steel", values: [] };
+
+    for (const cardinality of ["required", "optional", "prohibited"] as const) {
+      expect(
+        friendlyReadingOf(condition({ cardinality, value: { kind: "simple", value: "Steel" } }))
+      ).toEqual(equalsSteel);
+      expect(friendlyReadingOf(condition({ cardinality }))).toEqual({
+        operator: "exists",
+        text: "",
+        values: [],
+      });
+    }
   });
 });
 
@@ -368,9 +369,9 @@ describe("compileDraft", () => {
     ]);
   });
 
-  it("marks a notExists condition prohibited with no restriction", () => {
+  it("compiles a prohibited condition with no restriction", () => {
     const [spec] = compileDraft([
-      rule({ conditions: [condition({ name: "Tag", operator: "notExists" })] }),
+      rule({ conditions: [condition({ name: "Tag", cardinality: "prohibited" })] }),
     ]);
 
     expect(spec.requirements[0]).toEqual({

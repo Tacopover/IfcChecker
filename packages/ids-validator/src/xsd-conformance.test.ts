@@ -4,8 +4,13 @@ import { buildIdsXml } from "./build-ids.js";
 import { EVERY_FACET } from "./every-facet.fixture.js";
 import { idsSchemaViolations } from "./ids-schema-shape.js";
 import { idsXmlToDrafts } from "./import-ids.js";
-import type { ConditionDraft, ConditionOperator, RuleDraft } from "./rule-draft.js";
-import { cardinalityForOperator, plainName, valueDraftForOperator } from "./rule-draft.js";
+import type {
+  ConditionDraft,
+  ConditionOperator,
+  ConditionalCardinality,
+  RuleDraft,
+} from "./rule-draft.js";
+import { plainName, valueDraftForOperator } from "./rule-draft.js";
 import { idsXsdViolations } from "./xsd-conformance.js";
 
 /**
@@ -46,7 +51,6 @@ const PATTERNS = ["[A-Z]{2}-[0-9]+", ".*", "(a|b)+c?", "\\d{4}-\\d{2}-\\d{2}", "
 
 const OPERATORS: ConditionOperator[] = [
   "exists",
-  "notExists",
   "equals",
   "oneOf",
   "contains",
@@ -64,6 +68,15 @@ const ENTITY_SETS: [string, string[]][] = [
 /** The data types an import can carry: authored default, a deliberate omission, and a real one. */
 const DATA_TYPES: (string | null | undefined)[] = [undefined, null, "IFCBOOLEAN"];
 
+/**
+ * Cycled across the conditions in every generated document rather than derived from the operator.
+ *
+ * Cardinality and value are orthogonal in IDS, so each of the three has to be emitted beside each
+ * of the operators — including `optional`, which the operator-derived version could never produce
+ * and which no generated document therefore used to carry.
+ */
+const CARDINALITIES: ConditionalCardinality[] = ["required", "optional", "prohibited"];
+
 function textsFor(operator: ConditionOperator): string[] {
   return operator === "matches" ? PATTERNS : HOSTILE_TEXT;
 }
@@ -78,7 +91,7 @@ function condition(
     id: `c${index}`,
     name: plainName(text === "" ? "Unnamed" : `Name ${text}`),
     value: valueDraftForOperator(operator, text, [text, `${text} second`, "plain"]),
-    cardinality: cardinalityForOperator(operator),
+    cardinality: CARDINALITIES[index % CARDINALITIES.length],
   };
 
   if (kind === "attribute") return { ...common, kind, propertySet: null };
