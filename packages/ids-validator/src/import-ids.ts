@@ -355,6 +355,8 @@ function readApplicabilityFacet(
       return readClassificationFacet(node, "applicability");
     case "material":
       return readMaterialFacet(node, "applicability");
+    case "partOf":
+      return readPartOfFacet(node, "applicability");
     default:
       return refused(`Selects elements by <${tag}>, which the builder cannot show.`);
   }
@@ -622,8 +624,11 @@ function readMaterialFacet(
   };
 }
 
-function readPartOfFacet(node: OrderedNode): PartOfFacetDraft | FacetRefusal {
-  const shell = readFacetShell(node, "partOf", "requirements");
+function readPartOfFacet(
+  node: OrderedNode,
+  side: FacetSide = "requirements"
+): PartOfFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "partOf", side);
   if ("refused" in shell) return shell;
   if (shell.stated !== null && !isSimpleCardinality(shell.stated)) {
     return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);

@@ -208,6 +208,35 @@ describe("idsXmlToDrafts applicability", () => {
     );
   });
 
+  // No corpus file writes one, so this test is the whole of the evidence on the import side.
+  it("reads an applicability partOf, keeping its relation as the author wrote it", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Anything in a system" ifcVersion="IFC4">
+          <applicability>
+            <partOf relation="IFCRELVOIDSELEMENT IFCRELFILLSELEMENT">
+              <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+            </partOf>
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.applicabilityFacets).toEqual([
+      {
+        id: expect.any(String),
+        kind: "partOf",
+        relation: "IFCRELVOIDSELEMENT IFCRELFILLSELEMENT",
+        entityName: { kind: "simple", value: "IFCWALL" },
+        predefinedType: null,
+        cardinality: "required",
+        explicitCardinality: false,
+        instructions: null,
+      },
+    ]);
+  });
+
   // `ids.xsd` makes the applicability's <entity> minOccurs="0", so "every element carrying this
   // property" is a complete rule. It used to be refused for naming no type.
   it("reads an applicability that states a property and no entity at all", () => {

@@ -663,6 +663,8 @@ function readApplicabilityFacet(
     };
   }
 
+  if (tag === "partOf") return parsePartOfFacet(node, unsupported, "applicability");
+
   return refuse(tag, `Selects elements by <${tag}>, which cannot be represented.`);
 }
 
@@ -784,7 +786,8 @@ function parseAttributeFacet(
  */
 function parsePartOfFacet(
   node: OrderedNode,
-  unsupported: UnsupportedConstruct[]
+  unsupported: UnsupportedConstruct[],
+  section: UnsupportedConstruct["section"] = "requirements"
 ): ParsedPartOfFacet {
   const children = childrenOf(node, "partOf");
   const entityChildren = descend(children, "entity");
@@ -793,8 +796,8 @@ function parsePartOfFacet(
   return {
     kind: "partOf",
     relations: relation === undefined ? [] : relation.trim().split(/\s+/).filter(Boolean),
-    entityName: parseRestriction(entityChildren, "name", unsupported),
-    predefinedType: parseRestriction(entityChildren, "predefinedType", unsupported),
+    entityName: parseRestriction(entityChildren, "name", unsupported, section),
+    predefinedType: parseRestriction(entityChildren, "predefinedType", unsupported, section),
     cardinality: readCardinality(node),
   };
 }

@@ -216,12 +216,13 @@ describe("validateBySpecification", () => {
     );
   });
 
+  // All five facets `ids.xsd` allows beside `<entity>` are read now, so what is left to refuse is a
+  // facet from a later revision. The claim is unchanged: an applicability narrowed by something we
+  // did not read selects a different set of elements than its author wrote.
   it("refuses to run a specification whose applicability it could not fully read", () => {
     const idsXml = IDS_XML.replace(
       "</applicability>",
-      `<partOf relation="IFCRELAGGREGATES">
-         <entity><name><simpleValue>IFCBUILDING</simpleValue></name></entity>
-       </partOf></applicability>`
+      `<zone><name><simpleValue>Z1</simpleValue></name></zone></applicability>`
     );
 
     const [outcome] = validateBySpecification([compliantWall, failingWall], idsXml);
@@ -230,8 +231,34 @@ describe("validateBySpecification", () => {
     expect(outcome.violations).toEqual([]);
     expect(outcome.applicableCount).toBe(0);
     expect(outcome.unsupported).toContainEqual(
-      expect.objectContaining({ section: "applicability", construct: "partOf" })
+      expect.objectContaining({ section: "applicability", construct: "zone" })
     );
+  });
+
+  // partOf has no use in the 464 hand-authored corpus specifications, none in all 7,784 corpus
+  // files, and no conformance case — so this test and the real model are the only evidence it
+  // works. Stated here rather than left implicit.
+  it("selects on an applicability partOf, which no corpus file and no conformance case writes", () => {
+    const inASystem = makeElement({
+      globalId: "wall-4",
+      name: "W-010",
+      propertySets: { Pset_WallCommon: { FireRating: { value: "REI90" } } },
+      partOf: [
+        { ifcType: "IFCSYSTEM", predefinedType: null, relation: "IFCRELASSIGNSTOGROUP" },
+      ],
+    });
+    const idsXml = IDS_XML.replace(
+      "</applicability>",
+      `<partOf relation="IFCRELASSIGNSTOGROUP">
+         <entity><name><simpleValue>IFCSYSTEM</simpleValue></name></entity>
+       </partOf></applicability>`
+    );
+
+    const [outcome] = validateBySpecification([compliantWall, failingWall, inASystem], idsXml);
+
+    expect(outcome.checked).toBe(true);
+    expect(outcome.unsupported).toEqual([]);
+    expect(outcome).toMatchObject({ applicableCount: 1, passedCount: 1, failedCount: 0 });
   });
 
   it("marks a specification it could fully read as checked", () => {
