@@ -1125,3 +1125,124 @@ this stage settled that it should carry:
   field fed by the model, and `FacetDraft`'s property variant can take it as it stands.
 - The pass-through reason machinery now exists per facet, so `isEvaluable` narrowing during the
   refactor has somewhere to say why.
+
+## Stages 3 and 4 — landed and measured 2026-08-11/12
+
+Seven commits on `feat/ids-length-and-facet-import`, off `master` at `0d1d2f2`. **Pass-through
+191 → 41**, a fall of 150 against 151 predicted. **Conformance 302 → 305 agreed of 334**, and it
+moved exactly once, in the one commit that changes the validator. The corpus round-trip stayed at
+7,784 / 7,784 reproduced, 0 drifted, 3 schema-invalid in and out, and **0 files losing a
+requirement facet** at every commit — that last line is the check that a facet read into the model
+but never compiled cannot produce a false pass.
+
+| | commit | conformance | pass-through | predicted |
+| --- | --- | --- | --- | --- |
+| **S3a** | the validator checks a length | **302 → 305** | 191, unmoved | — |
+| **S3b** | the importer reads a length | 305 | 191 → **185** | 185 ✓ |
+| **S4a** | the importer reads classification | 305 | 185 → **139** | 138 ✗ |
+| **S4b** | the importer reads partOf | 305 | 139 → **100** | 100 ✓ |
+| **S4c** | the importer reads material | 305 | 100 → **66** | 66 ✓ |
+| **S4d** | the importer reads a requirement entity | 305 | 66 → **41** | 41 ✓ |
+| **S4e** | the 13 permanent pass-throughs say so | 305 | 41, unmoved | — |
+
+False passes stayed at **0** throughout. The gate went 720 → **750 tests in 48 files**.
+
+### The only conformance movement, and why it is legitimate
+
+`ParsedRestriction` gains a `length` variant, and `parseRestriction` reads `xs:length`,
+`xs:minLength` and `xs:maxLength`. **The three `pass-` length cases move from failing to
+agreeing.** Nothing was lost.
+
+The three `fail-` cases already agreed, and it is worth saying how: an unread restriction compiled
+to an empty enumeration that failed every element, which happens to be the answer a `fail-` case
+wants. They now agree on merits. A mechanism that only ever moves `pass-` cases is the shape to
+expect when a refusal that failed loudly becomes a real check.
+
+**All three edges are kept, not folded into one.** XSD lets an author write `xs:length` beside the
+two bounds, and collapsing them would stop enforcing part of what the file states.
+
+**The count is taken on the candidates as the file wrote them**, not on the unit-converted ones. A
+scale of 1000 rewrites 2 as 2000, which is four characters rather than one, so running length
+through `comparableCandidates` would make a character count depend on the model's unit assignment.
+
+### First-reason-wins missed once, and by one
+
+S4a predicted 138 and landed 139. One classification carries an `xs:annotation` underneath the
+reason `readFacet` reported first. Every other prediction was exact, which is the opposite of stage
+2's experience — there, C4 removed 72 reasons and exposed 8. The difference is that stage 4 removed
+whole-facet refusals raised at `readFacet`'s first line, before any other check could have fired,
+so there was nothing underneath them except what the facet's own parameters said.
+
+### What each facet needed beyond the dispatch
+
+The draft shapes, `compileFacet` and `build-ids`'s `facetXml` all landed in stage 2, so no
+downstream change was needed for any of the four. What each reader had to decide:
+
+- **`readFacet` is a switch over the tag**, with `readFacetShell` shared: the attribute allowlist,
+  the child allowlist, `instructions`, and the **raw** `cardinality` attribute. Raw rather than
+  checked, because the two alphabets differ per facet and each reader checks it against its own.
+- **`readValueDraft` takes the parameter name.** A classification constrains its `<system>` and its
+  `<value>` independently, and each is an `idsValue` in its own right.
+- **A classification stating no `<system>` is still kept verbatim.** `ids.xsd` makes the element
+  mandatory, so such a file is one the schema does not describe; the draft cannot state none, and
+  inventing one would author the rule. No corpus facet does it, so this costs nothing.
+- **`partOf` stores `relation` as the author's attribute**, not a split list — one member of the
+  schema's enumeration is two names in a single value. `compileFacet` splits.
+- **`partOf` takes `simpleCardinality`, which has no `optional`.** One saying `optional` is kept
+  verbatim rather than read as one of the other two.
+- **`readNestedEntity` is shared between `partOf` and the requirement-side `entity`**, which hold
+  the same mandatory `<name>` and optional `<predefinedType>`. The entity facet is then the
+  dispatch case and its allowlist.
+- **The requirement-side entity has no cardinality at all**, so one is refused through the same
+  unknown-attribute check that catches a `uri` on an attribute.
+- **A material with no `<value>`** asks whether the element is made of anything at all, which is a
+  real check rather than an empty one, so it imports as `value: null`.
+
+### The importer is stricter than the validator about a length, on purpose
+
+`readLengthDraft` refuses a count it cannot read, where `readBoundsDraft` stores one verbatim. A
+length stating no readable edge compiles to a restriction that **admits everything**, so importing
+a malformed one would turn it into a rule that passes every element.
+
+That divergence exists for bounds already and is latent: a restriction whose only bound is
+unreadable compiles to `{min: null, max: null}`, which `withinBounds` answers true to for any
+number, while `parseIdsXml` reads the same file as an empty enumeration that fails everything. **No
+corpus file writes one**, which is why the round-trip has never caught it. Recorded rather than
+fixed — it is a separate mechanism from anything in these stages.
+
+### `mixed-fidelity.ids` had to change what it keeps
+
+The fixture kept a classification, a material and a bound to test that pass-through survives in
+document order. All three are read now, and a fixture whose kept facet has quietly become
+representable stops testing the invariant it was written for. It now keeps a property whose
+`baseName` is a pattern — 15 corpus facets, deliberately out of scope, and so unrepresentable for
+as long as that stays true.
+
+### What is left of the 41
+
+| reason | facets | claimed by |
+| --- | --- | --- |
+| property set or property name is a pattern | 15 | pattern-valued names |
+| attribute name is a pattern | 4 | pattern-valued names |
+| property carries `<name>` | 8 | **never — not in IDS 1.0** |
+| property carries `measure` | 5 | **never — not in IDS 1.0** |
+| `xs:annotation` inside a restriction (property 4, classification 1) | 5 | an annotation-carrying `ValueDraft` |
+| two restriction families on one value | 3 | a regex OR, or an intersected model |
+| a non-string base on an enumeration | 1 | — |
+
+**19 of the 41 are pattern-valued names**, and they are also all 14 remaining conformance refusals.
+That is now the largest single mechanism on the board and the obvious next stage.
+
+The 13 permanent ones are re-labelled. `<name>` and `measure` are the 0.9-era spellings of
+`<baseName>` and `dataType`, all in one corpus file; their reason now says IDS 1.0 does not have
+them and that they are kept exactly as written on purpose, rather than implying a control is coming.
+
+### Still deliberately not done
+
+- **Applicability-side classification, material and partOf** (stage 5). A `<classification>` in an
+  applicability still refuses the whole specification, which is what keeps `isEvaluable` honest.
+  The 41,325 whole-specification refusals are unmoved, and are dominated by bSI Japan's
+  applicability-side property and attribute facets.
+- **A control for any of the four new kinds.** They render read-only through `UnshownFacetRow`,
+  which stage 2 landed for exactly this moment: the facet appears in the rule it belongs to rather
+  than thinning the list silently. Editing them is the next UI stage.
