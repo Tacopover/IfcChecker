@@ -5,6 +5,7 @@ import type {
   ClassificationFacetDraft,
   ConditionDraft,
   ConditionalCardinality,
+  EntityFacetDraft,
   FacetDraft,
   ImportedRuleSource,
   LengthDraft,
@@ -325,7 +326,13 @@ const FACET_ATTRIBUTES: Record<string, string[]> = {
   classification: ["@_cardinality", "@_uri", "@_instructions"],
   partOf: ["@_cardinality", "@_relation", "@_instructions"],
   material: ["@_cardinality", "@_uri", "@_instructions"],
+  // No cardinality: ids.xsd gives the requirements-side entity none, and says why in a comment —
+  // the list of IFC classes is finite and mandated, so a prohibited form would be superfluous.
+  entity: ["@_instructions"],
 };
+
+/** What an `entityType` element holds, wherever `ids.xsd` nests one. */
+const ENTITY_CHILDREN = ["name", "predefinedType"];
 
 /** Child elements a facet may carry and still be fully representable. */
 const FACET_CHILDREN: Record<string, string[]> = {
@@ -334,10 +341,8 @@ const FACET_CHILDREN: Record<string, string[]> = {
   classification: ["value", "system"],
   partOf: ["entity"],
   material: ["value"],
+  entity: ENTITY_CHILDREN,
 };
-
-/** What an `entityType` element holds, wherever `ids.xsd` nests one. */
-const ENTITY_CHILDREN = ["name", "predefinedType"];
 
 /**
  * Whether the source states one of the three cardinalities `ids.xsd` gives an attribute or a
@@ -431,6 +436,8 @@ function readFacet(node: OrderedNode): FacetDraft | FacetRefusal {
       return readPartOfFacet(node);
     case "material":
       return readMaterialFacet(node);
+    case "entity":
+      return readEntityFacet(node);
     default:
       return refused(`The builder cannot show a <${tag ?? "this facet"}> requirement.`);
   }
@@ -444,26 +451,48 @@ function readFacet(node: OrderedNode): FacetDraft | FacetRefusal {
  */
 function readNestedEntity(
   entityNode: OrderedNode,
-  where: string
+  subject: string
 ): { name: ValueDraft; predefinedType: ValueDraft | null } | FacetRefusal {
   const children = childrenOf(entityNode);
   const unknownChild = elementsOf(children).find(
     (child) => !ENTITY_CHILDREN.includes(tagOf(child) ?? "")
   );
   if (unknownChild !== undefined) {
-    return refused(`Its ${where} carries <${tagOf(unknownChild)}>, which the builder cannot show.`);
+    return refused(`${subject} carries <${tagOf(unknownChild)}>, which the builder cannot show.`);
   }
 
   const name = readValueDraft(children, "name");
   if ("refused" in name) return name;
   if (name.value === null) {
-    return refused(`Its ${where} names no IFC class, so what it requires is unknown.`);
+    return refused(`${subject} names no IFC class, so what it requires is unknown.`);
   }
 
   const predefinedType = readValueDraft(children, "predefinedType");
   if ("refused" in predefinedType) return predefinedType;
 
   return { name: name.value, predefinedType: predefinedType.value };
+}
+
+/**
+ * The IFC class the element must be.
+ *
+ * The one facet with no cardinality at all, so `readFacetShell` refuses a `cardinality` attribute
+ * here through the same unknown-attribute check that catches a `uri` on an attribute.
+ */
+function readEntityFacet(node: OrderedNode): EntityFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "entity");
+  if ("refused" in shell) return shell;
+
+  const entity = readNestedEntity(node, "This entity requirement");
+  if ("refused" in entity) return entity;
+
+  return {
+    id: shell.id,
+    kind: "entity",
+    name: entity.name,
+    predefinedType: entity.predefinedType,
+    instructions: shell.instructions,
+  };
 }
 
 /**
@@ -502,7 +531,7 @@ function readPartOfFacet(node: OrderedNode): PartOfFacetDraft | FacetRefusal {
   if (!entityNode) {
     return refused("States no <entity>, so the whole it must be part of is unknown.");
   }
-  const entity = readNestedEntity(entityNode, "<entity>");
+  const entity = readNestedEntity(entityNode, "The whole it must be part of");
   if ("refused" in entity) return entity;
 
   return {

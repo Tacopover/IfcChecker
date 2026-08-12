@@ -345,6 +345,45 @@ describe("idsXmlToDrafts classification", () => {
   });
 });
 
+describe("idsXmlToDrafts requirement-side entity", () => {
+  it("reads the class it names and the predefined type beside it", () => {
+    expect(
+      onlyFacet(
+        withRequirements(
+          `<entity instructions="Walls only."><name><xs:restriction base="xs:string"><xs:enumeration value="IFCWALL" /><xs:enumeration value="IFCWALLSTANDARDCASE" /></xs:restriction></name><predefinedType><simpleValue>SOLIDWALL</simpleValue></predefinedType></entity>`
+        )
+      )
+    ).toMatchObject({
+      kind: "entity",
+      name: { kind: "enum", values: ["IFCWALL", "IFCWALLSTANDARDCASE"] },
+      predefinedType: { kind: "simple", value: "SOLIDWALL" },
+      instructions: "Walls only.",
+    });
+  });
+
+  // ids.xsd gives the requirements-side entity no cardinality at all, so one is a document the
+  // schema does not describe and choosing a meaning for it would author the rule.
+  it("keeps an entity carrying a cardinality verbatim", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        withRequirements(
+          `<entity cardinality="prohibited"><name><simpleValue>IFCWALL</simpleValue></name></entity>`
+        )
+      )
+    );
+
+    expect(rule.conditions).toEqual([]);
+    expect(rule.imported?.passThrough[0].reason).toMatch(/Carries cardinality/);
+  });
+
+  it("keeps an entity naming no class verbatim rather than requiring nothing", () => {
+    const rule = onlyRule(idsXmlToDrafts(withRequirements(`<entity />`)));
+
+    expect(rule.conditions).toEqual([]);
+    expect(rule.imported?.passThrough[0].reason).toMatch(/names no IFC class/);
+  });
+});
+
 describe("idsXmlToDrafts material", () => {
   it("reads the material it names, with the uri and cardinality beside it", () => {
     expect(
@@ -436,10 +475,13 @@ describe("idsXmlToDrafts partOf", () => {
 
 describe("idsXmlToDrafts pass-through", () => {
   it.each([
+    // All six facets ids.xsd defines are read now, so the only thing left for the default branch
+    // is a construct from a later IDS than we know. That is what the pass-through machinery exists
+    // to survive, and it should stay covered.
     [
-      "a facet outside the builder's model",
-      `<entity><name><simpleValue>IFCWALL</simpleValue></name></entity>`,
-      "entity",
+      "a facet from a later IDS than we know",
+      `<geometry><value><simpleValue>Solid</simpleValue></value></geometry>`,
+      "geometry",
     ],
     // ids.xsd makes <system> mandatory, so this is a document the schema does not describe. A draft
     // cannot state none, and inventing one would author the rule on the file's behalf.
@@ -484,8 +526,8 @@ describe("idsXmlToDrafts pass-through", () => {
   // them checks less than it looks like it does. Each refusal names the one thing that stopped it.
   it.each([
     [
-      `<entity><name><simpleValue>IFCWALL</simpleValue></name></entity>`,
-      /cannot show a <entity> requirement/,
+      `<geometry><value><simpleValue>Solid</simpleValue></value></geometry>`,
+      /cannot show a <geometry> requirement/,
     ],
     [
       `<classification><value><simpleValue>21.22</simpleValue></value></classification>`,
