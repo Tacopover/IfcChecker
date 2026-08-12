@@ -1,18 +1,18 @@
 {
-  "generated": "2026-08-11",
+  "generated": "2026-08-12",
   "totals": {
     "cases": 334,
-    "agreed": 305,
+    "agreed": 317,
     "wrong": 15,
-    "refused": 14,
+    "refused": 2,
     "errored": 0
   },
   "groups": {
     "attribute": {
       "total": 56,
-      "agreed": 47,
+      "agreed": 51,
       "wrong": 3,
-      "refused": 6,
+      "refused": 2,
       "errored": 0
     },
     "classification": {
@@ -52,9 +52,9 @@
     },
     "property": {
       "total": 82,
-      "agreed": 68,
+      "agreed": 76,
       "wrong": 6,
-      "refused": 8,
+      "refused": 0,
       "errored": 0
     },
     "restriction": {
@@ -94,6 +94,7 @@
     "attribute/invalid-inverse_attributes_cannot_be_checked_and_always_fail",
     "attribute/invalid-only_specifically_formatted_numbers_are_allowed_1_4",
     "attribute/invalid-only_specifically_formatted_numbers_are_allowed_2_4",
+    "attribute/invalid-specifying_a_float_when_the_value_is_an_integer_is_invalid",
     "attribute/invalid-value_checks_always_fail_for_objects",
     "attribute/invalid-value_checks_always_fail_for_selects",
     "attribute/pass-a_required_facet_checks_all_parameters_as_normal",
@@ -110,6 +111,9 @@
     "attribute/pass-durations_are_treated_as_strings_1_2",
     "attribute/pass-globalids_are_treated_as_strings_and_not_expanded",
     "attribute/pass-integers_follow_the_same_rules_as_numbers",
+    "attribute/pass-name_restrictions_will_match_any_result_1_3",
+    "attribute/pass-name_restrictions_will_match_any_result_2_3",
+    "attribute/pass-name_restrictions_will_match_any_result_3_3",
     "attribute/pass-non_ascii_characters_are_treated_without_encoding",
     "attribute/pass-numeric_values_are_checked_using_type_casting_1_4",
     "attribute/pass-numeric_values_are_checked_using_type_casting_2_4",
@@ -252,6 +256,8 @@
     "partof/pass-the_nest_predefined_type_must_match_exactly_2_2",
     "property/fail-a_logical_unknown_is_considered_false_and_will_not_pass",
     "property/fail-a_prohibited_facet_returns_the_opposite_of_a_required_facet",
+    "property/fail-all_matching_properties_must_satisfy_requirements_3_3",
+    "property/fail-all_matching_property_sets_must_satisfy_requirements_2_3",
     "property/fail-an_empty_string_is_considered_false_and_will_not_pass",
     "property/fail-any_matching_value_in_a_bounded_property_will_pass_4_4",
     "property/fail-any_matching_value_in_a_list_property_will_pass_3_3",
@@ -264,6 +270,7 @@
     "property/fail-elements_with_a_matching_pset_but_no_property_also_fail",
     "property/fail-elements_with_no_properties_always_fail",
     "property/fail-ids_does_not_handle_string_truncation_such_as_for_identifiers",
+    "property/fail-if_multiple_properties_are_matched__all_values_must_satisfy_requirements_2_2",
     "property/fail-material_properties_that_are_absent_fail_under_ifc2x3",
     "property/fail-material_properties_that_are_absent_fail_under_ifc4",
     "property/fail-measures_are_used_to_specify_an_ifc_data_type_1_2",
@@ -291,6 +298,10 @@
     "property/pass-a_property_set_to_true_will_pass_a_name_check",
     "property/pass-a_required_facet_checks_all_parameters_as_normal",
     "property/pass-a_zero_duration_will_pass",
+    "property/pass-all_matching_properties_must_satisfy_requirements_1_3",
+    "property/pass-all_matching_properties_must_satisfy_requirements_2_3",
+    "property/pass-all_matching_property_sets_must_satisfy_requirements_1_3",
+    "property/pass-all_matching_property_sets_must_satisfy_requirements_3_3",
     "property/pass-an_optional_facet_always_passes_regardless_of_outcome_1_2",
     "property/pass-an_optional_facet_always_passes_regardless_of_outcome_2_2",
     "property/pass-any_matching_value_in_a_bounded_property_will_pass_1_4",
@@ -304,6 +315,7 @@
     "property/pass-booleans_must_be_specified_as_lowercase_strings_2_3",
     "property/pass-dates_are_treated_as_strings_1_2",
     "property/pass-durations_are_treated_as_strings_2_2",
+    "property/pass-if_multiple_properties_are_matched__all_values_must_satisfy_requirements_1_2",
     "property/pass-integer_values_are_checked_using_type_casting_1_4",
     "property/pass-measures_are_used_to_specify_an_ifc_data_type_2_2",
     "property/pass-non_ascii_characters_are_treated_without_encoding",
@@ -387,12 +399,6 @@
       "detail": "entity/name"
     },
     {
-      "case": "attribute/invalid-specifying_a_float_when_the_value_is_an_integer_is_invalid",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "attribute/name"
-    },
-    {
       "case": "attribute/invalid-value_checks_always_fail_for_lists",
       "expected": "fail",
       "actual": "refused",
@@ -415,24 +421,6 @@
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "attribute/pass-name_restrictions_will_match_any_result_1_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "attribute/name"
-    },
-    {
-      "case": "attribute/pass-name_restrictions_will_match_any_result_2_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "attribute/name"
-    },
-    {
-      "case": "attribute/pass-name_restrictions_will_match_any_result_3_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "attribute/name"
     },
     {
       "case": "classification/pass-non_rooted_resources_that_have_external_classification_references_should_also_pass",
@@ -465,64 +453,16 @@
       "detail": "0 applicable, 0 passed, 0 failed (This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.)"
     },
     {
-      "case": "property/fail-all_matching_properties_must_satisfy_requirements_3_3",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "property/name"
-    },
-    {
-      "case": "property/fail-all_matching_property_sets_must_satisfy_requirements_2_3",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "property/name"
-    },
-    {
-      "case": "property/fail-if_multiple_properties_are_matched__all_values_must_satisfy_requirements_2_2",
-      "expected": "fail",
-      "actual": "refused",
-      "detail": "property/name"
-    },
-    {
       "case": "property/pass-a_name_check_will_match_any_quantity_with_any_value",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"
     },
     {
-      "case": "property/pass-all_matching_properties_must_satisfy_requirements_1_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "property/name"
-    },
-    {
-      "case": "property/pass-all_matching_properties_must_satisfy_requirements_2_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "property/name"
-    },
-    {
-      "case": "property/pass-all_matching_property_sets_must_satisfy_requirements_1_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "property/name"
-    },
-    {
-      "case": "property/pass-all_matching_property_sets_must_satisfy_requirements_3_3",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "property/name"
-    },
-    {
       "case": "property/pass-any_matching_value_in_a_table_property_will_pass_2_3",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "property/pass-if_multiple_properties_are_matched__all_values_must_satisfy_requirements_1_2",
-      "expected": "pass",
-      "actual": "refused",
-      "detail": "property/name"
     },
     {
       "case": "property/pass-material_properties_are_supported_under_ifc2x3_via_extendedmaterialproperties",

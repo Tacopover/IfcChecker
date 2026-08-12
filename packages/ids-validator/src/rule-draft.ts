@@ -469,15 +469,15 @@ export function compileFacet(facet: FacetDraft): ParsedRequirementFacet {
     case "attribute":
       return {
         kind: "attribute",
-        name: facet.name,
+        name: { kind: "exact", value: facet.name },
         restriction: compileValue(facet.value),
         cardinality: facet.cardinality satisfies FacetCardinality,
       };
     case "property":
       return {
         kind: "property",
-        propertySet: facet.propertySet ?? "",
-        baseName: facet.name,
+        propertySet: { kind: "exact", value: facet.propertySet ?? "" },
+        baseName: { kind: "exact", value: facet.name },
         dataType: facet.dataType === undefined ? BUILDER_PROPERTY_DATA_TYPE : facet.dataType,
         restriction: compileValue(facet.value),
         cardinality: facet.cardinality,

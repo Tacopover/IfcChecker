@@ -323,15 +323,20 @@ describe("compileDraft", () => {
     expect(spec.requirements).toEqual([
       {
         kind: "property",
-        propertySet: "MEP_Data",
-        baseName: "SystemAbbreviation",
+        propertySet: { kind: "exact", value: "MEP_Data" },
+        baseName: { kind: "exact", value: "SystemAbbreviation" },
         // Nothing was chosen, so nothing is declared: a dataType the model does not hold fails
         // every element, and only the file can say which one it holds.
         dataType: null,
         restriction: null,
         cardinality: "required",
       },
-      { kind: "attribute", name: "Tag", restriction: null, cardinality: "required" },
+      {
+        kind: "attribute",
+        name: { kind: "exact", value: "Tag" },
+        restriction: null,
+        cardinality: "required",
+      },
     ]);
   });
 
@@ -342,7 +347,7 @@ describe("compileDraft", () => {
 
     expect(spec.requirements[0]).toEqual({
       kind: "attribute",
-      name: "Tag",
+      name: { kind: "exact", value: "Tag" },
       restriction: null,
       cardinality: "prohibited",
     });
@@ -354,7 +359,7 @@ describe("compileDraft", () => {
     ]);
     const [facet] = spec.requirements;
     if (facet.kind !== "property") throw new Error("expected a property facet");
-    expect(facet.propertySet).toBe("");
+    expect(facet.propertySet).toEqual({ kind: "exact", value: "" });
   });
 
   it("returns one specification per rule and an empty list for no rules", () => {

@@ -42,8 +42,8 @@ describe("IdsXmlPreview", () => {
     ]);
     expect(specification.requirements[0]).toMatchObject({
       kind: "property",
-      propertySet: "Pset_WallCommon",
-      baseName: "FireRating",
+      propertySet: { kind: "exact", value: "Pset_WallCommon" },
+      baseName: { kind: "exact", value: "FireRating" },
       restriction: { kind: "enum", values: ["60", "90"] },
     });
   });
