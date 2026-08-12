@@ -66,9 +66,11 @@ describe("idsXmlToDrafts applicability", () => {
 
   it.each([
     [
-      "a facet other than entity",
-      `<classification><system><simpleValue>NL/SfB</simpleValue></system></classification>`,
-      "classification",
+      // A facet no version of ids.xsd has. The five it does have are all read now, so the only way
+      // left to test the dispatch's default arm is a construct from a future revision.
+      "a facet IDS 1.0 does not have",
+      `<zone><name><simpleValue>Z1</simpleValue></name></zone>`,
+      "zone",
     ],
     [
       "entity names given as a pattern",
@@ -93,13 +95,201 @@ describe("idsXmlToDrafts applicability", () => {
     expect(result.refused[0].reasons.map((reason) => reason.construct)).toContain(construct);
   });
 
+  it("reads an applicability property beside the entity names", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Load-bearing walls" ifcVersion="IFC4">
+          <applicability>
+            <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+            <property dataType="IFCBOOLEAN">
+              <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+              <baseName><simpleValue>LoadBearing</simpleValue></baseName>
+              <value><simpleValue>TRUE</simpleValue></value>
+            </property>
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.entityTypes).toEqual(["IFCWALL"]);
+    expect(rule.applicabilityFacets).toEqual([
+      {
+        id: expect.any(String),
+        kind: "property",
+        propertySet: { kind: "simple", value: "Pset_WallCommon" },
+        name: { kind: "simple", value: "LoadBearing" },
+        value: { kind: "simple", value: "TRUE" },
+        dataType: "IFCBOOLEAN",
+        uri: null,
+        // The three fields `ids.xsd` gives a requirement facet and not an applicability one.
+        cardinality: "required",
+        explicitCardinality: false,
+        instructions: null,
+      },
+    ]);
+  });
+
+  it("reads an applicability attribute, restriction-valued and all", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Origin markers" ifcVersion="IFC4">
+          <applicability>
+            <entity><name><simpleValue>IFCBUILDINGELEMENTPROXY</simpleValue></name></entity>
+            <attribute>
+              <name><simpleValue>Name</simpleValue></name>
+              <value><xs:restriction base="xs:string"><xs:pattern value=".*nulpunt.*" /></xs:restriction></value>
+            </attribute>
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.applicabilityFacets).toEqual([
+      {
+        id: expect.any(String),
+        kind: "attribute",
+        propertySet: null,
+        name: { kind: "simple", value: "Name" },
+        value: { kind: "affix", operator: "contains", literal: "nulpunt" },
+        cardinality: "required",
+        explicitCardinality: false,
+        instructions: null,
+      },
+    ]);
+  });
+
+  it("reads an applicability classification", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Classified elements are named" ifcVersion="IFC4">
+          <applicability>
+            <classification>
+              <value><simpleValue>21.22</simpleValue></value>
+              <system><simpleValue>NL/SfB</simpleValue></system>
+            </classification>
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.entityTypes).toEqual([]);
+    expect(rule.applicabilityFacets).toEqual([
+      {
+        id: expect.any(String),
+        kind: "classification",
+        system: { kind: "simple", value: "NL/SfB" },
+        value: { kind: "simple", value: "21.22" },
+        uri: null,
+        cardinality: "required",
+        explicitCardinality: false,
+        instructions: null,
+      },
+    ]);
+  });
+
+  it("reads an applicability material, including one that names no material at all", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Anything with a material" ifcVersion="IFC4">
+          <applicability>
+            <material><value><simpleValue>Concrete</simpleValue></value></material>
+            <material />
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.applicabilityFacets?.map((facet) => facet.kind === "material" && facet.value)).toEqual(
+      [{ kind: "simple", value: "Concrete" }, null]
+    );
+  });
+
+  // No corpus file writes one, so this test is the whole of the evidence on the import side.
+  it("reads an applicability partOf, keeping its relation as the author wrote it", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Anything in a system" ifcVersion="IFC4">
+          <applicability>
+            <partOf relation="IFCRELVOIDSELEMENT IFCRELFILLSELEMENT">
+              <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+            </partOf>
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.applicabilityFacets).toEqual([
+      {
+        id: expect.any(String),
+        kind: "partOf",
+        relation: "IFCRELVOIDSELEMENT IFCRELFILLSELEMENT",
+        entityName: { kind: "simple", value: "IFCWALL" },
+        predefinedType: null,
+        cardinality: "required",
+        explicitCardinality: false,
+        instructions: null,
+      },
+    ]);
+  });
+
+  // `ids.xsd` makes the applicability's <entity> minOccurs="0", so "every element carrying this
+  // property" is a complete rule. It used to be refused for naming no type.
+  it("reads an applicability that states a property and no entity at all", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Everything classified" ifcVersion="IFC4">
+          <applicability>
+            <property>
+              <propertySet><simpleValue>ASML</simpleValue></propertySet>
+              <baseName><simpleValue>3.6 NL-SfB code</simpleValue></baseName>
+            </property>
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.entityTypes).toEqual([]);
+    expect(rule.applicabilityFacets).toHaveLength(1);
+  });
+
+  it.each([
+    ["cardinality", ` cardinality="prohibited"`],
+    ["instructions", ` instructions="only the load-bearing ones"`],
+    ["uri", ` uri="https://example.test/rule"`],
+  ])(
+    "refuses an applicability property carrying %s, which ids.xsd gives it none of",
+    (_label, attribute) => {
+      const result = idsXmlToDrafts(
+        document(`
+        <specification name="S" ifcVersion="IFC4">
+          <applicability>
+            <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+            <property${attribute}>
+              <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+              <baseName><simpleValue>LoadBearing</simpleValue></baseName>
+            </property>
+          </applicability>
+        </specification>`)
+      );
+
+      expect(result.rules).toEqual([]);
+      expect(result.refused[0].reasons.map((reason) => reason.construct)).toEqual(["property"]);
+    }
+  );
+
   it("keeps a refused specification verbatim so re-exporting hands it back", () => {
     const [refused] = idsXmlToDrafts(MIXED).refused;
 
-    expect(refused.name).toBe("Classified elements are named");
+    expect(refused.name).toBe("Everything with a wall-ish class is named");
     expect(refused.passThrough.construct).toBe("specification");
-    expect(refused.passThrough.xml).toContain("<classification>");
-    expect(refused.passThrough.xml).toContain("NL/SfB");
+    expect(refused.passThrough.xml).toContain("xs:pattern");
+    expect(refused.passThrough.xml).toContain("IFCWALL.*");
   });
 });
 

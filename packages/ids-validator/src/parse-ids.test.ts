@@ -64,7 +64,7 @@ describe("parseIdsXml", () => {
     expect(specifications).toHaveLength(1);
     const [spec] = specifications;
     expect(spec.name).toBe("Wall naming and fire rating");
-    expect(spec.applicabilityEntityNames).toEqual(["IFCWALL"]);
+    expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
     expect(spec.requirements).toEqual([
       {
         kind: "attribute",
@@ -188,20 +188,149 @@ describe("parseIdsXml", () => {
     expect(isEvaluable(spec)).toBe(true);
   });
 
+  // The same evaluation as a requirement, and the same value shapes: `applicabilityType` reuses
+  // `propertyType` and `attributeType` outright. What it does not reuse is `cardinality`.
+  it("reads an applicability property and attribute into facets, at cardinality required", () => {
+    const xml = SAMPLE_IDS.replace(
+      "</applicability>",
+      `<attribute><name><simpleValue>Description</simpleValue></name></attribute>
+       <property dataType="IFCBOOLEAN">
+         <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+         <baseName><simpleValue>LoadBearing</simpleValue></baseName>
+         <value><simpleValue>TRUE</simpleValue></value>
+       </property></applicability>`
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
+    expect(spec.applicability.facets).toEqual([
+      {
+        kind: "attribute",
+        name: { kind: "exact", value: "Description" },
+        restriction: null,
+        cardinality: "required",
+      },
+      {
+        kind: "property",
+        propertySet: { kind: "exact", value: "Pset_WallCommon" },
+        baseName: { kind: "exact", value: "LoadBearing" },
+        dataType: "IFCBOOLEAN",
+        restriction: { kind: "exact", value: "TRUE" },
+        cardinality: "required",
+      },
+    ]);
+    expect(spec.applicabilityComplete).toBe(true);
+    expect(isEvaluable(spec)).toBe(true);
+  });
+
+  it("reads an applicability classification into a facet", () => {
+    const xml = SAMPLE_IDS.replace(
+      "</applicability>",
+      `<classification>
+         <value><simpleValue>21.22</simpleValue></value>
+         <system><simpleValue>NL/SfB</simpleValue></system>
+       </classification></applicability>`
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicability.facets).toEqual([
+      {
+        kind: "classification",
+        system: { kind: "exact", value: "NL/SfB" },
+        value: { kind: "exact", value: "21.22" },
+        cardinality: "required",
+      },
+    ]);
+    expect(spec.applicabilityComplete).toBe(true);
+  });
+
+  // An applicability holding only a facet is a rule about every entity in scope that satisfies it.
+  // `ids.xsd` makes <entity> minOccurs="0" precisely so it can be written.
+  it("reads an applicability with no entity at all", () => {
+    const xml = SAMPLE_IDS.replace(
+      /<applicability maxOccurs="unbounded">[\s\S]*?<\/applicability>/,
+      `<applicability maxOccurs="unbounded">
+         <attribute><name><simpleValue>Description</simpleValue></name></attribute>
+       </applicability>`
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicability.entityNames).toBe(null);
+    expect(spec.applicability.facets).toHaveLength(1);
+    expect(isEvaluable(spec)).toBe(true);
+  });
+
+  // A restriction inside an applicability facet that this parser cannot read changes the *selection*
+  // rather than weakening a check, so it has to be reported under the applicability. Reported under
+  // requirements it would leave `applicabilityComplete` true and run a rule about the wrong set.
+  it("reports an unreadable restriction inside an applicability facet against the applicability", () => {
+    const xml = SAMPLE_IDS.replace(
+      "</applicability>",
+      `<attribute>
+         <name><simpleValue>Description</simpleValue></name>
+         <value><xs:restriction base="xs:string"><xs:whiteSpace value="collapse" /></xs:restriction></value>
+       </attribute></applicability>`
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "applicability", construct: "xs:whiteSpace" })
+    );
+    expect(spec.applicabilityComplete).toBe(false);
+    expect(isEvaluable(spec)).toBe(false);
+  });
+
+  // A facet from some later revision of IDS. The five `ids.xsd` allows beside <entity> are all read
+  // now, so a future one is what is left to test the dispatch's refusing arm with — and the claim it
+  // pins is unchanged: "walls that are also X" is not "walls", so the kept entity name is not the
+  // whole story and the specification must not run.
   it("reports an unrecognized applicability facet and marks the applicability incomplete", () => {
-    const xmlWithMaterial = SAMPLE_IDS.replace(
+    const xmlWithZone = SAMPLE_IDS.replace(
+      "</applicability>",
+      "<zone><name><simpleValue>Z1</simpleValue></name></zone></applicability>"
+    );
+
+    const [spec] = parseIdsXml(xmlWithZone);
+
+    expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
+    expect(spec.unsupported).toContainEqual(
+      expect.objectContaining({ section: "applicability", construct: "zone" })
+    );
+    expect(spec.applicabilityComplete).toBe(false);
+    expect(isEvaluable(spec)).toBe(false);
+  });
+
+  it("reads an applicability material into a facet", () => {
+    const xml = SAMPLE_IDS.replace(
       "</applicability>",
       "<material><value><simpleValue>Concrete</simpleValue></value></material></applicability>"
     );
 
-    const [spec] = parseIdsXml(xmlWithMaterial);
+    const [spec] = parseIdsXml(xml);
 
-    expect(spec.applicabilityEntityNames).toEqual(["IFCWALL"]);
-    expect(spec.unsupported).toContainEqual(
-      expect.objectContaining({ section: "applicability", construct: "material" })
+    expect(spec.applicability.facets).toEqual([
+      { kind: "material", value: { kind: "exact", value: "Concrete" }, cardinality: "required" },
+    ]);
+    expect(spec.applicabilityComplete).toBe(true);
+  });
+
+  // `ids.xsd` makes <entity> minOccurs="0", so "no entity element" and "an entity element naming
+  // nothing" are different documents. The first admits every class and leaves the selection to the
+  // facets beside it; running the second would check the whole model against a rule about nothing.
+  it("refuses an applicability that states nothing at all", () => {
+    const xml = SAMPLE_IDS.replace(
+      /<applicability maxOccurs="unbounded">[\s\S]*?<\/applicability>/,
+      `<applicability maxOccurs="unbounded"></applicability>`
     );
-    // "Walls made of concrete" is not "walls" — the kept entity name is not the whole story.
-    expect(spec.applicabilityComplete).toBe(false);
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicability).toEqual({ entityNames: null, facets: [] });
+    expect(spec.applicabilityComplete).toBe(true);
     expect(isEvaluable(spec)).toBe(false);
   });
 
@@ -213,7 +342,7 @@ describe("parseIdsXml", () => {
 
     const [spec] = parseIdsXml(xml);
 
-    expect(spec.applicabilityEntityNames).toEqual([]);
+    expect(spec.applicability.entityNames).toEqual(null);
     expect(spec.unsupported).toContainEqual(
       expect.objectContaining({ section: "applicability", construct: "entity/name" })
     );
@@ -277,7 +406,7 @@ describe("parseIdsXml", () => {
 
     const [spec] = parseIdsXml(xml);
 
-    expect(spec.applicabilityEntityNames).toEqual(["IFCWALL"]);
+    expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
     expect(spec.unsupported).toContainEqual(
       expect.objectContaining({ section: "applicability", construct: "entity/predefinedType" })
     );

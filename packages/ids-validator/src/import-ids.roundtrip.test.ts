@@ -121,7 +121,7 @@ describe("import / export round-trip", () => {
     expect(names).toEqual([
       "Walls carry a name and a type code",
       "Doors are documented",
-      "Classified elements are named",
+      "Everything with a wall-ish class is named",
       "Some storey must exist",
     ]);
   });
@@ -141,6 +141,37 @@ describe("import / export round-trip", () => {
         `facet count for ${rule.name}`
       ).toBe(counts.get(rule.name));
     }
+  });
+
+  // An applicability facet is written from the draft rather than kept verbatim, so the exporter has
+  // to put it back in the schema's order, at the schema's indentation, and without the cardinality,
+  // instructions and uri that `requirementsType` adds and `applicabilityType` does not.
+  it("reproduces an applicability property element for element, and stays valid", () => {
+    const source = [
+      `<?xml version="1.0" encoding="UTF-8"?>`,
+      `<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema">`,
+      `  <info><title>T</title></info>`,
+      `  <specifications>`,
+      `    <specification name="Load-bearing walls" ifcVersion="IFC4">`,
+      `      <applicability minOccurs="1" maxOccurs="unbounded">`,
+      `        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>`,
+      `        <property dataType="IFCBOOLEAN">`,
+      `          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>`,
+      `          <baseName><simpleValue>LoadBearing</simpleValue></baseName>`,
+      `          <value><simpleValue>TRUE</simpleValue></value>`,
+      `        </property>`,
+      `      </applicability>`,
+      `      <requirements>`,
+      `        <attribute><name><simpleValue>Name</simpleValue></name></attribute>`,
+      `      </requirements>`,
+      `    </specification>`,
+      `  </specifications>`,
+      `</ids>`,
+    ].join("\n");
+
+    expect(structure(reexport(source))).toEqual(structure(source));
+    expect(idsSchemaViolations(reexport(source))).toEqual([]);
+    expect(comparable(parseIdsXml(reexport(source)))).toEqual(comparable(parseIdsXml(source)));
   });
 
   it("still exports a rule the builder authored from scratch as plain IFC4", () => {

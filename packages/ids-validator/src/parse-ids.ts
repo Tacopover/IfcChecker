@@ -128,6 +128,45 @@ export type ParsedRequirementFacet =
   | ParsedPartOfFacet
   | ParsedEntityFacet;
 
+/**
+ * A facet standing in an `<applicability>`, which narrows the elements the rule is about.
+ *
+ * The same five shapes a requirement holds, minus `entity` — that one is `ParsedApplicability`'s
+ * name list, because it is the only facet whose selection can be enumerated rather than tested.
+ *
+ * Their `cardinality` is always `required`, and that is not a default this parser chose.
+ * `applicabilityType` references `attributeType`, `propertyType`, `classificationType`,
+ * `materialType` and `partOfType` directly; it is `requirementsType` that extends each of them with
+ * a `cardinality` attribute. A facet stating one inside an applicability is a document `ids.xsd`
+ * does not describe.
+ */
+export type ParsedApplicabilityFacet =
+  | ParsedAttributeFacet
+  | ParsedPropertyFacet
+  | ParsedClassificationFacet
+  | ParsedMaterialFacet
+  | ParsedPartOfFacet;
+
+/**
+ * Which elements a specification is about.
+ *
+ * A predicate rather than a list, because `ids.xsd` makes `<entity>` `minOccurs="0"`: an
+ * applicability may hold nothing but a `<property>`, and then there is no set of class names to
+ * start from — the rule reaches every entity in scope that carries the property. `entityNames` is
+ * `null` for exactly that case, and distinguishing it from an `<entity>` that lists nothing is what
+ * keeps "selects everything with this property" apart from "selects nothing".
+ *
+ * The name list stays a field rather than being derived back out of the facets: it is what the
+ * builder's type chips, the explorer rail and the exporter all read, and only the enumerable value
+ * shapes could ever be recovered from a predicate.
+ *
+ * Every facet must hold, together with the name list. IDS states no `or` anywhere.
+ */
+export interface ParsedApplicability {
+  entityNames: string[] | null;
+  facets: ParsedApplicabilityFacet[];
+}
+
 /** Something the source document asked for that this parser cannot represent. */
 export interface UnsupportedConstruct {
   section: "applicability" | "requirements";
@@ -156,7 +195,7 @@ export type SpecificationCardinality = "required" | "optional" | "prohibited";
 export interface ParsedSpecification {
   name: string;
   cardinality: SpecificationCardinality;
-  applicabilityEntityNames: string[];
+  applicability: ParsedApplicability;
   requirements: ParsedRequirementFacet[];
   /** Reported rather than logged, so a caller can show the user what was dropped. */
   unsupported: UnsupportedConstruct[];
@@ -175,10 +214,17 @@ export interface ParsedSpecification {
  * The same trap sits on the requirements side: a specification whose every requirement we had to
  * drop still selects elements, finds nothing wrong with them, and passes. "All pass" would be a
  * verdict on nothing that was checked, so it is refused too.
+ *
+ * An applicability stating nothing at all — no `<entity>` and no facet — is refused rather than
+ * read as "every element in the model". `ids.xsd` allows the shape, and a whole-model rule may well
+ * be what its author meant, but nothing in the corpus or the conformance suite writes one, so
+ * running it would be acting on a guess about an empty element.
  */
 export function isEvaluable(specification: ParsedSpecification): boolean {
   if (!specification.applicabilityComplete) return false;
-  if (specification.applicabilityEntityNames.length === 0) return false;
+  const { entityNames, facets } = specification.applicability;
+  if (entityNames !== null && entityNames.length === 0) return false;
+  if (entityNames === null && facets.length === 0) return false;
   if (specification.requirements.length > 0) return true;
   return !specification.unsupported.some((entry) => entry.section === "requirements");
 }
@@ -356,11 +402,17 @@ function readLength(restrictionChildren: OrderedNode[]): ParsedRestriction | nul
  * The restriction under one of a facet's parameters, named because a facet may carry several: a
  * `<classification>` constrains its `<system>` and its `<value>` independently, and each is an
  * `idsValue` in its own right.
+ *
+ * `section` is which half of the specification the facet stands in, and it is not cosmetic: a
+ * restriction we could not fully read weakens a requirement, but *changes the selection* when it
+ * stands in an applicability. Only the second makes `applicabilityComplete` false, and reporting it
+ * under the wrong section would run a rule whose subject we half-read.
  */
 function parseRestriction(
   facetChildren: OrderedNode[],
   parameter: string,
-  unsupported: UnsupportedConstruct[]
+  unsupported: UnsupportedConstruct[],
+  section: UnsupportedConstruct["section"] = "requirements"
 ): ParsedRestriction | null {
   const valueNode = facetChildren.find((candidate) => tagOf(candidate) === parameter);
   if (!valueNode) return null;
@@ -376,7 +428,7 @@ function parseRestriction(
   for (const tag of new Set(tagsOf(restrictionChildren))) {
     if (RESTRICTION_FACETS_READ.includes(tag)) continue;
     unsupported.push({
-      section: "requirements",
+      section,
       construct: `xs:${tag}`,
       description: `Constrains the value with xs:${tag}, which cannot be represented.`,
     });
@@ -391,7 +443,7 @@ function parseRestriction(
     // No file in the conformance suite writes both, so this is reported rather than implemented.
     if (nodesNamed(restrictionChildren, "enumeration").length > 0) {
       unsupported.push({
-        section: "requirements",
+        section,
         construct: "xs:enumeration",
         description: "Combines an enumeration with a numeric range; only the range is checked.",
       });
@@ -405,7 +457,7 @@ function parseRestriction(
     // constraint we stop enforcing.
     if (nodesNamed(restrictionChildren, "enumeration").length > 0) {
       unsupported.push({
-        section: "requirements",
+        section,
         construct: "xs:enumeration",
         description: "Combines an enumeration with a length; only the length is checked.",
       });
@@ -435,16 +487,13 @@ function parseSpecification(specNode: OrderedNode): ParsedSpecification {
   const unsupported: UnsupportedConstruct[] = [];
 
   const applicabilityNode = specChildren.find((node) => tagOf(node) === "applicability");
-  const applicabilityEntityNames = readApplicability(
-    descend(specChildren, "applicability"),
-    unsupported
-  );
+  const applicability = readApplicability(descend(specChildren, "applicability"), unsupported);
   const requirements = readRequirements(descend(specChildren, "requirements"), unsupported);
 
   return {
     name,
     cardinality: readSpecificationCardinality(applicabilityNode),
-    applicabilityEntityNames,
+    applicability,
     requirements,
     unsupported,
     applicabilityComplete: !unsupported.some((entry) => entry.section === "applicability"),
@@ -505,26 +554,24 @@ function readSpecificationCardinality(
 }
 
 /**
- * Entity names, plus a report of everything else that narrowed the selection. IDS also selects by
- * attribute, property, classification and material value; those decide which elements a rule is
- * about, so dropping one quietly changes what the rule means.
+ * Which elements the rule is about: the classes its `<entity>` lists, plus every other facet that
+ * narrows the selection, plus a report of anything that narrowed it in a way this parser cannot
+ * represent. Dropping one of those quietly changes what the rule means, so it refuses instead.
  */
 function readApplicability(
   applicability: OrderedNode[],
   unsupported: UnsupportedConstruct[]
-): string[] {
-  const entityNames: string[] = [];
+): ParsedApplicability {
+  let entityNames: string[] | null = null;
+  const facets: ParsedApplicabilityFacet[] = [];
 
   for (const node of applicability) {
     const tag = tagOf(node);
     if (tag === null || tag === TEXT_KEY) continue;
 
     if (tag !== "entity") {
-      unsupported.push({
-        section: "applicability",
-        construct: tag,
-        description: `Selects elements by <${tag}>, which cannot be represented.`,
-      });
+      const facet = readApplicabilityFacet(node, tag, unsupported);
+      if (facet) facets.push(facet);
       continue;
     }
 
@@ -538,7 +585,7 @@ function readApplicability(
       });
       continue;
     }
-    entityNames.push(...names);
+    entityNames = [...(entityNames ?? []), ...names];
 
     // Geometry is the one part of the schema a parse never normalizes, so a
     // rule aimed at it would select nothing and report every model clean. Said
@@ -561,7 +608,64 @@ function readApplicability(
     }
   }
 
-  return entityNames;
+  return { entityNames, facets };
+}
+
+/**
+ * One facet standing beside the `<entity>` in an applicability, or `null` when it says something
+ * this parser cannot follow — in which case the reason it reports refuses the whole specification.
+ *
+ * The evaluation is the requirements-side one, unchanged: "the element carries this property" is
+ * the same question whether it decides that the rule applies or that the rule is satisfied.
+ * `ifctester` uses one class per facet on both sides for the same reason.
+ */
+function readApplicabilityFacet(
+  node: OrderedNode,
+  tag: string,
+  unsupported: UnsupportedConstruct[]
+): ParsedApplicabilityFacet | null {
+  const refuse = (construct: string, description: string): null => {
+    unsupported.push({ section: "applicability", construct, description });
+    return null;
+  };
+
+  // `applicabilityType` references the base facet types directly; it is `requirementsType` that
+  // extends each of them with a `cardinality`. So one here is a document ids.xsd does not describe,
+  // and reading `prohibited` as though it were stated on a requirement would invert the selection.
+  if (attributesOf(node)["@_cardinality"] !== undefined) {
+    return refuse(
+      `${tag}/cardinality`,
+      `States a cardinality on <${tag}>, which ids.xsd gives no applicability facet.`
+    );
+  }
+
+  if (tag === "attribute" || tag === "property") {
+    const facet =
+      tag === "attribute"
+        ? parseAttributeFacet(node, unsupported, "applicability")
+        : parsePropertyFacet(node, unsupported, "applicability");
+    return (
+      facet ??
+      refuse(
+        `${tag}/name`,
+        `States no readable name for its <${tag}>, so which elements it selects is unknown.`
+      )
+    );
+  }
+
+  if (tag === "classification") return parseClassificationFacet(node, unsupported, "applicability");
+
+  if (tag === "material") {
+    return {
+      kind: "material",
+      value: parseRestriction(childrenOf(node, "material"), "value", unsupported, "applicability"),
+      cardinality: readCardinality(node),
+    };
+  }
+
+  if (tag === "partOf") return parsePartOfFacet(node, unsupported, "applicability");
+
+  return refuse(tag, `Selects elements by <${tag}>, which cannot be represented.`);
 }
 
 function readRequirements(
@@ -661,15 +765,16 @@ function parseEntityFacet(
 
 function parseAttributeFacet(
   node: OrderedNode,
-  unsupported: UnsupportedConstruct[]
+  unsupported: UnsupportedConstruct[],
+  section: UnsupportedConstruct["section"] = "requirements"
 ): ParsedAttributeFacet | null {
   const children = childrenOf(node, "attribute");
-  const name = parseRestriction(children, "name", unsupported);
+  const name = parseRestriction(children, "name", unsupported, section);
   if (name === null) return null;
   return {
     kind: "attribute",
     name,
-    restriction: parseRestriction(children, "value", unsupported),
+    restriction: parseRestriction(children, "value", unsupported, section),
     cardinality: readCardinality(node),
   };
 }
@@ -681,7 +786,8 @@ function parseAttributeFacet(
  */
 function parsePartOfFacet(
   node: OrderedNode,
-  unsupported: UnsupportedConstruct[]
+  unsupported: UnsupportedConstruct[],
+  section: UnsupportedConstruct["section"] = "requirements"
 ): ParsedPartOfFacet {
   const children = childrenOf(node, "partOf");
   const entityChildren = descend(children, "entity");
@@ -690,8 +796,8 @@ function parsePartOfFacet(
   return {
     kind: "partOf",
     relations: relation === undefined ? [] : relation.trim().split(/\s+/).filter(Boolean),
-    entityName: parseRestriction(entityChildren, "name", unsupported),
-    predefinedType: parseRestriction(entityChildren, "predefinedType", unsupported),
+    entityName: parseRestriction(entityChildren, "name", unsupported, section),
+    predefinedType: parseRestriction(entityChildren, "predefinedType", unsupported, section),
     cardinality: readCardinality(node),
   };
 }
@@ -703,31 +809,33 @@ function parsePartOfFacet(
  */
 function parseClassificationFacet(
   node: OrderedNode,
-  unsupported: UnsupportedConstruct[]
+  unsupported: UnsupportedConstruct[],
+  section: UnsupportedConstruct["section"] = "requirements"
 ): ParsedClassificationFacet {
   const children = childrenOf(node, "classification");
   return {
     kind: "classification",
-    system: parseRestriction(children, "system", unsupported),
-    value: parseRestriction(children, "value", unsupported),
+    system: parseRestriction(children, "system", unsupported, section),
+    value: parseRestriction(children, "value", unsupported, section),
     cardinality: readCardinality(node),
   };
 }
 
 function parsePropertyFacet(
   node: OrderedNode,
-  unsupported: UnsupportedConstruct[]
+  unsupported: UnsupportedConstruct[],
+  section: UnsupportedConstruct["section"] = "requirements"
 ): ParsedPropertyFacet | null {
   const children = childrenOf(node, "property");
-  const propertySet = parseRestriction(children, "propertySet", unsupported);
-  const baseName = parseRestriction(children, "baseName", unsupported);
+  const propertySet = parseRestriction(children, "propertySet", unsupported, section);
+  const baseName = parseRestriction(children, "baseName", unsupported, section);
   if (propertySet === null || baseName === null) return null;
   return {
     kind: "property",
     propertySet,
     baseName,
     dataType: attributesOf(node)["@_dataType"] ?? null,
-    restriction: parseRestriction(children, "value", unsupported),
+    restriction: parseRestriction(children, "value", unsupported, section),
     cardinality: readCardinality(node),
   };
 }

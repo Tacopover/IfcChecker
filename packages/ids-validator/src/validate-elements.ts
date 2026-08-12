@@ -78,7 +78,7 @@ export function validateBySpecification(
     let failedCount = 0;
 
     for (const element of elements) {
-      if (!matchesApplicability(element, specification.applicabilityEntityNames)) {
+      if (!matchesApplicability(element, specification.applicability, unitScales)) {
         continue;
       }
       applicableCount += 1;

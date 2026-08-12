@@ -236,12 +236,19 @@ const IMPORTED_IDS = `<?xml version="1.0" encoding="UTF-8"?>
         <classification><value><simpleValue>21.22</simpleValue></value></classification>
       </requirements>
     </specification>
-    <specification name="Classified elements are named" ifcVersion="IFC4">
-      <applicability><classification><system><simpleValue>NL/SfB</simpleValue></system></classification></applicability>
+    <specification name="Everything with a wall-ish class is named" ifcVersion="IFC4">
+      <applicability><entity><name><xs:restriction base="xs:string"><xs:pattern value="IFCWALL.*" /></xs:restriction></name></entity></applicability>
       <requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>
     </specification>
     <specification name="Doors are named" ifcVersion="IFC4">
-      <applicability><entity><name><simpleValue>IFCDOOR</simpleValue></name></entity></applicability>
+      <applicability>
+        <entity><name><simpleValue>IFCDOOR</simpleValue></name></entity>
+        <property dataType="IFCBOOLEAN">
+          <propertySet><simpleValue>Pset_DoorCommon</simpleValue></propertySet>
+          <baseName><simpleValue>IsExternal</simpleValue></baseName>
+          <value><simpleValue>TRUE</simpleValue></value>
+        </property>
+      </applicability>
       <requirements><attribute><name><simpleValue>Name</simpleValue></name></attribute></requirements>
     </specification>
   </specifications>
@@ -268,12 +275,26 @@ describe("RuleBuilderPage importing an IDS file", () => {
 
     expect(cardTitles(container)).toEqual([
       "Walls are named",
-      "Classified elements are named",
+      "Everything with a wall-ish class is named",
       "Doors are named",
     ]);
     expect(screen.getByText("Kept, not editable")).toBeInTheDocument();
     expect(
-      screen.getByText(/Selects elements by <classification>, which the builder cannot show\./)
+      screen.getByText(/Gives its entity types as a pattern rather than plain names\./)
+    ).toBeInTheDocument();
+  });
+
+  // An applicability facet decides which elements the rule reaches, so the type chips alone are
+  // not the whole story. It is read-only, like the four requirement kinds with no controls yet.
+  it("shows what else the rule selects by, beside its type chips", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+    await user.click(screen.getByRole("button", { name: "Expand Doors are named" }));
+
+    expect(
+      screen.getByText(/only those whose IsExternal in Pset_DoorCommon is TRUE/)
     ).toBeInTheDocument();
   });
 
@@ -302,8 +323,8 @@ describe("RuleBuilderPage importing an IDS file", () => {
     expect(xml).toContain("<title>Client standard</title>");
     expect(xml).toContain("<author>bim@client.example</author>");
     expect(xml).toContain(`ifcVersion="IFC2X3 IFC4"`);
-    expect(xml).toContain(`<specification name="Classified elements are named"`);
-    expect(xml).toContain("<classification>");
+    expect(xml).toContain(`<specification name="Everything with a wall-ish class is named"`);
+    expect(xml).toContain(`<xs:pattern value="IFCWALL.*"`);
   });
 
   it("confirms before replacing work already on the page, and stops if the user declines", async () => {

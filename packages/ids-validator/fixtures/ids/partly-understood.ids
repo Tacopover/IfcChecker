@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Specification shapes from buildingSMART's "Demo - BIM basis ILS" example, trimmed to a readable
-  size. One selects its elements by an attribute-value filter this parser cannot represent, and
-  before that was reported it parsed into an empty entity list, matched nothing, and reported the
-  model clean.
+  size. The first selects its elements by an attribute-value filter, which this parser once could
+  not represent — before that was reported it parsed into an empty entity list, matched nothing,
+  and reported the model clean; then it was refused whole; and since the applicability side landed
+  it selects the one proxy whose Name matches and fails it for stating no Description.
 
-  The last one is refused from the other side: its applicability is readable, but its only
-  requirement names a property by pattern rather than by name, so there is nothing left to check
-  and "all pass" would be a verdict on nothing. The classification specification above it used to
-  sit in that same position and is now checked on its merits.
+  Every specification here is checked on its merits now. The last two arrived there from the
+  requirements side, one naming a property by pattern and one asking for a classification. The
+  refusal invariant they used to stand for is pinned in `parse-ids.test.ts` instead, against an
+  entity naming no readable class.
 -->
 <ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd" xmlns="http://standards.buildingsmart.org/IDS">
   <info>

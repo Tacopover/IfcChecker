@@ -28,15 +28,20 @@ export const MAX_COLLECTED_FAILURES = 300;
  */
 export function evaluateRuleDraft(rule: RuleDraft, elements: NormalizedElement[]): RuleEvaluation {
   const [specification] = compileDraft([rule]);
-  const { applicabilityEntityNames, requirements } = specification;
+  const { applicability, requirements } = specification;
 
   const perCondition = requirements.map(() => 0);
   const failures: RuleEvaluation["failures"] = [];
   let matched = 0;
   let passed = 0;
 
+  // A rule naming no type and stating no applicability facet selects everything once it reaches a
+  // file, and `isEvaluable` refuses it for that reason. Counting every element against a rule the
+  // user has not finished stating would be the card claiming a verdict the validator would not give.
+  const statesNothing = applicability.entityNames === null && applicability.facets.length === 0;
+
   for (const element of elements) {
-    if (!matchesApplicability(element, applicabilityEntityNames)) continue;
+    if (statesNothing || !matchesApplicability(element, applicability)) continue;
     matched += 1;
 
     // A rule with no conditions checks nothing, so nothing can have passed it.

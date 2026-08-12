@@ -1,5 +1,7 @@
 import type {
   FacetCardinality,
+  ParsedApplicability,
+  ParsedApplicabilityFacet,
   ParsedBound,
   ParsedRequirementFacet,
   ParsedRestriction,
@@ -8,6 +10,15 @@ import type {
 import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
 import { concreteTypeNamesFor } from "./ifc-type-hierarchy.js";
 
+/**
+ * The readings of a condition's **value**, and nothing else.
+ *
+ * Cardinality is stated beside them rather than folded into them. IDS treats "must it be there" and
+ * "what may it say" as orthogonal — `prohibited` with a value says "must not be Steel", which no
+ * single operator can express — so an operator that also meant "not present" would make three of
+ * the nine combinations unreachable. `exists` is the reading for a facet stating no value at all,
+ * whatever its cardinality: required it means "must be filled in", prohibited "must not be".
+ */
 export type ConditionOperator =
   | "exists"
   | "equals"
@@ -15,8 +26,7 @@ export type ConditionOperator =
   | "contains"
   | "startsWith"
   | "endsWith"
-  | "matches"
-  | "notExists";
+  | "matches";
 
 /**
  * The cardinalities `ids.xsd` gives an attribute or a property (`conditionalCardinality`).
@@ -190,6 +200,21 @@ export type FacetDraft =
   | PartOfFacetDraft;
 
 /**
+ * A facet standing in an `<applicability>`, narrowing which elements the rule is about.
+ *
+ * The same shapes, minus `entity` — that one is the rule's `entityTypes`, because it is the only
+ * facet whose selection can be listed rather than tested.
+ *
+ * Three of the fields these shapes carry **may not be written in an applicability**, and are always
+ * at their defaults here: `cardinality` is `required` with `explicitCardinality` false,
+ * `instructions` is null, and `uri` is null. That is `ids.xsd`, not a convention —
+ * `applicabilityType` references the base facet types, and `requirementsType` is what extends each
+ * of them with those attributes. Both ways in hold the invariant by construction: the importer
+ * refuses a facet carrying any of the three, and the builder never writes one.
+ */
+export type ApplicabilityFacetDraft = Exclude<FacetDraft, { kind: "entity" }>;
+
+/**
  * The two facets the builder's rows can edit, and the two the importer produces.
  *
  * A separate name rather than a comment, because it is what the whole authoring UI is typed
@@ -266,6 +291,14 @@ export interface RuleDraft {
   id: string;
   name: string;
   entityTypes: string[];
+  /**
+   * What else the rule's applicability states, beyond the classes it selects.
+   *
+   * Absent is the common case and means the entity list is the whole of the selection. Present, the
+   * rule reaches only the elements that satisfy every one of these too — and `ids.xsd` allows an
+   * applicability with no `<entity>` at all, so a rule may state these and no type.
+   */
+  applicabilityFacets?: ApplicabilityFacetDraft[];
   /**
    * Every facet the rule requires, in document order.
    *
@@ -423,20 +456,17 @@ export interface FriendlyReading {
 }
 
 /**
- * The friendly reading of a condition, or `null` when no operator states what it says.
+ * The friendly reading of a condition's value, or `null` when no operator states what it says.
  *
- * `null` is not a fault — it is the honest answer for the things the eight operators cannot
- * express: a numeric range, a length, an optional facet, and a prohibited value ("must not be
- * Steel", which `notExists` would widen into "must not be present at all"). The row shows those
- * rather than mislabelling them.
+ * Cardinality is deliberately not consulted: it is a separate control on the row, so an optional
+ * facet and a prohibited value are both fully editable and only the value can be unreadable here.
+ *
+ * `null` is not a fault — it is the honest answer for the two value shapes the operators cannot
+ * express, a numeric range and a length. The row shows those rather than mislabelling them.
  */
 export function friendlyReadingOf(condition: ConditionDraft): FriendlyReading | null {
   const none = { text: "", values: [] };
 
-  if (condition.cardinality === "prohibited") {
-    return condition.value === null ? { operator: "notExists", ...none } : null;
-  }
-  if (condition.cardinality === "optional") return null;
   if (condition.value === null) return { operator: "exists", ...none };
 
   switch (condition.value.kind) {
@@ -462,7 +492,6 @@ export function valueDraftForOperator(
 ): ValueDraft | null {
   switch (operator) {
     case "exists":
-    case "notExists":
       return null;
     case "equals":
       return { kind: "simple", value: text };
@@ -475,9 +504,6 @@ export function valueDraftForOperator(
   }
 }
 
-export function cardinalityForOperator(operator: ConditionOperator): ConditionalCardinality {
-  return operator === "notExists" ? "prohibited" : "required";
-}
 
 /**
  * What the validator checks a facet against. Total over all six kinds, and it throws nothing.
@@ -487,6 +513,8 @@ export function cardinalityForOperator(operator: ConditionOperator): Conditional
  * draft carries those so the exporter can hand the file back; the validator has no use for them,
  * and a compile that let them through would be the draft model leaking into the engine.
  */
+export function compileFacet(facet: ApplicabilityFacetDraft): ParsedApplicabilityFacet;
+export function compileFacet(facet: FacetDraft): ParsedRequirementFacet;
 export function compileFacet(facet: FacetDraft): ParsedRequirementFacet {
   switch (facet.kind) {
     case "attribute":
@@ -539,6 +567,23 @@ export function compileFacet(facet: FacetDraft): ParsedRequirementFacet {
 }
 
 /**
+ * Which elements the rule selects, stated the way the exported file states it.
+ *
+ * A rule naming no entity type writes **no `<entity>` element** — `<name>` is mandatory, so there is
+ * no way to write one that lists nothing — and an applicability with no `<entity>` admits every
+ * class. So the compiled form has to say `null` rather than an empty list, or the preview would
+ * select nothing while the file it exports selects everything. `ruleProblems` blocks the export of a
+ * rule in that state, and `isEvaluable` refuses one whose applicability states nothing at all.
+ */
+function applicabilityOf(rule: RuleDraft): ParsedApplicability {
+  const entityNames = applicabilityEntityNamesOf(rule);
+  return {
+    entityNames: entityNames.length === 0 ? null : entityNames,
+    facets: (rule.applicabilityFacets ?? []).map((facet) => compileFacet(facet)),
+  };
+}
+
+/**
  * In-memory equivalent of `parseIdsXml(buildIdsXml(rules))`, so the live preview never has to
  * serialise and re-parse per keystroke. The round-trip test keeps the two in step.
  *
@@ -554,7 +599,7 @@ export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
       rule.imported?.applicabilityAttributes.minOccurs,
       rule.imported?.applicabilityAttributes.maxOccurs
     ),
-    applicabilityEntityNames: applicabilityEntityNamesOf(rule),
+    applicability: applicabilityOf(rule),
     requirements: rule.conditions.map(compileFacet),
     // Authored rules can say nothing the builder cannot; imported ones carry what it could not read.
     unsupported: (rule.imported?.passThrough ?? []).map((entry) => ({

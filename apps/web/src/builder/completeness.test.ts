@@ -49,7 +49,7 @@ describe("conditionProblem", () => {
 
   it("leaves operators that need no value alone", () => {
     expect(conditionProblem({ ...CONDITION, ...stating("exists") })).toBeNull();
-    expect(conditionProblem({ ...CONDITION, ...stating("notExists") })).toBeNull();
+    expect(conditionProblem({ ...CONDITION, ...stating("exists", "", [], "prohibited") })).toBeNull();
   });
 
   it("folds an uncompilable pattern into the same report", () => {

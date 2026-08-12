@@ -25,7 +25,6 @@ import type {
   ValueDraft,
 } from "./rule-draft.js";
 import {
-  cardinalityForOperator,
   compileDraft,
   plainName,
   valueDraftForOperator,
@@ -69,7 +68,7 @@ function condition(overrides: ConditionOverrides = {}): ConditionDraft {
     id: "c1",
     kind: "attribute",
     value: valueDraftForOperator(operator, text, values),
-    cardinality: cardinalityForOperator(operator),
+    cardinality: "required",
     ...rest,
     name: plainName(name),
     propertySet: propertySet === null ? null : plainName(propertySet),
@@ -95,7 +94,7 @@ const DRAFTS: RuleDraft[] = [
     conditions: [
       condition({ id: "c1", name: "Tag", operator: "exists" }),
       condition({ id: "c2", name: "Name", operator: "matches", text: "W-\\d+" }),
-      condition({ id: "c3", name: "Description", operator: "notExists" }),
+      condition({ id: "c3", name: "Description", cardinality: "prohibited" }),
     ],
   },
   {
@@ -128,7 +127,7 @@ const DRAFTS: RuleDraft[] = [
         kind: "property",
         propertySet: "MEP_Data",
         name: "Legacy",
-        operator: "notExists",
+        cardinality: "prohibited",
       }),
     ],
   },
@@ -169,7 +168,7 @@ describe("buildIdsXml", () => {
     expect(xml).toContain('<xs:pattern value="W-\\d+" />');
   });
 
-  it('emits cardinality="prohibited" only for notExists conditions', () => {
+  it('emits cardinality="prohibited" only for the conditions that state it', () => {
     const xml = buildIdsXml(DRAFTS);
     expect(xml.match(/cardinality="prohibited"/g)).toHaveLength(2);
   });

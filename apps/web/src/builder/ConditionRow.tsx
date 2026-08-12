@@ -1,7 +1,11 @@
 import { useMemo } from "react";
-import type { ConditionDraft, ConditionOperator, ValueDraft } from "@ifc-qa/ids-validator";
+import type {
+  ConditionDraft,
+  ConditionOperator,
+  ConditionalCardinality,
+  ValueDraft,
+} from "@ifc-qa/ids-validator";
 import {
-  cardinalityForOperator,
   friendlyReadingOf,
   plainName,
   plainNameOf,
@@ -13,14 +17,28 @@ import { conditionProblem, OPERATORS_NEEDING_TEXT } from "./completeness.js";
 import { nextDraftId } from "./draftIds.js";
 
 export const OPERATORS: Array<{ id: ConditionOperator; label: string }> = [
-  { id: "exists", label: "must be filled in" },
-  { id: "equals", label: "must be exactly" },
-  { id: "oneOf", label: "must be one of" },
-  { id: "contains", label: "must contain" },
-  { id: "startsWith", label: "must start with" },
-  { id: "endsWith", label: "must end with" },
-  { id: "matches", label: "must match pattern" },
-  { id: "notExists", label: "must NOT be filled in" },
+  { id: "exists", label: "be filled in" },
+  { id: "equals", label: "be exactly" },
+  { id: "oneOf", label: "be one of" },
+  { id: "contains", label: "contain" },
+  { id: "startsWith", label: "start with" },
+  { id: "endsWith", label: "end with" },
+  { id: "matches", label: "match pattern" },
+];
+
+/**
+ * The three cardinalities `ids.xsd` gives an attribute or a property, worded so the row still reads
+ * as a sentence: "Pset_WallCommon · FireRating **must** be one of 60, 90".
+ *
+ * A separate control from the operator, because IDS treats them as orthogonal. Folding them into
+ * one list is what used to make three combinations unreachable — an optional facet, a prohibited
+ * value ("must not be Steel") and prohibited with no value all shared one `notExists` entry or none
+ * at all, and the row showed the first two read-only.
+ */
+export const CARDINALITIES: Array<{ id: ConditionalCardinality; label: string }> = [
+  { id: "required", label: "must" },
+  { id: "optional", label: "if present, must" },
+  { id: "prohibited", label: "must NOT" },
 ];
 
 const MAX_SUGGESTIONS = 40;
@@ -152,12 +170,6 @@ export function defaultConditionFor(source: FieldsForResult): ConditionDraft {
  * that says what it is holding.
  */
 function unshownValue(condition: ConditionDraft): string {
-  if (condition.cardinality === "optional") {
-    return "Optional — checked only where the value is present. Not editable here yet.";
-  }
-  if (condition.cardinality === "prohibited") {
-    return "Must not hold this particular value. Not editable here yet.";
-  }
   if (condition.value?.kind === "length") {
     return "A limit on how many characters the value holds. Not editable here yet.";
   }
@@ -274,10 +286,10 @@ export function ConditionRow({
     });
   }
 
+  // The cardinality is left alone: "must not be Steel" is one control changing, not two.
   function changeOperator(operator: ConditionOperator) {
     onChange({
       ...condition,
-      cardinality: cardinalityForOperator(operator),
       value: valueDraftForOperator(operator, reading?.text ?? "", reading?.values ?? []),
     });
   }
@@ -370,6 +382,21 @@ export function ConditionRow({
           ))}
         </select>
       )}
+
+      <select
+        aria-label="Cardinality"
+        title="Whether the field has to be there at all"
+        value={condition.cardinality}
+        onChange={(event) =>
+          onChange({ ...condition, cardinality: event.target.value as ConditionalCardinality })
+        }
+      >
+        {CARDINALITIES.map((entry) => (
+          <option key={entry.id} value={entry.id}>
+            {entry.label}
+          </option>
+        ))}
+      </select>
 
       {reading === null ? (
         <span className="cond-unshown">{unshownValue(condition)}</span>

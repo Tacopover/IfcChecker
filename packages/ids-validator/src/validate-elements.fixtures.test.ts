@@ -41,23 +41,31 @@ describe("validateBySpecification against a rule set it only partly understands"
   const idsXml = readFileSync(join(FIXTURES_DIR, "partly-understood.ids"), "utf-8");
   const elements = loadElements("partly-understood.json");
 
-  it("refuses the specification it cannot judge, and runs the ones it can", () => {
+  it("runs every specification in the fixture", () => {
     const outcomes = validateBySpecification(elements, idsXml);
 
     expect(outcomes.map((outcome) => [outcome.name, outcome.checked])).toEqual([
-      ["lokale positie", false],
+      ["lokale positie", true],
       ["Bouwlaagindeling en -naamgeving", true],
       ["Classificatiesystematiek", true],
       ["Brandwerendheid", true],
     ]);
   });
 
-  it("names the construct behind the refusal", () => {
-    const [byApplicability] = validateBySpecification(elements, idsXml);
+  // "lokale positie" selects an IfcBuildingElementProxy whose *Name* matches a pattern, and was
+  // refused whole until an applicability attribute was readable. The fixture's proxy is called
+  // "Nulpunt referentie" and states no Description, so the rule now selects it and fails it —
+  // which is the real-world shape this facet was worth reading for.
+  it("selects on an applicability attribute pattern", () => {
+    const [byApplicabilityAttribute] = validateBySpecification(elements, idsXml);
 
-    expect(byApplicability.unsupported).toContainEqual(
-      expect.objectContaining({ section: "applicability", construct: "attribute" })
-    );
+    expect(byApplicabilityAttribute.unsupported).toEqual([]);
+    expect(byApplicabilityAttribute).toMatchObject({
+      applicableCount: 1,
+      passedCount: 0,
+      failedCount: 1,
+    });
+    expect(byApplicabilityAttribute.violations[0].elementGlobalId).toBe("1a2B3c4D5e6F7g8H9i0Jkl");
   });
 
   // "Brandwerendheid" names its property `Fire.*` rather than `FireRating`, and was refused on the

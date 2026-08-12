@@ -275,6 +275,16 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
       entityTypes: [...rule.entityTypes],
       // A ValueDraft is only ever replaced, never edited in place, so the copy can share it.
       conditions: rule.conditions.map((condition) => ({ ...condition, id: nextDraftId("c") })),
+      // Re-keyed for the same reason the conditions are: the row is keyed on the id, and deleting
+      // one from the copy must not take the original's row with it.
+      ...(rule.applicabilityFacets
+        ? {
+            applicabilityFacets: rule.applicabilityFacets.map((facet) => ({
+              ...facet,
+              id: nextDraftId("c"),
+            })),
+          }
+        : {}),
     };
     const index = rules.indexOf(rule);
     setRules([...rules.slice(0, index + 1), copy, ...rules.slice(index + 1)]);
