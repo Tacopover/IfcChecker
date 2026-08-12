@@ -170,17 +170,58 @@ describe("validateBySpecification", () => {
     expect(outcome.passedCount).toBe(0);
   });
 
-  it("refuses to run a specification whose applicability it could not fully read", () => {
-    // A property-value applicability: this selects walls *bearing* a load, not all walls.
-    // Dropping the property facet and keeping IFCWALL would check the wrong set; dropping the
-    // whole applicability would match nothing and report the model clean. Neither is honest.
-    const idsXml = IDS_XML.replace(
-      "</applicability>",
-      `<property dataType="IFCBOOLEAN">
+  // A property-value applicability: this selects walls *bearing* a load, not all walls. Keeping
+  // IFCWALL and dropping the property would check the wrong set, which is why it used to refuse the
+  // whole specification; now the property decides the selection, so both readings are gone.
+  const LOAD_BEARING_APPLICABILITY = `<property dataType="IFCBOOLEAN">
          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
          <baseName><simpleValue>LoadBearing</simpleValue></baseName>
          <value><simpleValue>TRUE</simpleValue></value>
-       </property></applicability>`
+       </property></applicability>`;
+
+  it("selects on an applicability property as well as on the entity name", () => {
+    const bearingWall = makeElement({
+      globalId: "wall-3",
+      name: "W-009",
+      propertySets: {
+        Pset_WallCommon: { FireRating: { value: "REI90" }, LoadBearing: { value: "TRUE" } },
+      },
+    });
+    const idsXml = IDS_XML.replace("</applicability>", LOAD_BEARING_APPLICABILITY);
+
+    const [outcome] = validateBySpecification([compliantWall, failingWall, bearingWall], idsXml);
+
+    expect(outcome.checked).toBe(true);
+    expect(outcome.unsupported).toEqual([]);
+    // The two walls that state no LoadBearing are not in the rule's subject at all, so the one
+    // that would have failed its requirements never reaches them.
+    expect(outcome).toMatchObject({ applicableCount: 1, passedCount: 1, failedCount: 0 });
+    expect(outcome.violations).toEqual([]);
+  });
+
+  it("refuses an applicability facet stating a cardinality, which ids.xsd gives it none of", () => {
+    const idsXml = IDS_XML.replace(
+      "</applicability>",
+      LOAD_BEARING_APPLICABILITY.replace("<property ", `<property cardinality="prohibited" `)
+    );
+
+    const [outcome] = validateBySpecification([compliantWall, failingWall], idsXml);
+
+    // Reading it as a requirement's `prohibited` would invert the selection and check the walls
+    // that are *not* load-bearing, which is a different rule from the one the file states.
+    expect(outcome.checked).toBe(false);
+    expect(outcome.applicableCount).toBe(0);
+    expect(outcome.unsupported).toContainEqual(
+      expect.objectContaining({ section: "applicability", construct: "property/cardinality" })
+    );
+  });
+
+  it("refuses to run a specification whose applicability it could not fully read", () => {
+    const idsXml = IDS_XML.replace(
+      "</applicability>",
+      `<partOf relation="IFCRELAGGREGATES">
+         <entity><name><simpleValue>IFCBUILDING</simpleValue></name></entity>
+       </partOf></applicability>`
     );
 
     const [outcome] = validateBySpecification([compliantWall, failingWall], idsXml);
@@ -189,7 +230,7 @@ describe("validateBySpecification", () => {
     expect(outcome.violations).toEqual([]);
     expect(outcome.applicableCount).toBe(0);
     expect(outcome.unsupported).toContainEqual(
-      expect.objectContaining({ section: "applicability", construct: "property" })
+      expect.objectContaining({ section: "applicability", construct: "partOf" })
     );
   });
 
