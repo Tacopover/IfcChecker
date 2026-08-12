@@ -399,7 +399,7 @@ describe("idsXmlToDrafts values", () => {
     ] as const;
 
     for (const [value, operator] of readings) {
-      expect(friendlyReadingOf(attributeValue(value))?.operator).toBe(operator);
+      expect(friendlyReadingOf(attributeValue(value).value)?.operator).toBe(operator);
     }
   });
 

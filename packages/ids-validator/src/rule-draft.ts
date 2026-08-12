@@ -456,28 +456,30 @@ export interface FriendlyReading {
 }
 
 /**
- * The friendly reading of a condition's value, or `null` when no operator states what it says.
+ * The friendly reading of one facet parameter, or `null` when no operator states what it says.
  *
- * Cardinality is deliberately not consulted: it is a separate control on the row, so an optional
- * facet and a prohibited value are both fully editable and only the value can be unreadable here.
+ * Takes the value rather than the whole facet, because that is all it reads — and because
+ * `ids.xsd` types nine parameters across the six facet kinds as an `idsValue`, four of the kinds
+ * carrying two of them. Cardinality is a separate control and a separate question.
  *
- * `null` is not a fault — it is the honest answer for the two value shapes the operators cannot
- * express, a numeric range and a length. The row shows those rather than mislabelling them.
+ * `null` in is a facet stating no value, which reads as `exists`. `null` out is not a fault — it is
+ * the honest answer for the two value shapes the operators cannot express, a numeric range and a
+ * length. The row shows those rather than mislabelling them.
  */
-export function friendlyReadingOf(condition: ConditionDraft): FriendlyReading | null {
+export function friendlyReadingOf(value: ValueDraft | null): FriendlyReading | null {
   const none = { text: "", values: [] };
 
-  if (condition.value === null) return { operator: "exists", ...none };
+  if (value === null) return { operator: "exists", ...none };
 
-  switch (condition.value.kind) {
+  switch (value.kind) {
     case "simple":
-      return { operator: "equals", text: condition.value.value, values: [] };
+      return { operator: "equals", text: value.value, values: [] };
     case "enum":
-      return { operator: "oneOf", text: "", values: [...condition.value.values] };
+      return { operator: "oneOf", text: "", values: [...value.values] };
     case "affix":
-      return { operator: condition.value.operator, text: condition.value.literal, values: [] };
+      return { operator: value.operator, text: value.literal, values: [] };
     case "pattern":
-      return { operator: "matches", text: condition.value.source, values: [] };
+      return { operator: "matches", text: value.source, values: [] };
     case "bounds":
     case "length":
       return null;
