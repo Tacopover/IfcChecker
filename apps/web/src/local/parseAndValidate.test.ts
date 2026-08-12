@@ -37,7 +37,7 @@ function makeFile(name: string, content = "ISO-10303-21;") {
 beforeEach(() => {
   vi.clearAllMocks();
   parseIdsXml.mockReturnValue([
-    { name: "fake-spec", applicabilityEntityNames: ["IFCWALL"], requirements: [], unsupported: [], applicabilityComplete: true },
+    { name: "fake-spec", applicability: { entityNames: ["IFCWALL"], facets: [] }, requirements: [], unsupported: [], applicabilityComplete: true },
   ]);
   isEvaluable.mockReturnValue(true);
 });
@@ -187,7 +187,7 @@ describe("validateParsedModels", () => {
 
   it("reports a specification that matched nothing, rather than returning an empty result set", () => {
     parseIdsXml.mockReturnValue([
-      { name: "Walls are fire rated", applicabilityEntityNames: ["IFCWALL"], requirements: [], unsupported: [], applicabilityComplete: true },
+      { name: "Walls are fire rated", applicability: { entityNames: ["IFCWALL"], facets: [] }, requirements: [], unsupported: [], applicabilityComplete: true },
     ]);
     validateBySpecification.mockReturnValueOnce([outcome({ name: "Walls are fire rated" })]);
 
@@ -207,7 +207,7 @@ describe("validateParsedModels", () => {
       { section: "applicability", construct: "property", description: "Selects elements by <property>, which cannot be represented." },
     ];
     parseIdsXml.mockReturnValue([
-      { name: "Load-bearing walls", applicabilityEntityNames: ["IFCWALL"], requirements: [], unsupported, applicabilityComplete: false },
+      { name: "Load-bearing walls", applicability: { entityNames: ["IFCWALL"], facets: [] }, requirements: [], unsupported, applicabilityComplete: false },
     ]);
     isEvaluable.mockReturnValue(false);
     validateBySpecification.mockReturnValueOnce([

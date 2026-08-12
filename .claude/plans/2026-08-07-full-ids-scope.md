@@ -1382,3 +1382,100 @@ that is worth more than four.
 
 Applicability-side classification, material and partOf are still deliberately unimplemented
 (stage 5), and there is still no control for the four read-only facet kinds.
+
+## Stage 5 — the applicability side: the decision, written before the code
+
+Six facets may stand in an `<applicability>`. We read one: `<entity>`, by name. Every other one
+refuses the whole specification, which is what keeps `isEvaluable` honest. That is **41,325
+whole-specification refusals**, unmoved through every stage so far.
+
+### What the two measurements can and cannot say about this stage
+
+Taken before writing anything, and the second one changes how the stage must be judged.
+
+- **The corpus.** 82,600 applicability facets other than `<entity>`, over 41,309 specifications:
+  property 41,300, attribute 41,294, classification 3, material 3, **partOf 0**. 41,287
+  specifications carry an attribute *and* a property, 10 a property alone, 7 an attribute alone.
+- **The conformance suite: 0 of its 334 cases writes a non-entity applicability.** Measured, not
+  assumed. So **the scoreboard cannot move this stage in either direction**, and its only role here
+  is the guard rail: 317 agreed, 15 wrong, 2 refused, 0 false passes must all stay exactly where
+  they are. Every claim about whether an applicability facet is evaluated *correctly* has to come
+  from hand-written tests and from the real 37 MB model, because neither the suite nor the
+  round-trip can speak for it.
+
+The corpus is unusually clean about what those facets carry, which decides most of the reader:
+
+- **No applicability facet in 7,784 files carries a `cardinality`** — nor an `instructions`, nor a
+  `uri`. `ids.xsd` gives them none: `applicabilityType` references `attributeType`, `propertyType`,
+  `classificationType`, `materialType` and `partOfType` directly, and it is `requirementsType` that
+  extends each with `cardinality`, `instructions` and (on three of them) `uri`. The only attribute
+  present is `dataType` on a property, 41,288 times, which the base type does allow.
+- The value shapes are nearly all `<simpleValue>`. Three restrictions exist in the whole corpus, and
+  two of them carry an `xs:annotation`, which the importer already refuses everywhere.
+
+### The decision: a predicate over `idsScope`, with the name list kept inside it
+
+`ParsedSpecification.applicabilityEntityNames: string[]` becomes:
+
+```ts
+export interface ParsedApplicability {
+  /** The classes <entity> lists, or null when the applicability states no <entity> at all. */
+  entityNames: string[] | null;
+  /** Every other facet. All of them must hold, and each narrows the selection further. */
+  facets: ParsedApplicabilityFacet[];
+}
+```
+
+and `matchesApplicability(element, applicability, unitScales)` answers the whole question.
+
+**Why not a name list with the other facets applied as a second pass.** Because `<entity>` is
+`minOccurs="0"`. An applicability may hold nothing but a `<property>`, and then there is no name
+list to filter first — the rule selects across every entity in `idsScope` that carries the property.
+A second pass makes the name list the gate, and `isEvaluable` refuses an empty one today, so the
+second-pass model would refuse exactly the shape this stage exists to read. The distinction between
+"there is no `<entity>`" and "the `<entity>` lists nothing" is what `null` versus `[]` carries, and
+it is load-bearing rather than tidy.
+
+**Why the name list stays a field rather than being derived.** It is the only facet whose selection
+can be *enumerated* rather than tested, and enumeration is what the builder's type chips, the
+explorer rail and `applicabilityEntityNamesOf`'s supertype expansion all read. Deriving it back out
+of a predicate would work for the exact and enumerated shapes and for nothing else. So the name list
+is a named field of the predicate, not a view computed from it.
+
+**An applicability facet is a requirement facet with the cardinality question already answered.**
+`ParsedApplicabilityFacet` reuses the requirement shapes and `evaluateRequirement` judges them, with
+`cardinality: "required"` — which is not a default we chose but the only value the schema permits
+there. A `cardinality` attribute inside an applicability is a document `ids.xsd` does not describe,
+and both readers refuse it. That is why this stage is cheap: the evaluation it needs already exists
+and has been measured against 334 conformance cases on the requirements side.
+
+**What `isEvaluable` may and may not do.** It still refuses an applicability that is not fully
+represented, and it still refuses one that states nothing at all — no `<entity>` and no facet, which
+`ids.xsd` allows and which selects the entire model. What changes is that an applicability with no
+`<entity>` but with facets is now evaluable, because it is now fully understood. A facet that is
+evaluated must be evaluated correctly; one that is not must still refuse the whole specification.
+
+### The staging, and what each commit is predicted to move
+
+Conformance cannot move, so the prediction is against the corpus round-trip's refusal count.
+
+| | commit | predicted refusals | why |
+| --- | --- | --- | --- |
+| **A** | the applicability becomes a predicate | 41,325, unmoved | carries nothing new; proves the shape decides nothing |
+| **B** | the validator evaluates an applicability property and attribute | 41,325, unmoved | the importer is untouched |
+| **C** | the importer reads an applicability property | 41,325 → **41,315** | the 10 specifications carrying a property alone |
+| **D** | the importer reads an applicability attribute | 41,315 → **23** | 41,287 carrying both, plus 7 carrying an attribute alone, less the 2 whose attribute is spelled `<n>` |
+| **E** | classification, both readers | 23 → **21** | 3 specifications, one of which states no `<system>` and carries an `xs:annotation` |
+| **F** | material, both readers | 21 → **20** | 3 facets over 2 specifications, one carrying an `xs:annotation` |
+
+The 20 predicted survivors are 16 specifications refused for an entity reason (12 name-as-pattern,
+6 predefinedType), the 2 `<n>` ones, and the 2 annotation-carrying facets above.
+
+**partOf: built, and the reasoning is the opposite of the usual one.** It has 0 uses in the 464
+hand-authored specifications and **0 in all 7,784 corpus files** — so no measurement in this
+repository can show it working or show it broken. It is built anyway, because the applicability
+reader is a switch over the same six tags the requirement reader already dispatches, and leaving one
+arm out costs an extra deliberate-exclusion branch and an extra refusal message rather than saving
+any. The honest qualification is stated rather than buried: **its only evidence is hand-written
+tests and the real 37 MB model**, where 1,917 entities carry a partOf whole, and neither the corpus
+round-trip nor the conformance suite will ever confirm or contradict it.

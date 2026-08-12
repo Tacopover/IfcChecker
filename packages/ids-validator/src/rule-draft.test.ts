@@ -329,13 +329,13 @@ describe("compileDraft", () => {
   it("uppercases applicability entity names and keeps the rule name", () => {
     const [spec] = compileDraft([rule({ name: "Sanitary", entityTypes: ["IfcSanitaryTerminal", "ifcBoiler"] })]);
     expect(spec.name).toBe("Sanitary");
-    expect(spec.applicabilityEntityNames).toEqual(["IFCSANITARYTERMINAL", "IFCBOILER"]);
+    expect(spec.applicability.entityNames).toEqual(["IFCSANITARYTERMINAL", "IFCBOILER"]);
   });
 
   it("compiles the same entity names the exported file states", () => {
     const walls = rule({ entityTypes: ["IfcWall"] });
     const [spec] = compileDraft([walls]);
-    expect(spec.applicabilityEntityNames).toEqual(applicabilityEntityNamesOf(walls));
+    expect(spec.applicability.entityNames).toEqual(applicabilityEntityNamesOf(walls));
   });
 
   it("emits one requirement per condition, in condition order", () => {

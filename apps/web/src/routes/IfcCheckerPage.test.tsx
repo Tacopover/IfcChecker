@@ -84,7 +84,7 @@ beforeEach(() => {
   // sequencing.
   vi.resetAllMocks();
   parseIdsXml.mockReturnValue([
-    { name: "fake-spec", applicabilityEntityNames: ["IFCWALL"], requirements: [], unsupported: [], applicabilityComplete: true },
+    { name: "fake-spec", applicability: { entityNames: ["IFCWALL"], facets: [] }, requirements: [], unsupported: [], applicabilityComplete: true },
   ]);
   isEvaluable.mockReturnValue(true);
 });

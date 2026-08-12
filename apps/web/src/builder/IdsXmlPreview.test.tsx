@@ -36,7 +36,7 @@ describe("IdsXmlPreview", () => {
 
     expect(specification.name).toBe("Walls declare a fire rating");
     // The builder writes the concrete classes the pick stands for: IDS inherits nothing.
-    expect(specification.applicabilityEntityNames).toEqual([
+    expect(specification.applicability.entityNames).toEqual([
       "IFCWALL",
       "IFCWALLELEMENTEDCASE",
       "IFCWALLSTANDARDCASE",

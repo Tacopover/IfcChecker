@@ -64,7 +64,7 @@ describe("parseIdsXml", () => {
     expect(specifications).toHaveLength(1);
     const [spec] = specifications;
     expect(spec.name).toBe("Wall naming and fire rating");
-    expect(spec.applicabilityEntityNames).toEqual(["IFCWALL"]);
+    expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
     expect(spec.requirements).toEqual([
       {
         kind: "attribute",
@@ -196,12 +196,28 @@ describe("parseIdsXml", () => {
 
     const [spec] = parseIdsXml(xmlWithMaterial);
 
-    expect(spec.applicabilityEntityNames).toEqual(["IFCWALL"]);
+    expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
     expect(spec.unsupported).toContainEqual(
       expect.objectContaining({ section: "applicability", construct: "material" })
     );
     // "Walls made of concrete" is not "walls" — the kept entity name is not the whole story.
     expect(spec.applicabilityComplete).toBe(false);
+    expect(isEvaluable(spec)).toBe(false);
+  });
+
+  // `ids.xsd` makes <entity> minOccurs="0", so "no entity element" and "an entity element naming
+  // nothing" are different documents. The first admits every class and leaves the selection to the
+  // facets beside it; running the second would check the whole model against a rule about nothing.
+  it("refuses an applicability that states nothing at all", () => {
+    const xml = SAMPLE_IDS.replace(
+      /<applicability maxOccurs="unbounded">[\s\S]*?<\/applicability>/,
+      `<applicability maxOccurs="unbounded"></applicability>`
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicability).toEqual({ entityNames: null, facets: [] });
+    expect(spec.applicabilityComplete).toBe(true);
     expect(isEvaluable(spec)).toBe(false);
   });
 
@@ -213,7 +229,7 @@ describe("parseIdsXml", () => {
 
     const [spec] = parseIdsXml(xml);
 
-    expect(spec.applicabilityEntityNames).toEqual([]);
+    expect(spec.applicability.entityNames).toEqual(null);
     expect(spec.unsupported).toContainEqual(
       expect.objectContaining({ section: "applicability", construct: "entity/name" })
     );
@@ -277,7 +293,7 @@ describe("parseIdsXml", () => {
 
     const [spec] = parseIdsXml(xml);
 
-    expect(spec.applicabilityEntityNames).toEqual(["IFCWALL"]);
+    expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
     expect(spec.unsupported).toContainEqual(
       expect.objectContaining({ section: "applicability", construct: "entity/predefinedType" })
     );

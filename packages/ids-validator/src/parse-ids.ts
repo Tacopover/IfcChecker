@@ -128,6 +128,45 @@ export type ParsedRequirementFacet =
   | ParsedPartOfFacet
   | ParsedEntityFacet;
 
+/**
+ * A facet standing in an `<applicability>`, which narrows the elements the rule is about.
+ *
+ * The same five shapes a requirement holds, minus `entity` — that one is `ParsedApplicability`'s
+ * name list, because it is the only facet whose selection can be enumerated rather than tested.
+ *
+ * Their `cardinality` is always `required`, and that is not a default this parser chose.
+ * `applicabilityType` references `attributeType`, `propertyType`, `classificationType`,
+ * `materialType` and `partOfType` directly; it is `requirementsType` that extends each of them with
+ * a `cardinality` attribute. A facet stating one inside an applicability is a document `ids.xsd`
+ * does not describe.
+ */
+export type ParsedApplicabilityFacet =
+  | ParsedAttributeFacet
+  | ParsedPropertyFacet
+  | ParsedClassificationFacet
+  | ParsedMaterialFacet
+  | ParsedPartOfFacet;
+
+/**
+ * Which elements a specification is about.
+ *
+ * A predicate rather than a list, because `ids.xsd` makes `<entity>` `minOccurs="0"`: an
+ * applicability may hold nothing but a `<property>`, and then there is no set of class names to
+ * start from — the rule reaches every entity in scope that carries the property. `entityNames` is
+ * `null` for exactly that case, and distinguishing it from an `<entity>` that lists nothing is what
+ * keeps "selects everything with this property" apart from "selects nothing".
+ *
+ * The name list stays a field rather than being derived back out of the facets: it is what the
+ * builder's type chips, the explorer rail and the exporter all read, and only the enumerable value
+ * shapes could ever be recovered from a predicate.
+ *
+ * Every facet must hold, together with the name list. IDS states no `or` anywhere.
+ */
+export interface ParsedApplicability {
+  entityNames: string[] | null;
+  facets: ParsedApplicabilityFacet[];
+}
+
 /** Something the source document asked for that this parser cannot represent. */
 export interface UnsupportedConstruct {
   section: "applicability" | "requirements";
@@ -156,7 +195,7 @@ export type SpecificationCardinality = "required" | "optional" | "prohibited";
 export interface ParsedSpecification {
   name: string;
   cardinality: SpecificationCardinality;
-  applicabilityEntityNames: string[];
+  applicability: ParsedApplicability;
   requirements: ParsedRequirementFacet[];
   /** Reported rather than logged, so a caller can show the user what was dropped. */
   unsupported: UnsupportedConstruct[];
@@ -175,10 +214,17 @@ export interface ParsedSpecification {
  * The same trap sits on the requirements side: a specification whose every requirement we had to
  * drop still selects elements, finds nothing wrong with them, and passes. "All pass" would be a
  * verdict on nothing that was checked, so it is refused too.
+ *
+ * An applicability stating nothing at all — no `<entity>` and no facet — is refused rather than
+ * read as "every element in the model". `ids.xsd` allows the shape, and a whole-model rule may well
+ * be what its author meant, but nothing in the corpus or the conformance suite writes one, so
+ * running it would be acting on a guess about an empty element.
  */
 export function isEvaluable(specification: ParsedSpecification): boolean {
   if (!specification.applicabilityComplete) return false;
-  if (specification.applicabilityEntityNames.length === 0) return false;
+  const { entityNames, facets } = specification.applicability;
+  if (entityNames !== null && entityNames.length === 0) return false;
+  if (entityNames === null && facets.length === 0) return false;
   if (specification.requirements.length > 0) return true;
   return !specification.unsupported.some((entry) => entry.section === "requirements");
 }
@@ -435,16 +481,13 @@ function parseSpecification(specNode: OrderedNode): ParsedSpecification {
   const unsupported: UnsupportedConstruct[] = [];
 
   const applicabilityNode = specChildren.find((node) => tagOf(node) === "applicability");
-  const applicabilityEntityNames = readApplicability(
-    descend(specChildren, "applicability"),
-    unsupported
-  );
+  const applicability = readApplicability(descend(specChildren, "applicability"), unsupported);
   const requirements = readRequirements(descend(specChildren, "requirements"), unsupported);
 
   return {
     name,
     cardinality: readSpecificationCardinality(applicabilityNode),
-    applicabilityEntityNames,
+    applicability,
     requirements,
     unsupported,
     applicabilityComplete: !unsupported.some((entry) => entry.section === "applicability"),
@@ -505,15 +548,16 @@ function readSpecificationCardinality(
 }
 
 /**
- * Entity names, plus a report of everything else that narrowed the selection. IDS also selects by
- * attribute, property, classification and material value; those decide which elements a rule is
- * about, so dropping one quietly changes what the rule means.
+ * Which elements the rule is about: the classes its `<entity>` lists, plus every other facet that
+ * narrows the selection, plus a report of anything that narrowed it in a way this parser cannot
+ * represent. Dropping one of those quietly changes what the rule means, so it refuses instead.
  */
 function readApplicability(
   applicability: OrderedNode[],
   unsupported: UnsupportedConstruct[]
-): string[] {
-  const entityNames: string[] = [];
+): ParsedApplicability {
+  let entityNames: string[] | null = null;
+  const facets: ParsedApplicabilityFacet[] = [];
 
   for (const node of applicability) {
     const tag = tagOf(node);
@@ -538,7 +582,7 @@ function readApplicability(
       });
       continue;
     }
-    entityNames.push(...names);
+    entityNames = [...(entityNames ?? []), ...names];
 
     // Geometry is the one part of the schema a parse never normalizes, so a
     // rule aimed at it would select nothing and report every model clean. Said
@@ -561,7 +605,7 @@ function readApplicability(
     }
   }
 
-  return entityNames;
+  return { entityNames, facets };
 }
 
 function readRequirements(

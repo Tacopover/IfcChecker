@@ -1,5 +1,6 @@
 import type {
   FacetCardinality,
+  ParsedApplicability,
   ParsedBound,
   ParsedRequirementFacet,
   ParsedRestriction,
@@ -539,6 +540,20 @@ export function compileFacet(facet: FacetDraft): ParsedRequirementFacet {
 }
 
 /**
+ * Which elements the rule selects, stated the way the exported file states it.
+ *
+ * A rule naming no entity type writes **no `<entity>` element** — `<name>` is mandatory, so there is
+ * no way to write one that lists nothing — and an applicability with no `<entity>` admits every
+ * class. So the compiled form has to say `null` rather than an empty list, or the preview would
+ * select nothing while the file it exports selects everything. `ruleProblems` blocks the export of a
+ * rule in that state, and `isEvaluable` refuses one whose applicability states nothing at all.
+ */
+function applicabilityOf(rule: RuleDraft): ParsedApplicability {
+  const entityNames = applicabilityEntityNamesOf(rule);
+  return { entityNames: entityNames.length === 0 ? null : entityNames, facets: [] };
+}
+
+/**
  * In-memory equivalent of `parseIdsXml(buildIdsXml(rules))`, so the live preview never has to
  * serialise and re-parse per keystroke. The round-trip test keeps the two in step.
  *
@@ -554,7 +569,7 @@ export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
       rule.imported?.applicabilityAttributes.minOccurs,
       rule.imported?.applicabilityAttributes.maxOccurs
     ),
-    applicabilityEntityNames: applicabilityEntityNamesOf(rule),
+    applicability: applicabilityOf(rule),
     requirements: rule.conditions.map(compileFacet),
     // Authored rules can say nothing the builder cannot; imported ones carry what it could not read.
     unsupported: (rule.imported?.passThrough ?? []).map((entry) => ({

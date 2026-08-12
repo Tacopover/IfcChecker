@@ -6,6 +6,7 @@ import type {
   UnitScales,
 } from "@ifc-qa/shared-types";
 import type {
+  ParsedApplicability,
   ParsedAttributeFacet,
   ParsedBound,
   ParsedClassificationFacet,
@@ -74,6 +75,28 @@ const TOP_LEVEL_ATTRIBUTE_READERS: Record<string, (element: NormalizedElement) =
 const TOP_LEVEL_ATTRIBUTE_NAMES = ["GlobalId", "Name", "PredefinedType"];
 
 /**
+ * Whether the element is one the specification is about.
+ *
+ * Every part must hold: the classes the `<entity>` lists, and every other facet standing beside it.
+ * IDS states no `or` anywhere, and `ifctester` chains one filter per facet for the same reason.
+ *
+ * A `null` name list is an applicability with no `<entity>` at all, which `ids.xsd` allows — the
+ * rule then reaches every entity in scope that its other facets admit, rather than none.
+ * `isEvaluable` refuses the one shape that leaves, an applicability stating nothing whatsoever.
+ */
+export function matchesApplicability(
+  element: NormalizedElement,
+  applicability: ParsedApplicability,
+  /** Empty for a model already in SI, exactly as on the requirements side. */
+  unitScales: UnitScales = {}
+): boolean {
+  if (!matchesApplicabilityEntity(element, applicability.entityNames)) return false;
+  return applicability.facets.every(
+    (facet) => evaluateRequirement(element, facet, unitScales).passed
+  );
+}
+
+/**
  * An applicability entity name matches exactly, the same way a requirement's does.
  *
  * `Documentation/UserManual/entity-facet.md` states it twice and scopes neither statement to
@@ -92,8 +115,15 @@ const TOP_LEVEL_ATTRIBUTE_NAMES = ["GlobalId", "Name", "PredefinedType"];
  * for (`applicabilityEntityNamesOf`), so nothing authored here loses elements. An imported file
  * naming an abstract class now selects nothing — and fails on applicability cardinality, which is
  * a loud result rather than a quiet one.
+ *
+ * `null` is an applicability with no `<entity>` element, which admits every class — the facets
+ * beside it are then the whole of the selection.
  */
-export function matchesApplicability(element: NormalizedElement, entityNames: string[]): boolean {
+export function matchesApplicabilityEntity(
+  element: NormalizedElement,
+  entityNames: string[] | null
+): boolean {
+  if (entityNames === null) return true;
   const ifcType = element.ifcType.trim().toUpperCase();
   return entityNames.some((entityName) => ifcType === entityName.trim().toUpperCase());
 }

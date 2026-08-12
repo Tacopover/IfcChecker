@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import { matchesApplicability, evaluateRequirement } from "./facet-evaluation.js";
+import {
+  matchesApplicability,
+  matchesApplicabilityEntity,
+  evaluateRequirement,
+} from "./facet-evaluation.js";
 import { patternRestriction } from "./parse-ids.js";
 import type {
   ParsedAttributeFacet,
@@ -24,13 +28,13 @@ function makeElement(overrides: Partial<NormalizedElement>): NormalizedElement {
   };
 }
 
-describe("matchesApplicability", () => {
+describe("matchesApplicabilityEntity", () => {
   it("matches case-insensitively", () => {
-    expect(matchesApplicability(makeElement({ ifcType: "IfcWall" }), ["IFCWALL"])).toBe(true);
+    expect(matchesApplicabilityEntity(makeElement({ ifcType: "IfcWall" }), ["IFCWALL"])).toBe(true);
   });
 
   it("returns false when no entity name matches", () => {
-    expect(matchesApplicability(makeElement({ ifcType: "IFCDOOR" }), ["IFCWALL"])).toBe(false);
+    expect(matchesApplicabilityEntity(makeElement({ ifcType: "IFCDOOR" }), ["IFCWALL"])).toBe(false);
   });
 
   // entity-facet.md: the class "must match exactly", and "there is no automatic inheritance in IDS
@@ -39,18 +43,18 @@ describe("matchesApplicability", () => {
   // nothing authored here depends on inheritance happening at check time.
   it("does not match a subtype against a supertype applicability entry", () => {
     const wall = makeElement({ ifcType: "IFCWALL" });
-    expect(matchesApplicability(wall, ["IFCELEMENT"])).toBe(false);
-    expect(matchesApplicability(wall, ["IFCBUILDINGELEMENT"])).toBe(false);
-    expect(matchesApplicability(wall, ["IFCELEMENT", "IFCWALL"])).toBe(true);
+    expect(matchesApplicabilityEntity(wall, ["IFCELEMENT"])).toBe(false);
+    expect(matchesApplicabilityEntity(wall, ["IFCBUILDINGELEMENT"])).toBe(false);
+    expect(matchesApplicabilityEntity(wall, ["IFCELEMENT", "IFCWALL"])).toBe(true);
   });
 
   it("does not match a supertype element against a subtype applicability entry", () => {
-    expect(matchesApplicability(makeElement({ ifcType: "IFCELEMENT" }), ["IFCWALL"])).toBe(false);
+    expect(matchesApplicabilityEntity(makeElement({ ifcType: "IFCELEMENT" }), ["IFCWALL"])).toBe(false);
   });
 
   it("does not match across sibling branches", () => {
-    expect(matchesApplicability(makeElement({ ifcType: "IFCDUCTSEGMENT" }), ["IFCWALL"])).toBe(false);
-    expect(matchesApplicability(makeElement({ ifcType: "IFCDUCTSEGMENT" }), ["IFCFLOWSEGMENT"])).toBe(
+    expect(matchesApplicabilityEntity(makeElement({ ifcType: "IFCDUCTSEGMENT" }), ["IFCWALL"])).toBe(false);
+    expect(matchesApplicabilityEntity(makeElement({ ifcType: "IFCDUCTSEGMENT" }), ["IFCFLOWSEGMENT"])).toBe(
       false
     );
   });
@@ -58,7 +62,7 @@ describe("matchesApplicability", () => {
   // A name outside the schema table used to fall back to a literal comparison; now every
   // comparison is literal, so an unknown class still selects the elements that carry it.
   it("matches a type the schema table does not know", () => {
-    expect(matchesApplicability(makeElement({ ifcType: "IFCNOTATHING" }), ["IFCNOTATHING"])).toBe(true);
+    expect(matchesApplicabilityEntity(makeElement({ ifcType: "IFCNOTATHING" }), ["IFCNOTATHING"])).toBe(true);
   });
 });
 
