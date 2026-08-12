@@ -345,6 +345,27 @@ const FACET_CHILDREN: Record<string, string[]> = {
 };
 
 /**
+ * What a draft of IDS carried and 1.0 does not, keyed by the facet that carries it.
+ *
+ * These are the one group of refusals that is final. A 1.0 `<property>` names its field with
+ * `<baseName>` and types it with `dataType`; `<name>` and `measure` are the 0.9-era spellings, and
+ * the corpus holds 13 facets still using them, all in one file. Keeping those verbatim is the
+ * correct and permanent answer for them, so the reason says so rather than implying that a control
+ * for them is on its way.
+ */
+const PRE_1_0_ATTRIBUTES: Record<string, string[]> = { property: ["@_measure"] };
+const PRE_1_0_CHILDREN: Record<string, string[]> = { property: ["name"] };
+
+/** The reason a construct is kept, saying outright when no version of the builder will show it. */
+function refuseConstruct(construct: string, permanent: boolean): FacetRefusal {
+  return refused(
+    permanent
+      ? `Carries ${construct}, which IDS 1.0 does not have. It is kept exactly as written, on purpose.`
+      : `Carries ${construct}, which the builder cannot show.`
+  );
+}
+
+/**
  * Whether the source states one of the three cardinalities `ids.xsd` gives an attribute or a
  * property.
  *
@@ -405,14 +426,18 @@ function readFacetShell(node: OrderedNode, tag: string): FacetShell | FacetRefus
     (key) => !FACET_ATTRIBUTES[tag].includes(key)
   );
   if (unknownAttribute !== undefined) {
-    return refused(`Carries ${unknownAttribute.replace(/^@_/, "")}, which the builder cannot show.`);
+    return refuseConstruct(
+      unknownAttribute.replace(/^@_/, ""),
+      PRE_1_0_ATTRIBUTES[tag]?.includes(unknownAttribute) ?? false
+    );
   }
 
   const unknownChild = elementsOf(childrenOf(node)).find(
     (child) => !FACET_CHILDREN[tag].includes(tagOf(child) ?? "")
   );
   if (unknownChild !== undefined) {
-    return refused(`Carries <${tagOf(unknownChild)}>, which the builder cannot show.`);
+    const child = tagOf(unknownChild) ?? "";
+    return refuseConstruct(`<${child}>`, PRE_1_0_CHILDREN[tag]?.includes(child) ?? false);
   }
 
   const stated = attributeOrNull(node, "cardinality");

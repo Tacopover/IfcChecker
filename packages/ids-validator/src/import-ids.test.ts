@@ -568,11 +568,21 @@ describe("idsXmlToDrafts pass-through", () => {
     ],
     [
       `<attribute uri="https://example.org/rule"><name><simpleValue>Name</simpleValue></name></attribute>`,
-      /Carries uri/,
+      /Carries uri, which the builder cannot show/,
     ],
     [
       `<attribute><name><xs:restriction base="xs:string"><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`,
       /attribute name as a pattern/,
+    ],
+    // The 0.9-era spellings of baseName and dataType. Their refusal is final, so it says so rather
+    // than implying a control for them is on its way.
+    [
+      `<property measure="IfcBoolean"><propertySet><simpleValue>P</simpleValue></propertySet><name><simpleValue>IsExternal</simpleValue></name></property>`,
+      /Carries measure, which IDS 1\.0 does not have\. It is kept exactly as written, on purpose\./,
+    ],
+    [
+      `<property><propertySet><simpleValue>P</simpleValue></propertySet><name><simpleValue>IsExternal</simpleValue></name></property>`,
+      /Carries <name>, which IDS 1\.0 does not have\. It is kept exactly as written, on purpose\./,
     ],
   ])("says why it kept a facet rather than only which one", (facet, expected) => {
     const rule = onlyRule(idsXmlToDrafts(withRequirements(facet)));
