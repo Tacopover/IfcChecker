@@ -1,6 +1,7 @@
 import type {
   FacetCardinality,
   ParsedApplicability,
+  ParsedApplicabilityFacet,
   ParsedBound,
   ParsedRequirementFacet,
   ParsedRestriction,
@@ -191,6 +192,21 @@ export type FacetDraft =
   | PartOfFacetDraft;
 
 /**
+ * A facet standing in an `<applicability>`, narrowing which elements the rule is about.
+ *
+ * The same shapes, minus `entity` — that one is the rule's `entityTypes`, because it is the only
+ * facet whose selection can be listed rather than tested.
+ *
+ * Three of the fields these shapes carry **may not be written in an applicability**, and are always
+ * at their defaults here: `cardinality` is `required` with `explicitCardinality` false,
+ * `instructions` is null, and `uri` is null. That is `ids.xsd`, not a convention —
+ * `applicabilityType` references the base facet types, and `requirementsType` is what extends each
+ * of them with those attributes. Both ways in hold the invariant by construction: the importer
+ * refuses a facet carrying any of the three, and the builder never writes one.
+ */
+export type ApplicabilityFacetDraft = Exclude<FacetDraft, { kind: "entity" }>;
+
+/**
  * The two facets the builder's rows can edit, and the two the importer produces.
  *
  * A separate name rather than a comment, because it is what the whole authoring UI is typed
@@ -267,6 +283,14 @@ export interface RuleDraft {
   id: string;
   name: string;
   entityTypes: string[];
+  /**
+   * What else the rule's applicability states, beyond the classes it selects.
+   *
+   * Absent is the common case and means the entity list is the whole of the selection. Present, the
+   * rule reaches only the elements that satisfy every one of these too — and `ids.xsd` allows an
+   * applicability with no `<entity>` at all, so a rule may state these and no type.
+   */
+  applicabilityFacets?: ApplicabilityFacetDraft[];
   /**
    * Every facet the rule requires, in document order.
    *
@@ -488,6 +512,8 @@ export function cardinalityForOperator(operator: ConditionOperator): Conditional
  * draft carries those so the exporter can hand the file back; the validator has no use for them,
  * and a compile that let them through would be the draft model leaking into the engine.
  */
+export function compileFacet(facet: ApplicabilityFacetDraft): ParsedApplicabilityFacet;
+export function compileFacet(facet: FacetDraft): ParsedRequirementFacet;
 export function compileFacet(facet: FacetDraft): ParsedRequirementFacet {
   switch (facet.kind) {
     case "attribute":
@@ -550,7 +576,10 @@ export function compileFacet(facet: FacetDraft): ParsedRequirementFacet {
  */
 function applicabilityOf(rule: RuleDraft): ParsedApplicability {
   const entityNames = applicabilityEntityNamesOf(rule);
-  return { entityNames: entityNames.length === 0 ? null : entityNames, facets: [] };
+  return {
+    entityNames: entityNames.length === 0 ? null : entityNames,
+    facets: (rule.applicabilityFacets ?? []).map((facet) => compileFacet(facet)),
+  };
 }
 
 /**

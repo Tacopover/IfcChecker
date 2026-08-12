@@ -122,19 +122,35 @@ function cardinalityXml(facet: Exclude<FacetDraft, { kind: "entity" }>): string 
   return value !== "required" || facet.explicitCardinality ? ` cardinality="${value}"` : "";
 }
 
-/** One requirement facet. Total over all six kinds `ids.xsd` allows. */
-function facetXml(facet: FacetDraft): string {
-  const instructions = attributeXml("instructions", facet.instructions);
+/**
+ * One facet, in either half of the specification. Total over all six kinds `ids.xsd` allows.
+ *
+ * `where` decides three attributes and the indentation, and nothing else. `applicabilityType`
+ * references the base facet types; it is `requirementsType` that extends each of them with
+ * `cardinality`, `instructions` and — on three of them — `uri`. Writing one of those into an
+ * applicability produces a document no conforming checker reads, so an applicability facet draft
+ * never holds one and this never emits one. `relation` and `dataType` belong to the base types and
+ * are written on both sides.
+ */
+function facetXml(facet: FacetDraft, where: FacetSide = "requirements"): string {
+  const inRequirements = where === "requirements";
+  const indent = inRequirements ? "      " : "        ";
+  const valueIndent = `${indent}  `;
+  const instructions = inRequirements ? attributeXml("instructions", facet.instructions) : "";
+  const cardinality = (kept: Exclude<FacetDraft, { kind: "entity" }>) =>
+    inRequirements ? cardinalityXml(kept) : "";
+  const uri = (value: string | null | undefined) =>
+    inRequirements ? attributeXml("uri", value) : "";
 
   switch (facet.kind) {
     // No `uri` on an attribute: ids.xsd gives it to classification, property and material alone,
     // and emitting one here would produce a document no conforming checker reads.
     case "attribute":
       return (
-        `      <attribute${cardinalityXml(facet)}${instructions}>` +
-        idsValueXml("name", facet.name) +
-        idsValueXml("value", facet.value) +
-        `\n      </attribute>`
+        `${indent}<attribute${cardinality(facet)}${instructions}>` +
+        idsValueXml("name", facet.name, valueIndent) +
+        idsValueXml("value", facet.value, valueIndent) +
+        `\n${indent}</attribute>`
       );
 
     case "property": {
@@ -143,52 +159,55 @@ function facetXml(facet: FacetDraft): string {
       const dataType = facet.dataType === undefined ? BUILDER_PROPERTY_DATA_TYPE : facet.dataType;
       const dataTypeAttribute = dataType === null ? "" : ` dataType="${escapeXml(dataType)}"`;
       return (
-        `      <property${dataTypeAttribute}${attributeXml("uri", facet.uri)}${cardinalityXml(facet)}${instructions}>` +
+        `${indent}<property${dataTypeAttribute}${uri(facet.uri)}${cardinality(facet)}${instructions}>` +
         // `<propertySet>` is mandatory, so a rule stating none writes an empty one rather than
         // omitting the element and producing a document no conforming reader accepts.
-        idsValueXml("propertySet", facet.propertySet ?? plainName("")) +
-        idsValueXml("baseName", facet.name) +
-        idsValueXml("value", facet.value) +
-        `\n      </property>`
+        idsValueXml("propertySet", facet.propertySet ?? plainName(""), valueIndent) +
+        idsValueXml("baseName", facet.name, valueIndent) +
+        idsValueXml("value", facet.value, valueIndent) +
+        `\n${indent}</property>`
       );
     }
 
     case "entity":
       return (
-        `      <entity${instructions}>` +
-        idsValueXml("name", facet.name) +
-        idsValueXml("predefinedType", facet.predefinedType) +
-        `\n      </entity>`
+        `${indent}<entity${instructions}>` +
+        idsValueXml("name", facet.name, valueIndent) +
+        idsValueXml("predefinedType", facet.predefinedType, valueIndent) +
+        `\n${indent}</entity>`
       );
 
     // `<value>` before `<system>`: ids.xsd fixes that order, and a reader validating against the
     // schema rejects the pair the other way round.
     case "classification":
       return (
-        `      <classification${attributeXml("uri", facet.uri)}${cardinalityXml(facet)}${instructions}>` +
-        idsValueXml("value", facet.value) +
-        idsValueXml("system", facet.system) +
-        `\n      </classification>`
+        `${indent}<classification${uri(facet.uri)}${cardinality(facet)}${instructions}>` +
+        idsValueXml("value", facet.value, valueIndent) +
+        idsValueXml("system", facet.system, valueIndent) +
+        `\n${indent}</classification>`
       );
 
     case "material":
       return (
-        `      <material${attributeXml("uri", facet.uri)}${cardinalityXml(facet)}${instructions}>` +
-        idsValueXml("value", facet.value) +
-        `\n      </material>`
+        `${indent}<material${uri(facet.uri)}${cardinality(facet)}${instructions}>` +
+        idsValueXml("value", facet.value, valueIndent) +
+        `\n${indent}</material>`
       );
 
     case "partOf":
       return (
-        `      <partOf${attributeXml("relation", facet.relation)}${cardinalityXml(facet)}${instructions}>` +
-        `\n        <entity>` +
-        idsValueXml("name", facet.entityName, "          ") +
-        idsValueXml("predefinedType", facet.predefinedType, "          ") +
-        `\n        </entity>` +
-        `\n      </partOf>`
+        `${indent}<partOf${attributeXml("relation", facet.relation)}${cardinality(facet)}${instructions}>` +
+        `\n${valueIndent}<entity>` +
+        idsValueXml("name", facet.entityName, `${valueIndent}  `) +
+        idsValueXml("predefinedType", facet.predefinedType, `${valueIndent}  `) +
+        `\n${valueIndent}</entity>` +
+        `\n${indent}</partOf>`
       );
   }
 }
+
+/** Which half of a specification a facet is being written into. */
+type FacetSide = "requirements" | "applicability";
 
 function attributeXml(name: string, value: string | null | undefined): string {
   return value === null || value === undefined ? "" : ` ${name}="${escapeXml(value)}"`;
@@ -257,6 +276,13 @@ function specificationXml(rule: RuleDraft): string {
     applicabilityEntityNamesOf(rule),
     source?.entityNamesAsEnumeration ?? false
   );
+  // In the order the draft holds them, which is the order the source wrote them. `ids.xsd` fixes
+  // the order of the kinds, so a file that reaches here in a different one was already invalid on
+  // the way in, and reordering it would be correcting someone else's document rather than
+  // reproducing it.
+  const applicabilityFacets = (rule.applicabilityFacets ?? []).map((facet) =>
+    facetXml(facet, "applicability")
+  );
 
   const specAttributes = source
     ? attributeXml("name", rule.name) + attributesXml(source.attributes)
@@ -266,7 +292,11 @@ function specificationXml(rule: RuleDraft): string {
     ? attributesXml(source.applicabilityAttributes)
     : ` minOccurs="1" maxOccurs="unbounded"`;
 
-  const facets = interleave(rule.conditions.map(facetXml), source?.passThrough ?? [], "      ");
+  const facets = interleave(
+    rule.conditions.map((facet) => facetXml(facet)),
+    source?.passThrough ?? [],
+    "      "
+  );
   // A source with no <requirements> at all is an applicability-only rule, and inventing an empty
   // element for it would turn "these elements must exist" into something the schema reads differently.
   const requirements =
@@ -282,6 +312,7 @@ function specificationXml(rule: RuleDraft): string {
     `    <specification${specAttributes}>`,
     `      <applicability${applicabilityAttributes}>`,
     ...entities,
+    ...applicabilityFacets,
     `      </applicability>`,
     ...requirements,
     `    </specification>`,

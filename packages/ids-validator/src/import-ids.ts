@@ -1,6 +1,7 @@
 import { XMLBuilder, XMLParser } from "fast-xml-parser";
 import type { UnsupportedConstruct } from "./parse-ids.js";
 import type {
+  ApplicabilityFacetDraft,
   BoundDraft,
   ClassificationFacetDraft,
   ConditionDraft,
@@ -184,9 +185,14 @@ function readSpecification(
   const applicabilityNode = findChild(children, "applicability");
 
   const reasons: UnsupportedConstruct[] = [];
-  const { entityTypes, asEnumeration } = readApplicability(applicabilityNode, reasons);
+  const { entityTypes, asEnumeration, applicabilityFacets } = readApplicability(
+    applicabilityNode,
+    reasons
+  );
 
-  if (reasons.length > 0 || entityTypes.length === 0) {
+  // A rule may name no type and still select something, because `ids.xsd` makes `<entity>`
+  // minOccurs="0" — "every element carrying this property" is a whole applicability on its own.
+  if (reasons.length > 0 || (entityTypes.length === 0 && applicabilityFacets.length === 0)) {
     if (entityTypes.length === 0 && reasons.length === 0) {
       reasons.push({
         section: "applicability",
@@ -228,7 +234,16 @@ function readSpecification(
     passThrough,
   };
 
-  rules.push({ id: draftId("r"), name, entityTypes, conditions, imported });
+  rules.push({
+    id: draftId("r"),
+    name,
+    entityTypes,
+    // Absent rather than empty for the rule that states none, so a file whose applicability is an
+    // entity list alone produces exactly the draft it always did.
+    ...(applicabilityFacets.length > 0 ? { applicabilityFacets } : {}),
+    conditions,
+    imported,
+  });
 }
 
 /**
@@ -263,27 +278,34 @@ function readEntityNames(
 }
 
 /**
- * Entity names, or a reason the specification cannot be shown. IDS also selects by attribute,
- * property, classification and material value; those decide *which* elements the rule is about,
- * so a rule displaying only part of them would be a rule the user cannot see the meaning of.
+ * What the applicability selects by: the entity names it lists, and every other facet beside them.
+ * A facet that cannot be shown is a reason, and one reason refuses the whole specification — a
+ * rule displaying only part of what decides its subject is a rule the user cannot see the meaning
+ * of.
  */
 function readApplicability(
   applicabilityNode: OrderedNode | null,
   reasons: UnsupportedConstruct[]
-): { entityTypes: string[]; asEnumeration: boolean } {
+): { entityTypes: string[]; asEnumeration: boolean; applicabilityFacets: ApplicabilityFacetDraft[] } {
   const entityTypes: string[] = [];
+  const applicabilityFacets: ApplicabilityFacetDraft[] = [];
   let asEnumeration = false;
-  if (!applicabilityNode) return { entityTypes, asEnumeration };
+  if (!applicabilityNode) return { entityTypes, asEnumeration, applicabilityFacets };
 
   for (const node of elementsOf(childrenOf(applicabilityNode))) {
     const tag = tagOf(node);
 
     if (tag !== "entity") {
-      reasons.push({
-        section: "applicability",
-        construct: tag ?? "unknown",
-        description: `Selects elements by <${tag}>, which the builder cannot show.`,
-      });
+      const facet = readApplicabilityFacet(node, tag);
+      if ("refused" in facet) {
+        reasons.push({
+          section: "applicability",
+          construct: tag ?? "unknown",
+          description: facet.refused,
+        });
+      } else {
+        applicabilityFacets.push(facet);
+      }
       continue;
     }
 
@@ -310,7 +332,27 @@ function readApplicability(
     }
   }
 
-  return { entityTypes, asEnumeration };
+  return { entityTypes, asEnumeration, applicabilityFacets };
+}
+
+/**
+ * One facet standing beside the `<entity>` in an applicability, or the reason it cannot be shown.
+ *
+ * The same readers the requirements side uses, told which side they are on. What differs is the
+ * attributes: `applicabilityType` references the base facet types, so `cardinality`,
+ * `instructions` and `uri` are all refused here rather than read. Nothing else differs, because
+ * "the element carries this property" is the same statement wherever it stands.
+ */
+function readApplicabilityFacet(
+  node: OrderedNode,
+  tag: string | null
+): ApplicabilityFacetDraft | FacetRefusal {
+  switch (tag) {
+    case "property":
+      return readSlotFacet(node, tag, "applicability");
+    default:
+      return refused(`Selects elements by <${tag}>, which the builder cannot show.`);
+  }
 }
 
 /**
@@ -329,6 +371,24 @@ const FACET_ATTRIBUTES: Record<string, string[]> = {
   // No cardinality: ids.xsd gives the requirements-side entity none, and says why in a comment —
   // the list of IFC classes is finite and mandated, so a prohibited form would be superfluous.
   entity: ["@_instructions"],
+};
+
+/**
+ * The same, for a facet standing in an `<applicability>` — and it is much shorter.
+ *
+ * `applicabilityType` references `attributeType`, `propertyType`, `classificationType`,
+ * `materialType` and `partOfType` directly, and it is `requirementsType` that extends each of them
+ * with `cardinality`, `instructions` and (on three) `uri`. So only what the base type declares may
+ * appear here: `dataType` on a property, `relation` on a partOf, and nothing else at all. Over the
+ * 7,784-file corpus no applicability facet carries anything else, so this costs nothing and keeps
+ * a `cardinality="prohibited"` from silently inverting which elements a rule is about.
+ */
+const APPLICABILITY_FACET_ATTRIBUTES: Record<string, string[]> = {
+  attribute: [],
+  property: ["@_dataType"],
+  classification: [],
+  partOf: ["@_relation"],
+  material: [],
 };
 
 /** What an `entityType` element holds, wherever `ids.xsd` nests one. */
@@ -421,10 +481,19 @@ interface FacetShell {
   stated: string | null;
 }
 
-function readFacetShell(node: OrderedNode, tag: string): FacetShell | FacetRefusal {
-  const unknownAttribute = Object.keys(attributesOf(node)).find(
-    (key) => !FACET_ATTRIBUTES[tag].includes(key)
-  );
+/**
+ * Which half of the specification a facet stands in.
+ *
+ * The elements a facet holds are the same on both sides; only the attributes differ, which is why
+ * one reader serves both. An applicability facet's `stated` is always `null` and its `instructions`
+ * always absent, because `APPLICABILITY_FACET_ATTRIBUTES` refuses either before this is reached.
+ */
+type FacetSide = "requirements" | "applicability";
+
+function readFacetShell(node: OrderedNode, tag: string, side: FacetSide): FacetShell | FacetRefusal {
+  const allowed =
+    side === "requirements" ? FACET_ATTRIBUTES[tag] : APPLICABILITY_FACET_ATTRIBUTES[tag];
+  const unknownAttribute = Object.keys(attributesOf(node)).find((key) => !allowed.includes(key));
   if (unknownAttribute !== undefined) {
     return refuseConstruct(
       unknownAttribute.replace(/^@_/, ""),
@@ -505,7 +574,7 @@ function readNestedEntity(
  * here through the same unknown-attribute check that catches a `uri` on an attribute.
  */
 function readEntityFacet(node: OrderedNode): EntityFacetDraft | FacetRefusal {
-  const shell = readFacetShell(node, "entity");
+  const shell = readFacetShell(node, "entity", "requirements");
   if ("refused" in shell) return shell;
 
   const entity = readNestedEntity(node, "This entity requirement");
@@ -525,7 +594,7 @@ function readEntityFacet(node: OrderedNode): EntityFacetDraft | FacetRefusal {
  * element is made of anything at all — which is a real check, not an empty one.
  */
 function readMaterialFacet(node: OrderedNode): MaterialFacetDraft | FacetRefusal {
-  const shell = readFacetShell(node, "material");
+  const shell = readFacetShell(node, "material", "requirements");
   if ("refused" in shell) return shell;
   if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
     return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
@@ -546,7 +615,7 @@ function readMaterialFacet(node: OrderedNode): MaterialFacetDraft | FacetRefusal
 }
 
 function readPartOfFacet(node: OrderedNode): PartOfFacetDraft | FacetRefusal {
-  const shell = readFacetShell(node, "partOf");
+  const shell = readFacetShell(node, "partOf", "requirements");
   if ("refused" in shell) return shell;
   if (shell.stated !== null && !isSimpleCardinality(shell.stated)) {
     return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
@@ -575,8 +644,12 @@ function readPartOfFacet(node: OrderedNode): PartOfFacetDraft | FacetRefusal {
 }
 
 /** The two facets that name one value slot on the element and constrain what it holds. */
-function readSlotFacet(node: OrderedNode, tag: "attribute" | "property"): ConditionDraft | FacetRefusal {
-  const shell = readFacetShell(node, tag);
+function readSlotFacet(
+  node: OrderedNode,
+  tag: "attribute" | "property",
+  side: FacetSide = "requirements"
+): ConditionDraft | FacetRefusal {
+  const shell = readFacetShell(node, tag, side);
   if ("refused" in shell) return shell;
   if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
     return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
@@ -624,7 +697,7 @@ function readSlotFacet(node: OrderedNode, tag: "attribute" | "property"): Condit
 }
 
 function readClassificationFacet(node: OrderedNode): ClassificationFacetDraft | FacetRefusal {
-  const shell = readFacetShell(node, "classification");
+  const shell = readFacetShell(node, "classification", "requirements");
   if ("refused" in shell) return shell;
   if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
     return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);

@@ -1064,6 +1064,12 @@ caption {
   padding: 0.1rem 0.28rem;
 }
 
+/* Part of what the rule selects rather than something the selected elements are
+   judged on, so it sits in the applies-to clause and carries no score of its own. */
+.cond.applicability-facet {
+  margin-top: 0.35rem;
+}
+
 /* A value none of the eight operators states — a range, a prohibited value, an
    optional facet. The row says what it holds rather than mislabelling it. */
 .cond-unshown {

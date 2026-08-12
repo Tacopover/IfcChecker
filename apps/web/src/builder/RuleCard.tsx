@@ -8,6 +8,7 @@ import { ConditionRow, defaultConditionFor } from "./ConditionRow.js";
 import { ruleProblems } from "./completeness.js";
 import { FailingElementsTable } from "./FailingElementsTable.js";
 import { UnshownFacetRow } from "./UnshownFacetRow.js";
+import { ApplicabilityFacetRow } from "./ApplicabilityFacetRow.js";
 import { nextDraftId } from "./draftIds.js";
 
 export interface RuleCardProps {
@@ -44,7 +45,7 @@ export function RuleCard({
   // depends on, so renaming the rule does not re-evaluate it.
   const evaluation = useMemo(
     () => evaluateRuleDraft(rule, elements),
-    [rule.entityTypes, rule.conditions, elements]
+    [rule.entityTypes, rule.applicabilityFacets, rule.conditions, elements]
   );
   const source = useMemo(
     () => introspection.fieldsFor(rule.entityTypes),
@@ -202,6 +203,20 @@ export function RuleCard({
                 </optgroup>
               </select>
             </div>
+            {(rule.applicabilityFacets ?? []).map((facet) => (
+              <ApplicabilityFacetRow
+                key={facet.id}
+                facet={facet}
+                onDelete={() =>
+                  onChange({
+                    ...rule,
+                    applicabilityFacets: (rule.applicabilityFacets ?? []).filter(
+                      (entry) => entry.id !== facet.id
+                    ),
+                  })
+                }
+              />
+            ))}
             {problems.applicability && <p className="rule-error">{problems.applicability}</p>}
           </div>
 

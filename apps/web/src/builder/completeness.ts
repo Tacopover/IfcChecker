@@ -113,11 +113,16 @@ export function ruleProblems(rule: RuleDraft): RuleProblems {
     rule.conditions.length === 0 && (rule.imported?.passThrough.length ?? 0) === 0;
   const applicabilityOnly = rule.imported?.requirementsAttributes === null;
 
+  // `ids.xsd` makes the applicability's `<entity>` optional, so a rule selecting by a property
+  // alone is complete without a type. It is only an applicability stating *nothing* that would
+  // reach every element in the file, and that is the one the exporter must not write.
+  const selectsNothing =
+    rule.entityTypes.length === 0 && (rule.applicabilityFacets?.length ?? 0) === 0;
+
   return {
-    applicability:
-      rule.entityTypes.length === 0
-        ? "No element types — IDS needs at least one, and this rule would apply to nothing."
-        : null,
+    applicability: selectsNothing
+      ? "No element types — IDS needs at least one, and this rule would apply to nothing."
+      : null,
     conditions:
       checksNothing && !applicabilityOnly
         ? "No conditions — there is nothing for this rule to check."
