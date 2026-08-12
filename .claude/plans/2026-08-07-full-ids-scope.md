@@ -1246,3 +1246,139 @@ them and that they are kept exactly as written on purpose, rather than implying 
 - **A control for any of the four new kinds.** They render read-only through `UnshownFacetRow`,
   which stage 2 landed for exactly this moment: the facet appears in the rule it belongs to rather
   than thinning the list silently. Editing them is the next UI stage.
+
+## Pattern-valued names — landed and measured 2026-08-12
+
+Three commits on `feat/ids-pattern-valued-names`, off `master` at `980f8fb`. The largest single
+mechanism left, and it moved both numbers at once: **conformance 305 → 317 agreed of 334** and
+**pass-through 41 → 22**. False passes stayed at **0**, nothing was lost, and the corpus round-trip
+stayed at 7,784 / 7,784 reproduced, 0 drifted, 3 schema-invalid in and out, and **0 files losing a
+requirement facet** at every commit.
+
+| | commit | conformance | pass-through | predicted |
+| --- | --- | --- | --- | --- |
+| **A** | the validator reads a pattern-valued name | **305 → 317** | 41, unmoved | — |
+| **B** | the importer reads a pattern-valued name | 317 | 41 → **22** | 22 ✓ |
+| **C** | the importer refuses a bound it cannot read | 317, unmoved | 22, unmoved | unmoved ✓ |
+
+The gate went 750 → **767 tests in 48 files**.
+
+### It is 12 conformance cases, not 14
+
+The brief said all 14 remaining refusals were pattern-valued names. Twelve were. The other two —
+`attribute/invalid-derived_attributes_cannot_be_checked_and_always_fail` and
+`attribute/invalid-value_checks_always_fail_for_lists` — refuse because their *applicability* names
+`IFCCARTESIANPOINT`, geometry this build does not normalize. Their detail column says `entity/name`
+rather than `attribute/name`, which is how the two are told apart. They are the last two refusals on
+the board and belong to the element-scope decision, not to this stage.
+
+### The semantics the suite decides, and IfcOpenShell confirms
+
+`Documentation/UserManual/attribute-facet.md` and `property-facet.md` say only that restrictions are
+allowed on these names; neither says what a facet naming several slots then means. `ifctester`'s
+`Attribute.__call__` and `Property.__call__` do, and the suite's own case titles state the answers:
+
+- **Every matched slot must satisfy the value.** `ifctester` loops the matches and breaks on the
+  first failure. Three suite documents place their only failing property second in the set.
+- **Each matching property set is asked separately.** A wall whose `Foo_Bar` holds `Foo` and whose
+  `Foo_Baz` holds nothing of the sort must **fail** a facet naming `Foo_.*` and `Foo`. One flat list
+  of matches would find `Foo` in the first set and approve it — a false pass, and it is a `fail-`
+  case, so the suite catches it.
+- **An empty slot is dropped before the value is judged, not failed.** `ifctester` filters
+  `None`/`""`/`()` out and keeps going if anything remains. The suite pairs a wall stating `Name`
+  with one stating `Description` against a facet naming both, and requires each to pass.
+- **At least one filled slot must survive**, which keeps "the element has none of these" a failure.
+
+An exact name still reads its one slot by direct lookup, keeping the case-insensitive fallback, so
+none of this is on the path a builder-written file takes.
+
+### The three identity fields had to be offered to a restriction separately
+
+Neither adapter puts `GlobalId`, `Name` or `PredefinedType` in `NormalizedElement.attributes` —
+they are fields on the element. A pattern matched against the bag alone would miss all three, and
+the suite's `pass-name_restrictions_will_match_any_result_2_3` is exactly that document: an
+`IfcWall` whose `Name` is set and whose `Description` is not, against a facet naming both. The
+candidate set is the three names plus the bag's keys, each read back through `readAttributeValue`
+so the top-level readers stay the single source of the value.
+
+### The per-set rule bites on the user's own model
+
+Measured on the 37 MB reference model, holding the applicability at `IFCFLOWFITTING` (286 elements):
+
+| the rule as written | applicable | passed | failed |
+| --- | --- | --- | --- |
+| `ASML` · `3.6 NL-SfB code` | 286 | 286 | 0 |
+| `ASML.*` · `3\.6.*` | 286 | **0** | **286** |
+
+`ASML.*` matches two sets, `ASML` and `ASML sparingen`, and the second holds no `3.6` property at
+all. Every element fails, correctly. The conformance suite scores that rule as one `fail-` case;
+on this model it is the difference between a rule that checks what its author meant and one that
+fails 286 elements for a reason the message has to name — which it does, by the set.
+
+`.*Name.*` on the same 286 elements passes all of them, reaching `Name` through the top-level
+reader.
+
+### Costs
+
+Nothing measurable. Parse **2,930 ms on this branch against 2,988 ms on `master`**, both measured
+today and both a little above the 2,593–2,788 ms band recorded earlier, which is the machine rather
+than the change. Checking 286 elements against one facet takes 5–17 ms either way, and the exact-name
+verdicts are byte-identical: same counts, same digest of every violation message.
+
+### What the UI had to answer
+
+A pattern names no single slot, and three places in `ConditionRow` and one in
+`FailingElementsTable` were reading one.
+
+- The property-set and field **selects become phrases** when the name is a restriction. The row
+  keeps its operator, its value box and its stored-as picker — the precedent is `unshownValue`,
+  which already withholds one parameter while leaving the rest of the row working.
+- `dataTypeFromModel` and `observedValuesFor` return nothing rather than looking up the empty
+  string, which would have reported the model as holding no such field.
+- `readConditionValue` gained a `notOneSlot` case. Reading it as `null` would have printed
+  "not set", which is the opposite claim about the element. The column says the value is not shown
+  and leaves the validator's own message to name the field that failed.
+
+`conditionProblem` was deliberately **not** extended to the names, though `ids.xsd` types them as
+`idsValue` too: the builder only ever writes a plain one, and `readValueDraft` refuses an empty
+restriction at import, so neither shape it guards against can reach a name.
+
+### First-reason-wins exposed nothing, exactly as predicted
+
+Commit B predicted 22 and landed 22. The sharpened rule from 2026-08-12 said a refusal removed
+*after* the value has been read can expose nothing, and this is the case that tested it.
+
+### `mixed-fidelity.ids` had to change what it keeps, again
+
+It kept a property whose `baseName` is a pattern — the facet this stage makes representable. It now
+keeps a value stating two restriction families at once, a range beside an enumeration: 3 corpus
+facets, XSD intersects them, and one `ValueDraft` states one of the two. Third time the fixture has
+been re-pointed for this reason, and the reason is the same each time.
+
+### The bounds false pass is fixed
+
+`readBoundsDraft` refuses an edge whose value is not a number and names it, the rule
+`readLengthDraft` already applied. Nothing moved — no corpus file and no conformance case writes
+one, which is why 7,784 round trips never surfaced it, and checking that nothing moved is the whole
+point of landing it on its own.
+
+### What is left
+
+**2 refusals, 15 wrong, 0 errored, 0 false passes**, and 22 pass-throughs of which **13 are
+permanent**.
+
+| pass-through reason | facets | claimed by |
+| --- | --- | --- |
+| property carries `<name>` | 8 | **never — not in IDS 1.0** |
+| property carries `measure` | 5 | **never — not in IDS 1.0** |
+| `xs:annotation` inside a restriction (property 4, classification 1) | 5 | an annotation-carrying `ValueDraft` |
+| two restriction families on one value | 3 | a regex OR, or an intersected model |
+| a non-string base on an enumeration | 1 | — |
+
+Nine addressable facets remain, against nineteen that just went. The conformance board is now
+**15 wrong answers and 2 honest refusals**, and the wrong answers are the cheap comparison
+leftovers plus the four `entity` IFC2X3 occurrence/type mapping cases — no whole mechanism left
+that is worth more than four.
+
+Applicability-side classification, material and partOf are still deliberately unimplemented
+(stage 5), and there is still no control for the four read-only facet kinds.
