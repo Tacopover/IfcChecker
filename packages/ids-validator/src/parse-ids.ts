@@ -653,6 +653,8 @@ function readApplicabilityFacet(
     );
   }
 
+  if (tag === "classification") return parseClassificationFacet(node, unsupported, "applicability");
+
   return refuse(tag, `Selects elements by <${tag}>, which cannot be represented.`);
 }
 
@@ -796,13 +798,14 @@ function parsePartOfFacet(
  */
 function parseClassificationFacet(
   node: OrderedNode,
-  unsupported: UnsupportedConstruct[]
+  unsupported: UnsupportedConstruct[],
+  section: UnsupportedConstruct["section"] = "requirements"
 ): ParsedClassificationFacet {
   const children = childrenOf(node, "classification");
   return {
     kind: "classification",
-    system: parseRestriction(children, "system", unsupported),
-    value: parseRestriction(children, "value", unsupported),
+    system: parseRestriction(children, "system", unsupported, section),
+    value: parseRestriction(children, "value", unsupported, section),
     cardinality: readCardinality(node),
   };
 }

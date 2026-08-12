@@ -66,9 +66,11 @@ describe("idsXmlToDrafts applicability", () => {
 
   it.each([
     [
-      "a facet other than entity",
-      `<classification><system><simpleValue>NL/SfB</simpleValue></system></classification>`,
-      "classification",
+      // A facet no version of ids.xsd has. The five it does have are all read now, so the only way
+      // left to test the dispatch's default arm is a construct from a future revision.
+      "a facet IDS 1.0 does not have",
+      `<zone><name><simpleValue>Z1</simpleValue></name></zone>`,
+      "zone",
     ],
     [
       "entity names given as a pattern",
@@ -158,6 +160,36 @@ describe("idsXmlToDrafts applicability", () => {
     ]);
   });
 
+  it("reads an applicability classification", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`
+        <specification name="Classified elements are named" ifcVersion="IFC4">
+          <applicability>
+            <classification>
+              <value><simpleValue>21.22</simpleValue></value>
+              <system><simpleValue>NL/SfB</simpleValue></system>
+            </classification>
+          </applicability>
+        </specification>`)
+      )
+    );
+
+    expect(rule.entityTypes).toEqual([]);
+    expect(rule.applicabilityFacets).toEqual([
+      {
+        id: expect.any(String),
+        kind: "classification",
+        system: { kind: "simple", value: "NL/SfB" },
+        value: { kind: "simple", value: "21.22" },
+        uri: null,
+        cardinality: "required",
+        explicitCardinality: false,
+        instructions: null,
+      },
+    ]);
+  });
+
   // `ids.xsd` makes the applicability's <entity> minOccurs="0", so "every element carrying this
   // property" is a complete rule. It used to be refused for naming no type.
   it("reads an applicability that states a property and no entity at all", () => {
@@ -207,10 +239,10 @@ describe("idsXmlToDrafts applicability", () => {
   it("keeps a refused specification verbatim so re-exporting hands it back", () => {
     const [refused] = idsXmlToDrafts(MIXED).refused;
 
-    expect(refused.name).toBe("Classified elements are named");
+    expect(refused.name).toBe("Everything with a wall-ish class is named");
     expect(refused.passThrough.construct).toBe("specification");
-    expect(refused.passThrough.xml).toContain("<classification>");
-    expect(refused.passThrough.xml).toContain("NL/SfB");
+    expect(refused.passThrough.xml).toContain("xs:pattern");
+    expect(refused.passThrough.xml).toContain("IFCWALL.*");
   });
 });
 

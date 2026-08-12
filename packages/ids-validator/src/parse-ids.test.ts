@@ -224,6 +224,28 @@ describe("parseIdsXml", () => {
     expect(isEvaluable(spec)).toBe(true);
   });
 
+  it("reads an applicability classification into a facet", () => {
+    const xml = SAMPLE_IDS.replace(
+      "</applicability>",
+      `<classification>
+         <value><simpleValue>21.22</simpleValue></value>
+         <system><simpleValue>NL/SfB</simpleValue></system>
+       </classification></applicability>`
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicability.facets).toEqual([
+      {
+        kind: "classification",
+        system: { kind: "exact", value: "NL/SfB" },
+        value: { kind: "exact", value: "21.22" },
+        cardinality: "required",
+      },
+    ]);
+    expect(spec.applicabilityComplete).toBe(true);
+  });
+
   // An applicability holding only a facet is a rule about every entity in scope that satisfies it.
   // `ids.xsd` makes <entity> minOccurs="0" precisely so it can be written.
   it("reads an applicability with no entity at all", () => {

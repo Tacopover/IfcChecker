@@ -10,6 +10,11 @@
   really unrepresentable: the classification, the material, the bound and the pattern-valued baseName
   this file used to keep are all read now, and a fixture whose "kept" facet has quietly become
   representable stops testing the thing it was written for.
+
+  The whole specification kept verbatim names its entity types with an xs:pattern. 12 corpus
+  specifications do this, and it is the applicability the builder cannot show for a structural
+  reason rather than a pending one: it offers a list of type chips, and a pattern names an
+  open-ended set of classes. It used to be a classification applicability, which is read now.
 -->
 <ids xmlns="http://standards.buildingsmart.org/IDS"
      xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -104,11 +109,15 @@
         </attribute>
       </requirements>
     </specification>
-    <specification name="Classified elements are named" ifcVersion="IFC4">
+    <specification name="Everything with a wall-ish class is named" ifcVersion="IFC4">
       <applicability minOccurs="0" maxOccurs="unbounded">
-        <classification>
-          <system><simpleValue>NL/SfB</simpleValue></system>
-        </classification>
+        <entity>
+          <name>
+            <xs:restriction base="xs:string">
+              <xs:pattern value="IFCWALL.*" />
+            </xs:restriction>
+          </name>
+        </entity>
       </applicability>
       <requirements>
         <attribute>

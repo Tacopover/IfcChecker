@@ -121,7 +121,7 @@ describe("import / export round-trip", () => {
     expect(names).toEqual([
       "Walls carry a name and a type code",
       "Doors are documented",
-      "Classified elements are named",
+      "Everything with a wall-ish class is named",
       "Some storey must exist",
     ]);
   });

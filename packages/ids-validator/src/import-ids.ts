@@ -351,6 +351,8 @@ function readApplicabilityFacet(
     case "attribute":
     case "property":
       return readSlotFacet(node, tag, "applicability");
+    case "classification":
+      return readClassificationFacet(node, "applicability");
     default:
       return refused(`Selects elements by <${tag}>, which the builder cannot show.`);
   }
@@ -697,8 +699,11 @@ function readSlotFacet(
   };
 }
 
-function readClassificationFacet(node: OrderedNode): ClassificationFacetDraft | FacetRefusal {
-  const shell = readFacetShell(node, "classification", "requirements");
+function readClassificationFacet(
+  node: OrderedNode,
+  side: FacetSide = "requirements"
+): ClassificationFacetDraft | FacetRefusal {
+  const shell = readFacetShell(node, "classification", side);
   if ("refused" in shell) return shell;
   if (shell.stated !== null && !isConditionalCardinality(shell.stated)) {
     return refused(`Is cardinality="${shell.stated}", which ids.xsd does not give this facet.`);
