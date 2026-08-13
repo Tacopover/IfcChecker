@@ -4,6 +4,7 @@ import { plainNameOf } from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
 import type { ObservedValue } from "./ValuePicker.js";
 import { FacetValueEditor } from "./FacetValueEditor.js";
+import { FacetRowFrame, errorIdOf } from "./FacetRowFrame.js";
 import { CARDINALITIES } from "./ConditionRow.js";
 import { conditionProblem } from "./completeness.js";
 
@@ -73,11 +74,20 @@ export function ClassificationRow({
   const codes = useMemo(() => codeOptions(source, system), [source, system]);
 
   const error = conditionProblem(facet);
-  const errorId = `cond-error-${facet.id}`;
-  const scoreClass = matched === 0 ? "empty" : hits === matched ? "all-pass" : "has-fail";
+  const errorId = errorIdOf(facet.id);
 
   return (
-    <div className={facet.cardinality === "prohibited" ? "cond prohibited" : "cond"}>
+    <FacetRowFrame
+      id={facet.id}
+      prohibited={facet.cardinality === "prohibited"}
+      hits={hits}
+      matched={matched}
+      instructions={facet.instructions}
+      uri={facet.uri}
+      error={error}
+      onDuplicate={onDuplicate}
+      onDelete={onDelete}
+    >
       <span className="tok">Classification</span>
 
       <select
@@ -122,44 +132,6 @@ export function ClassificationRow({
         errorId={errorId}
         invalid={error !== null}
       />
-
-      <span className={`cond-score score ${scoreClass}`}>
-        <span className="score-text num">
-          {hits}/{matched}
-        </span>
-        <button
-          type="button"
-          className="iconbtn"
-          title="Duplicate condition"
-          aria-label="Duplicate condition"
-          onClick={onDuplicate}
-        >
-          ⧉
-        </button>
-        <button
-          type="button"
-          className="iconbtn danger"
-          title="Remove condition"
-          aria-label="Remove condition"
-          onClick={onDelete}
-        >
-          ✕
-        </button>
-      </span>
-
-      {(facet.instructions || facet.uri) && (
-        <span className="cond-note">
-          {facet.instructions}
-          {/* Shown as text, never as a link: the address comes from a file someone else wrote. */}
-          {facet.uri && <span className="cond-uri">{facet.uri}</span>}
-        </span>
-      )}
-
-      {error && (
-        <span className="cond-error" id={errorId}>
-          {error}
-        </span>
-      )}
-    </div>
+    </FacetRowFrame>
   );
 }

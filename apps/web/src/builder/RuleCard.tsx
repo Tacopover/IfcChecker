@@ -9,6 +9,7 @@ import { ruleProblems } from "./completeness.js";
 import { FailingElementsTable } from "./FailingElementsTable.js";
 import { UnshownFacetRow } from "./UnshownFacetRow.js";
 import { ClassificationRow } from "./ClassificationRow.js";
+import { MaterialRow } from "./MaterialRow.js";
 import { ApplicabilityFacetRow } from "./ApplicabilityFacetRow.js";
 import { nextDraftId } from "./draftIds.js";
 
@@ -67,6 +68,23 @@ export function RuleCard({
 
   function updateConditions(conditions: FacetDraft[]) {
     onChange({ ...rule, conditions });
+  }
+
+  // Shared by every row kind, so a new one wires up three callbacks rather than re-deriving them.
+  function replaceCondition(id: string, next: FacetDraft) {
+    updateConditions(rule.conditions.map((entry) => (entry.id === id ? next : entry)));
+  }
+
+  function duplicateCondition(index: number, condition: FacetDraft) {
+    updateConditions([
+      ...rule.conditions.slice(0, index + 1),
+      { ...condition, id: nextDraftId("c") },
+      ...rule.conditions.slice(index + 1),
+    ]);
+  }
+
+  function deleteCondition(id: string) {
+    updateConditions(rule.conditions.filter((entry) => entry.id !== id));
   }
 
   // Qualified whenever requirements were kept but not shown, so "all pass" never reads as a verdict
@@ -259,21 +277,20 @@ export function RuleCard({
                     source={source}
                     hits={perCondition[index] ?? 0}
                     matched={matched}
-                    onChange={(next) =>
-                      updateConditions(
-                        rule.conditions.map((entry) => (entry.id === condition.id ? next : entry))
-                      )
-                    }
-                    onDuplicate={() =>
-                      updateConditions([
-                        ...rule.conditions.slice(0, index + 1),
-                        { ...condition, id: nextDraftId("c") },
-                        ...rule.conditions.slice(index + 1),
-                      ])
-                    }
-                    onDelete={() =>
-                      updateConditions(rule.conditions.filter((entry) => entry.id !== condition.id))
-                    }
+                    onChange={(next) => replaceCondition(condition.id, next)}
+                    onDuplicate={() => duplicateCondition(index, condition)}
+                    onDelete={() => deleteCondition(condition.id)}
+                  />
+                ) : condition.kind === "material" ? (
+                  <MaterialRow
+                    key={condition.id}
+                    facet={condition}
+                    source={source}
+                    hits={perCondition[index] ?? 0}
+                    matched={matched}
+                    onChange={(next) => replaceCondition(condition.id, next)}
+                    onDuplicate={() => duplicateCondition(index, condition)}
+                    onDelete={() => deleteCondition(condition.id)}
                   />
                 ) : (
                   <UnshownFacetRow

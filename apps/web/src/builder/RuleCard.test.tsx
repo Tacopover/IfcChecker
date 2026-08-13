@@ -206,16 +206,44 @@ describe("RuleCard", () => {
     expect(screen.getByText(/No conditions/)).toHaveClass("rule-error");
   });
 
-  // The importer keeps the other four kinds verbatim, so nothing puts one in a rule yet. When it
-  // starts reading them, the facet has to appear in the rule it belongs to rather than thinning
-  // the list — and it has to say it is checked, because it is.
-  it("shows a facet no condition row can edit, rather than dropping it from the rule", () => {
+  // The importer reads all six kinds, so a facet with no row of its own does reach a rule. It has
+  // to appear in the rule it belongs to rather than thinning the list, and it has to say it is
+  // checked, because it is. `partOf` is one of the two kinds still waiting for controls.
+  it("shows a facet no row can edit yet, rather than dropping it from the rule", () => {
     render(
       <Harness
         initial={{
           ...RULE,
           conditions: [
             ...RULE.conditions,
+            {
+              id: "p1",
+              kind: "partOf",
+              relation: null,
+              entityName: { kind: "simple", value: "IFCBUILDINGSTOREY" },
+              predefinedType: null,
+              cardinality: "required",
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(screen.getByText("partOf")).toBeInTheDocument();
+    expect(screen.getByText(/Must be part of a whole.*not editable here yet/)).toBeInTheDocument();
+    // One operator select, from the property row — the partOf facet offers no controls.
+    expect(screen.getAllByLabelText("Operator")).toHaveLength(1);
+  });
+
+  // Material was that example until it got controls. The row is the difference between a rule the
+  // user can read and one they can change.
+  it("edits a material requirement in place", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={{
+          ...RULE,
+          conditions: [
             {
               id: "m1",
               kind: "material",
@@ -227,10 +255,10 @@ describe("RuleCard", () => {
       />
     );
 
-    expect(screen.getByText("material")).toBeInTheDocument();
-    expect(screen.getByText(/Must be made of a material.*not editable here yet/)).toBeInTheDocument();
-    // One operator select, from the property row — the material facet offers no controls.
-    expect(screen.getAllByLabelText("Operator")).toHaveLength(1);
+    expect(screen.getByLabelText("Material")).toHaveValue("Concrete");
+
+    await user.selectOptions(screen.getByLabelText("Cardinality"), "prohibited");
+    expect(screen.getByLabelText("Cardinality")).toHaveValue("prohibited");
   });
 
   // "classification" alone says a facet was kept. It does not say the rule in front of the user
