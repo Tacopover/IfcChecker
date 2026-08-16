@@ -1752,3 +1752,87 @@ callback without a cast.
 - The other 5 refusals: 2 `applicability/classification` (one states no `<system>`, one carries an
   `xs:annotation`), 2 `applicability/attribute` (the markdown-mangled `<n>` files), 1
   `applicability/material` (an `xs:annotation`).
+
+## The metadata panel — landed and measured 2026-08-16
+
+Three commits. `<info>` and the `<specification>` attributes are the last untouched part of the
+document, and they had the same shape of problem as the facets did: carried faithfully through a
+round trip, and impossible to edit. A document authored here stated a title and nothing else.
+
+| | commit | conformance | refused whole | pass-through | gate |
+| --- | --- | --- | --- | --- | --- |
+| **M1** | the document's own metadata is editable | 317 | 17 | 24 | 849 → 858 |
+| **M2** | a specification's own metadata is editable | 317 | 17 | 24 | 858 → 863 |
+| **M3** | an `<entity>` with no `<name>` says so | 317 | 17 | 24 | **864** |
+
+### Neither existing harness could speak for it, and that had to be built first
+
+The corpus round-trip compares **what `parseIdsXml` sees**, and `parseIdsXml` reads no `<info>` at
+all and none of the `<specification>` attributes beyond `name` and `ifcVersion`. It also pins the
+date so its output is stable. So a change to how the metadata is carried can pass 7,784 / 7,784 and
+still lose the author's name.
+
+`.claude/plans/corpus-info-fidelity.mjs` is the check that closes it: import, export, compare the
+eight `<info>` children and the five `<specification>` attributes, text for text.
+**7,784 / 7,784 `<info>` blocks and 41,751 / 41,751 attribute sets reproduced.**
+
+Three things it had to be taught, each a difference no reader can see:
+
+- **XML 1.0 §2.11 requires CRLF to be folded to LF** before the application sees it. That is the
+  only difference in 7,445 Japanese descriptions.
+- `escapeXml` writes `&apos;` inside a double-quoted attribute where the source wrote a bare `'`.
+  Legal, unnecessary, and the only difference in one Dutch description.
+- One file writes `<ids:title />`, which is the same empty string as `<title></title>`.
+
+### Empty means absent, except where the schema says otherwise
+
+Measured before choosing the rule: 7,784 corpus files have an `<info>`, 7,452 state all eight
+children, and **the only empty element in any of them is one `<title>`**. So a cleared box writing
+no element costs nothing and stops a `<copyright></copyright>` nobody typed.
+
+`<title>` is the exception, and dropping it exported the one document this change made
+schema-invalid. **The round-trip's `schema-invalid out` caught it, 3 → 4** — the only guard rail
+that could have, and the reason it is counted separately from `drifted`.
+
+### Two constraints the exporter cannot fix up for the author
+
+`ids.xsd` narrows two of the eight beyond `xs:string`: `<author>` carries
+`[^@]+@[^\.]+\..+` and `<date>` is an `xs:date`. `infoProblems` transcribes both, as loosely as the
+schema writes them — tightening the address pattern would reject a document IDS accepts.
+
+`ifcVersion` is the third, and it is a closed enumeration of three, so the panel offers a checkbox
+each rather than a box. **`undefined` and `""` had to be different**: a rule that never stated one
+takes the exporter's default, one whose boxes the user cleared states none, and `ruleProblems` gains
+a `metadata` key so the panel and `exportBlockers` say the same thing. The exporter still writes the
+default either way, so a downloaded file is never invalid.
+
+### A pattern-valued applicability entity name: not worth a control, and the count was wrong
+
+The remaining item on the list, and reading the 12 refusals settles it against building anything.
+
+**They are not 12 patterns.** Eight are `NL_BIM_Basis_ILS.ids` specifications whose `<entity>` has
+no `<name>` at all — they spell it `<n>`, the same markdown mangling two applicability *attributes*
+already carry. Nothing about them is a pattern and no control can represent them; the file is
+broken, and reproducing it faithfully is the whole point.
+
+Of the four that do give a restriction:
+
+| file | what it writes |
+| --- | --- |
+| `IDS_SimpleBIM_examples.ids` | an `xs:annotation` inside the restriction |
+| `IDS_ucms_prefab_pipes_IFC2x3.ids` | an `xs:annotation` inside the restriction |
+| `IDS_ucms_prefab_pipes_IFC4.3.ids` | an `xs:annotation` inside the restriction |
+| `IDS_random_example.ids` | `<xs:pattern value="IFCCOVERING"/>` — one literal class |
+
+Three are refused for the annotation regardless of the pattern, and the fourth is a pattern in form
+only. **The corpus contains no open-ended entity pattern at all.** So the honest refusal stays, and
+the message now says which of the two faults a file has.
+
+### What is left
+
+- **The four remaining `entity/name` refusals**, claimed by an annotation-carrying `ValueDraft`
+  rather than by anything about patterns.
+- 2 `applicability/classification` (one states no `<system>`, one an `xs:annotation`), 2
+  `applicability/attribute` (the `<n>` files), 1 `applicability/material` (an `xs:annotation`).
+- **An annotation-carrying `ValueDraft` is now the single largest remaining mechanism**: 5 of the 24
+  pass-throughs and 4 of the 17 refusals turn on it, which is more than anything else left.
