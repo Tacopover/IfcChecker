@@ -164,6 +164,15 @@ export type ParsedApplicabilityFacet =
  */
 export interface ParsedApplicability {
   entityNames: string[] | null;
+  /**
+   * The `<entity><predefinedType>` the applicability states, or `null` when it states none.
+   *
+   * A field of its own rather than a facet, for the reason `entityNames` is one: it belongs to the
+   * `<entity>`, which is the only facet whose selection the builder enumerates rather than tests.
+   * It narrows that list rather than standing beside it, so an applicability naming no class and a
+   * predefined type is a document `ids.xsd` does not describe.
+   */
+  entityPredefinedType: ParsedRestriction | null;
   facets: ParsedApplicabilityFacet[];
 }
 
@@ -563,6 +572,7 @@ function readApplicability(
   unsupported: UnsupportedConstruct[]
 ): ParsedApplicability {
   let entityNames: string[] | null = null;
+  let entityPredefinedType: ParsedRestriction | null = null;
   const facets: ParsedApplicabilityFacet[] = [];
 
   for (const node of applicability) {
@@ -599,16 +609,24 @@ function readApplicability(
       });
     }
 
-    if (children.some((child) => tagOf(child) === "predefinedType")) {
+    const predefinedType = parseRestriction(children, "predefinedType", unsupported, "applicability");
+    if (predefinedType === null) continue;
+    // `ids.xsd` allows one `<entity>`, so there is no second predefined type to intersect with the
+    // first. Refused rather than overwritten: names from two elements are a union and predefined
+    // types would be an intersection, and guessing which the author meant is what this parser does
+    // not do.
+    if (entityPredefinedType !== null) {
       unsupported.push({
         section: "applicability",
         construct: "entity/predefinedType",
-        description: `Narrows <${names.join(", ")}> to one predefined type, which cannot be represented.`,
+        description: "States a predefined type on more than one <entity>, which the schema does not allow.",
       });
+      continue;
     }
+    entityPredefinedType = predefinedType;
   }
 
-  return { entityNames, facets };
+  return { entityNames, entityPredefinedType, facets };
 }
 
 /**

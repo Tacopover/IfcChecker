@@ -581,6 +581,7 @@ function applicabilityOf(rule: RuleDraft): ParsedApplicability {
   const entityNames = applicabilityEntityNamesOf(rule);
   return {
     entityNames: entityNames.length === 0 ? null : entityNames,
+    entityPredefinedType: null,
     facets: (rule.applicabilityFacets ?? []).map((facet) => compileFacet(facet)),
   };
 }
