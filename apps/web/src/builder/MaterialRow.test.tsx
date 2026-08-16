@@ -16,6 +16,7 @@ const SOURCE: FieldsForResult = {
     { value: "Cast in situ", count: 2 },
   ],
   wholes: [],
+  ifcTypes: [],
 };
 
 const FACET: MaterialFacetDraft = {

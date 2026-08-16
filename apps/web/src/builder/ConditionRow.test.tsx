@@ -15,6 +15,7 @@ const SOURCE: FieldsForResult = {
   classifications: [],
   materials: [],
   wholes: [],
+  ifcTypes: [],
   attributes: [
     { name: "Tag", propertySet: null, hits: 9, coverage: 0.9, values: [{ value: "W-1", count: 1 }], dataTypes: [] },
     { name: "Name", propertySet: null, hits: 10, coverage: 1, values: [{ value: "Wall", count: 10 }], dataTypes: [] },

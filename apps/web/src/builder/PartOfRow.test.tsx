@@ -12,6 +12,7 @@ const SOURCE: FieldsForResult = {
   propertySets: [],
   classifications: [],
   materials: [],
+  ifcTypes: [],
   wholes: [
     {
       relation: "IFCRELCONTAINEDINSPATIALSTRUCTURE",

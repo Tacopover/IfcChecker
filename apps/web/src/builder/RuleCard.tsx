@@ -7,8 +7,8 @@ import { evaluateRuleDraft } from "./evaluateDraft.js";
 import { ConditionRow, defaultConditionFor } from "./ConditionRow.js";
 import { ruleProblems } from "./completeness.js";
 import { FailingElementsTable } from "./FailingElementsTable.js";
-import { UnshownFacetRow } from "./UnshownFacetRow.js";
 import { ClassificationRow } from "./ClassificationRow.js";
+import { EntityRow } from "./EntityRow.js";
 import { MaterialRow } from "./MaterialRow.js";
 import { PartOfRow } from "./PartOfRow.js";
 import { ApplicabilityFacetRow } from "./ApplicabilityFacetRow.js";
@@ -305,14 +305,18 @@ export function RuleCard({
                     onDelete={() => deleteCondition(condition.id)}
                   />
                 ) : (
-                  <UnshownFacetRow
+                  // The last arm rather than a case of its own: with the entity row landed, every
+                  // kind `ids.xsd` allows in <requirements> has controls, so there is nothing left
+                  // for a read-only fallback to catch.
+                  <EntityRow
                     key={condition.id}
                     facet={condition}
+                    source={source}
                     hits={perCondition[index] ?? 0}
                     matched={matched}
-                    onDelete={() =>
-                      updateConditions(rule.conditions.filter((entry) => entry.id !== condition.id))
-                    }
+                    onChange={(next) => replaceCondition(condition.id, next)}
+                    onDuplicate={() => duplicateCondition(index, condition)}
+                    onDelete={() => deleteCondition(condition.id)}
                   />
                 )
               )

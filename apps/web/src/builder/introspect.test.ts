@@ -303,6 +303,7 @@ describe("introspectModel — fieldsFor", () => {
       classifications: [],
       materials: [],
       wholes: [],
+      ifcTypes: [],
     });
     expect(fieldsFor(["IfcWindow"]).total).toBe(0);
   });
@@ -409,6 +410,49 @@ describe("introspectModel — what the selection is classified in, made of and p
     expect(bare.classifications).toEqual([]);
     expect(bare.materials).toEqual([]);
     expect(bare.wholes).toEqual([]);
+  });
+});
+
+// The fourth section, which the requirement-side entity row reads. A requirement entity name is
+// matched exactly and case-sensitively against `NormalizedElement.ifcType`, so what this section
+// offers has to be the file's own spelling rather than the canonical name the type chips carry.
+describe("introspectModel — what the selection is", () => {
+  const model = [
+    element("IFCFLOWSEGMENT", { predefinedType: "RIGIDSEGMENT" }),
+    element("IFCFLOWSEGMENT", { predefinedType: "RIGIDSEGMENT" }),
+    element("IFCFLOWSEGMENT", { predefinedType: "FLEXIBLESEGMENT" }),
+    element("IFCFLOWFITTING", { predefinedType: null }),
+  ];
+
+  it("lists each class as the file spells it, with the predefined types seen on it", () => {
+    const { ifcTypes } = introspectModel(model).fieldsFor(["IfcFlowSegment", "IfcFlowFitting"]);
+
+    expect(ifcTypes).toEqual([
+      {
+        ifcType: "IFCFLOWSEGMENT",
+        hits: 3,
+        predefinedTypes: [
+          { value: "RIGIDSEGMENT", count: 2 },
+          { value: "FLEXIBLESEGMENT", count: 1 },
+        ],
+      },
+      { ifcType: "IFCFLOWFITTING", hits: 1, predefinedTypes: [] },
+    ]);
+  });
+
+  // `evaluateEntity` matches either literal, so a rule asking USERDEFINED and one asking the real
+  // name both pass. Offering only the resolved name would hide half of what the file satisfies.
+  it("offers the stored USERDEFINED literal beside the name it resolves to", () => {
+    const userDefined = [
+      element("IFCWALL", { predefinedType: "WALDO", storedPredefinedType: "USERDEFINED" }),
+    ];
+
+    const { ifcTypes } = introspectModel(userDefined).fieldsFor(["IfcWall"]);
+
+    expect(ifcTypes[0].predefinedTypes).toEqual([
+      { value: "USERDEFINED", count: 1 },
+      { value: "WALDO", count: 1 },
+    ]);
   });
 });
 

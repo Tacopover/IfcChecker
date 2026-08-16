@@ -25,6 +25,7 @@ const SOURCE: FieldsForResult = {
   ],
   materials: [],
   wholes: [],
+  ifcTypes: [],
 };
 
 const FACET: ClassificationFacetDraft = {

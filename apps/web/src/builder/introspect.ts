@@ -58,20 +58,36 @@ export interface PartOfSummary {
   predefinedTypes: Array<{ value: string; count: number }>;
 }
 
+/**
+ * One IFC class the selection holds, with the predefined types seen on it.
+ *
+ * `ifcType` is spelled as the **file** spells it — `IFCWALL`, not `IfcWall` — because a requirement
+ * entity facet is matched exactly and case-sensitively against `NormalizedElement.ifcType`. The
+ * canonical mixed-case name the type chips use is the applicability's spelling, and offering it here
+ * would write a requirement no element satisfies.
+ */
+export interface EntitySummary {
+  ifcType: string;
+  hits: number;
+  predefinedTypes: Array<{ value: string; count: number }>;
+}
+
 export interface FieldsForResult {
   total: number;
   attributes: FieldSummary[];
   propertySets: Array<{ name: string; fields: FieldSummary[] }>;
   /**
-   * What the selection is classified in, made of, and part of — the three sections the rail needs
-   * before a classification, material or partOf row can offer anything from the user's own file.
+   * What the selection is classified in, made of, part of, and is — the four sections the rail needs
+   * before a classification, material, partOf or entity row can offer anything from the user's own
+   * file.
    *
-   * Derived from `NormalizedElement`, which has carried all three since the missing facets landed,
+   * Derived from `NormalizedElement`, which has carried all of them since the missing facets landed,
    * so this is introspection work rather than anything the adapters have to grow.
    */
   classifications: ClassificationSummary[];
   materials: Array<{ value: string; count: number }>;
   wholes: PartOfSummary[];
+  ifcTypes: EntitySummary[];
 }
 
 export interface ModelIntrospection {
@@ -249,8 +265,22 @@ export function introspectModel(elements: NormalizedElement[]): ModelIntrospecti
     const classifications = new Map<string, { system: string | null; hits: number; values: Map<string, number> }>();
     const materials = new Map<string, number>();
     const wholes = new Map<string, { relation: string; ifcType: string; hits: number; predefinedTypes: Map<string, number> }>();
+    const ifcTypes = new Map<string, { ifcType: string; hits: number; predefinedTypes: Map<string, number> }>();
 
     for (const element of pool) {
+      let entity = ifcTypes.get(element.ifcType);
+      if (!entity) {
+        entity = { ifcType: element.ifcType, hits: 0, predefinedTypes: new Map() };
+        ifcTypes.set(element.ifcType, entity);
+      }
+      entity.hits++;
+      // Both literals, because `evaluateEntity` matches either: an element storing `USERDEFINED`
+      // with a real name elsewhere satisfies a requirement asking for either one. The stored
+      // literal is populated only where it differs, so nothing is counted twice.
+      for (const literal of [element.predefinedType, element.storedPredefinedType]) {
+        if (literal) entity.predefinedTypes.set(literal, (entity.predefinedTypes.get(literal) ?? 0) + 1);
+      }
+
       for (const reference of element.classifications ?? []) {
         const key = reference.system ?? "";
         let record = classifications.get(key);
@@ -338,6 +368,9 @@ export function introspectModel(elements: NormalizedElement[]): ModelIntrospecti
             a.ifcType.localeCompare(b.ifcType) ||
             a.relation.localeCompare(b.relation)
         ),
+      ifcTypes: [...ifcTypes.values()]
+        .map((record) => ({ ...record, predefinedTypes: counted(record.predefinedTypes) }))
+        .sort((a, b) => b.hits - a.hits || a.ifcType.localeCompare(b.ifcType)),
     };
   };
 

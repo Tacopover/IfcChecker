@@ -4,8 +4,9 @@ import { nameSummary } from "./ConditionRow.js";
 /**
  * One line of what an imported rule selects by, beyond its list of IFC classes.
  *
- * Read-only, like `UnshownFacetRow` and for the same reason: the facet really does decide which
- * elements the rule reaches, so hiding it would make the type chips look like the whole story. It
+ * Read-only, and for the reason the requirement rows were until each got controls: the facet really
+ * does decide which elements the rule reaches, so hiding it would make the type chips look like the
+ * whole story. It
  * carries no score of its own — an applicability facet narrows the count beside the rule rather
  * than being passed or failed by the elements it selects — and no cardinality, because `ids.xsd`
  * gives an applicability facet none.

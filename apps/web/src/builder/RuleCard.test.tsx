@@ -206,16 +206,15 @@ describe("RuleCard", () => {
     expect(screen.getByText(/No conditions/)).toHaveClass("rule-error");
   });
 
-  // The importer reads all six kinds, so a facet with no row of its own does reach a rule. It has
-  // to appear in the rule it belongs to rather than thinning the list, and it has to say it is
-  // checked, because it is. The requirement-side `entity` is the last kind waiting for controls.
-  it("shows a facet no row can edit yet, rather than dropping it from the rule", () => {
+  // The last of the six kinds to get controls, so there is no read-only requirement row left at
+  // all. `ids.xsd` gives this one no cardinality, which is what the missing select states.
+  it("edits an entity requirement in place, with no cardinality to state", async () => {
+    const user = userEvent.setup();
     render(
       <Harness
         initial={{
           ...RULE,
           conditions: [
-            ...RULE.conditions,
             {
               id: "e1",
               kind: "entity",
@@ -227,12 +226,13 @@ describe("RuleCard", () => {
       />
     );
 
-    expect(screen.getByText("entity")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Must be one of these IFC classes.*not editable here yet/)
-    ).toBeInTheDocument();
-    // One operator select, from the property row — the entity facet offers no controls.
-    expect(screen.getAllByLabelText("Operator")).toHaveLength(1);
+    const box = screen.getByLabelText("Class");
+    expect(box).toHaveValue("IFCWALL");
+    expect(screen.queryByLabelText("Cardinality")).toBeNull();
+
+    await user.clear(box);
+    await user.type(box, "IFCDOOR");
+    expect(screen.getByLabelText("Class")).toHaveValue("IFCDOOR");
   });
 
   // partOf was that example until it got controls, and material before it. The row is the
