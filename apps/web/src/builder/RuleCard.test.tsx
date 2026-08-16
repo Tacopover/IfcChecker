@@ -208,7 +208,7 @@ describe("RuleCard", () => {
 
   // The importer reads all six kinds, so a facet with no row of its own does reach a rule. It has
   // to appear in the rule it belongs to rather than thinning the list, and it has to say it is
-  // checked, because it is. `partOf` is one of the two kinds still waiting for controls.
+  // checked, because it is. The requirement-side `entity` is the last kind waiting for controls.
   it("shows a facet no row can edit yet, rather than dropping it from the rule", () => {
     render(
       <Harness
@@ -216,6 +216,34 @@ describe("RuleCard", () => {
           ...RULE,
           conditions: [
             ...RULE.conditions,
+            {
+              id: "e1",
+              kind: "entity",
+              name: { kind: "simple", value: "IFCWALL" },
+              predefinedType: null,
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(screen.getByText("entity")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Must be one of these IFC classes.*not editable here yet/)
+    ).toBeInTheDocument();
+    // One operator select, from the property row — the entity facet offers no controls.
+    expect(screen.getAllByLabelText("Operator")).toHaveLength(1);
+  });
+
+  // partOf was that example until it got controls, and material before it. The row is the
+  // difference between a rule the user can read and one they can change.
+  it("edits a partOf requirement in place", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={{
+          ...RULE,
+          conditions: [
             {
               id: "p1",
               kind: "partOf",
@@ -229,10 +257,10 @@ describe("RuleCard", () => {
       />
     );
 
-    expect(screen.getByText("partOf")).toBeInTheDocument();
-    expect(screen.getByText(/Must be part of a whole.*not editable here yet/)).toBeInTheDocument();
-    // One operator select, from the property row — the partOf facet offers no controls.
-    expect(screen.getAllByLabelText("Operator")).toHaveLength(1);
+    expect(screen.getByLabelText("Class")).toHaveValue("IFCBUILDINGSTOREY");
+
+    await user.selectOptions(screen.getByLabelText("Relationship"), "IFCRELAGGREGATES");
+    expect(screen.getByLabelText("Relationship")).toHaveValue("IFCRELAGGREGATES");
   });
 
   // Material was that example until it got controls. The row is the difference between a rule the

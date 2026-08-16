@@ -10,6 +10,7 @@ import { FailingElementsTable } from "./FailingElementsTable.js";
 import { UnshownFacetRow } from "./UnshownFacetRow.js";
 import { ClassificationRow } from "./ClassificationRow.js";
 import { MaterialRow } from "./MaterialRow.js";
+import { PartOfRow } from "./PartOfRow.js";
 import { ApplicabilityFacetRow } from "./ApplicabilityFacetRow.js";
 import { nextDraftId } from "./draftIds.js";
 
@@ -283,6 +284,17 @@ export function RuleCard({
                   />
                 ) : condition.kind === "material" ? (
                   <MaterialRow
+                    key={condition.id}
+                    facet={condition}
+                    source={source}
+                    hits={perCondition[index] ?? 0}
+                    matched={matched}
+                    onChange={(next) => replaceCondition(condition.id, next)}
+                    onDuplicate={() => duplicateCondition(index, condition)}
+                    onDelete={() => deleteCondition(condition.id)}
+                  />
+                ) : condition.kind === "partOf" ? (
+                  <PartOfRow
                     key={condition.id}
                     facet={condition}
                     source={source}
