@@ -8,7 +8,7 @@ import { ModelTree } from "./ModelTree.js";
 import { RuleCard } from "./RuleCard.js";
 import { RefusedSpecificationCard } from "./RefusedSpecificationCard.js";
 import { IdsXmlPreview } from "./IdsXmlPreview.js";
-import { defaultConditionFor } from "./ConditionRow.js";
+import { defaultConditionFor } from "./defaultFacets.js";
 import { nextDraftId } from "./draftIds.js";
 import { importIdsText } from "./importIds.js";
 

@@ -6,7 +6,6 @@ import type { ObservedValue } from "./ValuePicker.js";
 import { FacetValueEditor, OPERATORS } from "./FacetValueEditor.js";
 import { FacetRowFrame, errorIdOf, rowNoun, type FacetSide } from "./FacetRowFrame.js";
 import { conditionProblem } from "./completeness.js";
-import { nextDraftId } from "./draftIds.js";
 
 export { OPERATORS } from "./FacetValueEditor.js";
 
@@ -117,31 +116,6 @@ export function observedValuesFor(source: FieldsForResult, condition: ConditionD
           .find((set) => set.name === propertySet)
           ?.fields.find((entry) => entry.name === name);
   return field?.values ?? [];
-}
-
-/** A fresh condition points at whatever the current selection actually carries, so it is never empty. */
-export function defaultConditionFor(source: FieldsForResult): ConditionDraft {
-  const set = source.propertySets[0];
-  if (set) {
-    const name = set.fields[0]?.name ?? "";
-    return {
-      id: nextDraftId("c"),
-      kind: "property",
-      propertySet: plainName(set.name),
-      name: plainName(name),
-      value: null,
-      cardinality: "required",
-      dataType: dataTypeFromModel(source, set.name, name),
-    };
-  }
-  return {
-    id: nextDraftId("c"),
-    kind: "attribute",
-    propertySet: null,
-    name: plainName(source.attributes[0]?.name ?? "Name"),
-    value: null,
-    cardinality: "required",
-  };
 }
 
 function optionsWith(list: string[], current: string | null) {

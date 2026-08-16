@@ -107,6 +107,18 @@ describe("isRuleComplete", () => {
       isRuleComplete({ ...RULE, conditions: [{ ...CONDITION, ...stating("oneOf") }] })
     ).toBe(false);
   });
+
+  // Both sides became authorable together, so both are checked together — and the applicability
+  // side is the sharper case: an empty enumeration there does not merely accept anything, it
+  // selects everything the rule then reports on.
+  it("is false when an applicability facet is incomplete", () => {
+    expect(
+      isRuleComplete({
+        ...RULE,
+        applicabilityFacets: [{ ...CONDITION, id: "a1", ...stating("oneOf") }],
+      })
+    ).toBe(false);
+  });
 });
 
 describe("exportBlockers", () => {
@@ -120,6 +132,18 @@ describe("exportBlockers", () => {
     ]);
 
     expect(blocker).toContain("Walls declare a fire rating");
+    expect(blocker).toContain("FireRating");
+    expect(blocker).toMatch(/Enter a value/);
+  });
+
+  it("blocks a rule whose applicability facet is incomplete, not only its conditions", () => {
+    const [blocker] = exportBlockers([
+      {
+        ...RULE,
+        applicabilityFacets: [{ ...CONDITION, id: "a1", ...stating("contains", "") }],
+      },
+    ]);
+
     expect(blocker).toContain("FireRating");
     expect(blocker).toMatch(/Enter a value/);
   });

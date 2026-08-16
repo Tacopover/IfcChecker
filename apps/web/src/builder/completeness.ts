@@ -135,10 +135,21 @@ function ruleProblemList(rule: RuleDraft): string[] {
   return [applicability, conditions].filter((problem): problem is string => problem !== null);
 }
 
+/**
+ * Every facet the rule states, on both sides.
+ *
+ * An applicability facet is checked by the same rules as a requirement one and for a sharper
+ * reason: an empty enumeration there does not merely accept anything, it *selects* everything the
+ * rule then reports on. Both sides became authorable together, so both are checked together.
+ */
+function facetsOf(rule: RuleDraft): FacetDraft[] {
+  return [...(rule.applicabilityFacets ?? []), ...rule.conditions];
+}
+
 export function isRuleComplete(rule: RuleDraft): boolean {
   return (
     ruleProblemList(rule).length === 0 &&
-    rule.conditions.every((condition) => conditionProblem(condition) === null)
+    facetsOf(rule).every((facet) => conditionProblem(facet) === null)
   );
 }
 
@@ -154,9 +165,9 @@ export function exportBlockers(rules: RuleDraft[], preservedCount = 0): string[]
   const blockers: string[] = [];
   for (const rule of rules) {
     const reasons = ruleProblemList(rule);
-    for (const condition of rule.conditions) {
-      const problem = conditionProblem(condition);
-      if (problem !== null) reasons.push(`${labelOf(condition)} — ${problem}`);
+    for (const facet of facetsOf(rule)) {
+      const problem = conditionProblem(facet);
+      if (problem !== null) reasons.push(`${labelOf(facet)} — ${problem}`);
     }
     if (reasons.length) blockers.push(`"${rule.name || "Untitled rule"}": ${reasons.join(" ")}`);
   }

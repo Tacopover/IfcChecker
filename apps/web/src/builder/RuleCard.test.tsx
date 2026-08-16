@@ -139,7 +139,7 @@ describe("RuleCard", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole("button", { name: "+ condition" }));
+    await user.selectOptions(screen.getByLabelText("Add a requirement"), "property");
     expect(screen.getAllByLabelText("Operator")).toHaveLength(2);
 
     await user.click(screen.getAllByRole("button", { name: "Duplicate condition" })[0]);
@@ -147,6 +147,30 @@ describe("RuleCard", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Remove condition" })[0]);
     expect(screen.getAllByLabelText("Operator")).toHaveLength(2);
+  });
+
+  // Editing an imported facet is half of writing one. Until this control existed, a classification,
+  // material, partOf or entity requirement could only be reached by importing a file that had one.
+  it("adds a requirement of any of the six kinds, filled from the model", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...RULE, conditions: [] }} />);
+
+    await user.selectOptions(screen.getByLabelText("Add a requirement"), "material");
+    expect(screen.getByLabelText("Material operator")).toHaveValue("exists");
+
+    await user.selectOptions(screen.getByLabelText("Add a requirement"), "entity");
+    expect(screen.getByLabelText("Class")).toHaveValue("IFCWALL");
+  });
+
+  it("narrows what the rule selects, with the new facet stating no cardinality", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    await user.selectOptions(screen.getByLabelText("Narrow what this rule selects"), "material");
+
+    const row = within(container.querySelector<HTMLElement>(".applicability-facet")!);
+    expect(row.getByLabelText("Material operator")).toBeInTheDocument();
+    expect(row.queryByLabelText("Cardinality")).toBeNull();
   });
 
   it("renames without remounting the row underneath it", async () => {

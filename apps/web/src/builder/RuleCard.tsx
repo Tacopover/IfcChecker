@@ -3,7 +3,12 @@ import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ApplicabilityFacetDraft, FacetDraft, RuleDraft } from "@ifc-qa/ids-validator";
 import type { ModelIntrospection } from "./introspect.js";
 import { evaluateRuleDraft } from "./evaluateDraft.js";
-import { defaultConditionFor } from "./ConditionRow.js";
+import {
+  APPLICABILITY_KINDS,
+  REQUIREMENT_KINDS,
+  defaultApplicabilityFacetFor,
+  defaultFacetFor,
+} from "./defaultFacets.js";
 import { ruleProblems } from "./completeness.js";
 import { FailingElementsTable } from "./FailingElementsTable.js";
 import { ApplicabilityRow, RequirementRow } from "./FacetRow.js";
@@ -253,6 +258,28 @@ export function RuleCard({
                 onDelete={() => deleteApplicabilityFacet(facet.id)}
               />
             ))}
+            <select
+              className="linkbtn"
+              aria-label="Narrow what this rule selects"
+              value=""
+              onChange={(event) => {
+                if (!event.target.value) return;
+                updateApplicabilityFacets([
+                  ...(rule.applicabilityFacets ?? []),
+                  defaultApplicabilityFacetFor(
+                    event.target.value as ApplicabilityFacetDraft["kind"],
+                    source
+                  ),
+                ]);
+              }}
+            >
+              <option value="">+ narrow by…</option>
+              {APPLICABILITY_KINDS.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
             {problems.applicability && <p className="rule-error">{problems.applicability}</p>}
           </div>
 
@@ -276,13 +303,27 @@ export function RuleCard({
                 />
               ))
             )}
-            <button
-              type="button"
+            {/* A select rather than the button it replaces: every kind `ids.xsd` allows here has a
+                row now, and one that can only be reached by importing a file is not authorable. */}
+            <select
               className="linkbtn"
-              onClick={() => updateConditions([...rule.conditions, defaultConditionFor(source)])}
+              aria-label="Add a requirement"
+              value=""
+              onChange={(event) => {
+                if (!event.target.value) return;
+                updateConditions([
+                  ...rule.conditions,
+                  defaultFacetFor(event.target.value as FacetDraft["kind"], source),
+                ]);
+              }}
             >
-              + condition
-            </button>
+              <option value="">+ condition…</option>
+              {REQUIREMENT_KINDS.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
 
             {/* Permanent, not dismissible: the moment this matters is export, which can happen
                 long after the import, and a count above that ignores these would be a lie. */}
