@@ -201,6 +201,40 @@ describe("RuleCard", () => {
     expect(screen.queryByLabelText("Predefined type")).toBeNull();
   });
 
+  // Four attributes and the schema versions, all of which survived a round trip before this and
+  // none of which could be edited.
+  it("edits what the specification says about itself", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByRole("button", { name: /About this specification/ }));
+    await user.type(screen.getByLabelText("Identifier"), "S1");
+    await user.type(screen.getByLabelText("Instructions"), "Ask the architect.");
+
+    expect(screen.getByLabelText("Identifier")).toHaveValue("S1");
+    expect(screen.getByLabelText("Instructions")).toHaveValue("Ask the architect.");
+  });
+
+  // `ifcVersion` is a space-separated list drawn from a closed enumeration, so a text box would let
+  // a user write a value that makes the document invalid.
+  it("picks schema versions from the three the schema lists, and refuses none", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByRole("button", { name: /About this specification/ }));
+
+    const ifc4 = screen.getByRole("checkbox", { name: "IFC4" });
+    expect(ifc4).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "IFC2X3" })).not.toBeChecked();
+
+    await user.click(screen.getByRole("checkbox", { name: "IFC2X3" }));
+    expect(screen.getByRole("checkbox", { name: "IFC2X3" })).toBeChecked();
+
+    await user.click(ifc4);
+    await user.click(screen.getByRole("checkbox", { name: "IFC2X3" }));
+    expect(screen.getByText(/Schema version — IDS requires at least one/)).toBeInTheDocument();
+  });
+
   it("renames without remounting the row underneath it", async () => {
     const user = userEvent.setup();
     render(<Harness />);

@@ -233,6 +233,20 @@ function attributeXml(name: string, value: string | null | undefined): string {
   return value === null || value === undefined ? "" : ` ${name}="${escapeXml(value)}"`;
 }
 
+/**
+ * What a rule states when it names no schema version.
+ *
+ * `ids.xsd` makes `ifcVersion` required, so there is no "state none" — this is the value the
+ * exporter has always written for an authored rule, kept as the default rather than becoming a
+ * choice the user has to make before their first export.
+ */
+export const DEFAULT_IFC_VERSION = "IFC4";
+
+/** An attribute the schema makes optional: empty and absent both write nothing. */
+function optionalAttributeXml(name: string, value: string | null | undefined): string {
+  return typeof value === "string" && value !== "" ? attributeXml(name, value) : "";
+}
+
 function attributesXml(attributes: Record<string, string>): string {
   return Object.entries(attributes)
     .map(([name, value]) => attributeXml(name, value))
@@ -319,9 +333,15 @@ function specificationXml(rule: RuleDraft): string {
     facetXml(facet, "applicability")
   );
 
-  const specAttributes = source
-    ? attributeXml("name", rule.name) + attributesXml(source.attributes)
-    : `${attributeXml("name", rule.name)} ifcVersion="IFC4"`;
+  // The five the panel edits are written from the draft; anything else the source carried follows
+  // verbatim. Attribute order is not significant to a reader, so hoisting these changes no meaning.
+  const specAttributes =
+    attributeXml("name", rule.name) +
+    attributeXml("ifcVersion", rule.ifcVersion || DEFAULT_IFC_VERSION) +
+    optionalAttributeXml("identifier", rule.identifier) +
+    optionalAttributeXml("description", rule.description) +
+    optionalAttributeXml("instructions", rule.instructions) +
+    attributesXml(source?.attributes ?? {});
 
   const applicabilityAttributes = source
     ? attributesXml(source.applicabilityAttributes)
@@ -338,7 +358,7 @@ function specificationXml(rule: RuleDraft): string {
     source && source.requirementsAttributes === null && facets.length === 0
       ? []
       : [
-          `      <requirements${attributesXml(source?.requirementsAttributes ?? {})}>`,
+          `      <requirements${optionalAttributeXml("description", rule.requirementsDescription)}${attributesXml(source?.requirementsAttributes ?? {})}>`,
           ...facets,
           `      </requirements>`,
         ];

@@ -316,6 +316,22 @@ export interface RuleDraft {
    * starts reading a `<material>`, nothing downstream has to be taught what one is.
    */
   conditions: FacetDraft[];
+  /**
+   * The schema versions this specification is written against, space-separated.
+   *
+   * `ids.xsd` makes it **required** and lists exactly three values, so a rule states one or more of
+   * `IFC2X3`, `IFC4` and `IFC4X3_ADD2` and nothing else. Absent means `IFC4`, which is what the
+   * exporter wrote for every authored rule before this field existed. 344 of the 464 hand-authored
+   * corpus specifications say `"IFC2X3 IFC4"`.
+   */
+  ifcVersion?: string;
+  /** A machine-readable id the author may give the specification. `ids.xsd` does not make it unique. */
+  identifier?: string | null;
+  /** What the specification is about, and what to do about it — both optional attributes. */
+  description?: string | null;
+  instructions?: string | null;
+  /** `<requirements description>`, which is prose about the requirements rather than about the rule. */
+  requirementsDescription?: string | null;
   imported?: ImportedRuleSource;
 }
 

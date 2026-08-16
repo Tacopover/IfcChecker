@@ -117,6 +117,8 @@ function labelOf(facet: FacetDraft): string {
 export interface RuleProblems {
   applicability: string | null;
   conditions: string | null;
+  /** What the specification says about itself, rather than what it checks. */
+  metadata: string | null;
 }
 
 export function ruleProblems(rule: RuleDraft): RuleProblems {
@@ -147,12 +149,18 @@ export function ruleProblems(rule: RuleDraft): RuleProblems {
       checksNothing && !applicabilityOnly
         ? "No conditions — there is nothing for this rule to check."
         : null,
+    // `undefined` is a rule that has never stated one, which the exporter defaults; `""` is one the
+    // user cleared, and `ids.xsd` makes the attribute required. The exporter still writes the
+    // default either way, so the file stays valid — this is what stops it being written silently.
+    metadata: rule.ifcVersion === "" ? "Schema version — IDS requires at least one." : null,
   };
 }
 
 function ruleProblemList(rule: RuleDraft): string[] {
-  const { applicability, conditions } = ruleProblems(rule);
-  return [applicability, conditions].filter((problem): problem is string => problem !== null);
+  const { applicability, conditions, metadata } = ruleProblems(rule);
+  return [applicability, conditions, metadata].filter(
+    (problem): problem is string => problem !== null
+  );
 }
 
 /**

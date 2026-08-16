@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ApplicabilityFacetDraft, FacetDraft, RuleDraft } from "@ifc-qa/ids-validator";
 import { plainName } from "@ifc-qa/ids-validator";
@@ -15,6 +15,7 @@ import { FailingElementsTable } from "./FailingElementsTable.js";
 import { ApplicabilityRow, RequirementRow } from "./FacetRow.js";
 import { FacetValueEditor } from "./FacetValueEditor.js";
 import { predefinedTypeOptions } from "./EntityRow.js";
+import { SpecificationInfoPanel } from "./SpecificationInfoPanel.js";
 import { nextDraftId } from "./draftIds.js";
 
 /**
@@ -72,6 +73,9 @@ export function RuleCard({
   const scoreClass =
     matched === 0 || rule.conditions.length === 0 ? "empty" : failing === 0 ? "all-pass" : "has-fail";
 
+  // Local, because it is presentation only: which panels are open is not part of the draft, and
+  // the page already tracks which rules are open.
+  const [infoOpen, setInfoOpen] = useState(false);
   const predefinedType = rule.entityPredefinedType ?? null;
   const predefinedTypes = useMemo(() => predefinedTypeOptions(source, null), [source]);
 
@@ -403,6 +407,13 @@ export function RuleCard({
               </div>
             )}
           </div>
+
+          <SpecificationInfoPanel
+            rule={rule}
+            open={infoOpen}
+            onToggle={() => setInfoOpen((wasOpen) => !wasOpen)}
+            onChange={onChange}
+          />
 
           <div className="rule-foot">
             <span className={`score ${scoreClass}`}>

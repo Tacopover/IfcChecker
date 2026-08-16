@@ -1,5 +1,6 @@
-// `<info>` fidelity over the corpus: import every real .ids file, export it again, and compare the
-// eight children `ids.xsd` names, text for text.
+// Metadata fidelity over the corpus: import every real .ids file, export it again, and compare the
+// parts `parseIdsXml` never reads — the eight children of `<info>`, and the five attributes
+// `ids.xsd` names on a `<specification>`.
 //
 // The round-trip harness beside this one cannot answer the question. It pins `date` so its output
 // is stable, and it compares what `parseIdsXml` sees — which reads no `<info>` at all. So a change
@@ -12,6 +13,7 @@ import { idsXmlToDrafts } from "/root/IfcChecker/packages/ids-validator/src/impo
 import { buildIdsXml } from "/root/IfcChecker/packages/ids-validator/src/build-ids.ts";
 
 const ROOT = process.argv[2] ?? "/tmp/ids-corpus";
+const SPEC_ATTRIBUTES = ["name", "ifcVersion", "identifier", "description", "instructions"];
 const TAGS = [
   "title",
   "copyright",
@@ -77,7 +79,28 @@ const files = walk(ROOT);
 let compared = 0;
 let identical = 0;
 let dated = 0;
+let specs = 0;
+let specsIdentical = 0;
 const lost = new Map();
+const lostAttributes = new Map();
+
+/** Every `<specification>` open tag's attributes, in the order they were written. */
+function specificationAttributesOf(xml) {
+  return [...xml.matchAll(/<(?:\w+:)?specification\b([^>]*)>/g)].map((match) => {
+    const found = {};
+    for (const attribute of SPEC_ATTRIBUTES) {
+      const value = new RegExp(`\\b${attribute}="([^"]*)"`).exec(match[1]);
+      // Decoded, because `escapeXml` writes `&apos;` inside a double-quoted attribute where the
+      // source wrote a bare `'`. Legal, unnecessary, and the same character to any reader — one
+      // corpus description differs only this way.
+      found[attribute] =
+        value === null
+          ? null
+          : value[1].replace(/&(amp|lt|gt|quot|apos);/g, (_whole, name) => ENTITIES[name]);
+    }
+    return found;
+  });
+}
 
 for (const file of files) {
   const source = readFileSync(file, "utf8");
@@ -105,6 +128,21 @@ for (const file of files) {
   // being authored and is not a loss of anything the source carried. Counted, not called a failure.
   if (before.date === null && (after?.date ?? null) !== null) dated++;
 
+  const beforeSpecs = specificationAttributesOf(source);
+  const afterSpecs = specificationAttributesOf(out);
+  for (let index = 0; index < beforeSpecs.length; index += 1) {
+    specs++;
+    const differingAttributes = SPEC_ATTRIBUTES.filter(
+      (attribute) => beforeSpecs[index][attribute] !== (afterSpecs[index]?.[attribute] ?? null)
+    );
+    if (differingAttributes.length === 0) specsIdentical++;
+    else {
+      for (const attribute of differingAttributes) {
+        lostAttributes.set(attribute, (lostAttributes.get(attribute) ?? 0) + 1);
+      }
+    }
+  }
+
   const differing = TAGS.filter(
     (tag) =>
       (before[tag] ?? null) !== (after?.[tag] ?? null) &&
@@ -118,9 +156,16 @@ console.log(`corpus root                      ${ROOT}`);
 console.log(`files with an <info>             ${compared}`);
 console.log(`reproduced child for child       ${identical} / ${compared}`);
 console.log(`dated, having stated none        ${dated}`);
+console.log(`specification attributes kept    ${specsIdentical} / ${specs}`);
 if (lost.size > 0) {
   console.log("\nchildren that differ:");
   for (const [tag, count] of [...lost.entries()].sort((a, b) => b[1] - a[1])) {
     console.log(`  ${String(count).padStart(6)}  ${tag}`);
+  }
+}
+if (lostAttributes.size > 0) {
+  console.log("\nspecification attributes that differ:");
+  for (const [name, count] of [...lostAttributes.entries()].sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${String(count).padStart(6)}  ${name}`);
   }
 }

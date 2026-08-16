@@ -889,19 +889,40 @@ describe("idsXmlToDrafts pass-through", () => {
 });
 
 describe("idsXmlToDrafts document metadata", () => {
-  it("carries specification, applicability and requirements attributes the builder has no field for", () => {
+  // The five `ids.xsd` names on a `<specification>` are fields of the rule now, so the metadata
+  // panel can edit them. What stays in the verbatim bag is only what the schema does not name.
+  it("reads the specification attributes the schema names into fields of their own", () => {
     const [rule] = idsXmlToDrafts(MIXED).rules;
 
-    expect(rule.imported?.attributes).toEqual({
+    expect(rule).toMatchObject({
       identifier: "S1",
       ifcVersion: "IFC2X3 IFC4",
       description: "Spec-level prose the builder has no field for.",
       instructions: "Fill these in from the wall schedule.",
+      requirementsDescription: "Requirement-level prose, which lives on the element itself.",
     });
+    expect(rule.imported?.attributes).toEqual({});
+    expect(rule.imported?.requirementsAttributes).toEqual({});
+  });
+
+  // `minOccurs` and `maxOccurs` stay verbatim: they belong to the applicability, not to the
+  // specification, and the builder states no control for them.
+  it("still carries the applicability's own attributes verbatim", () => {
+    const [rule] = idsXmlToDrafts(MIXED).rules;
+
     expect(rule.imported?.applicabilityAttributes).toEqual({ minOccurs: "0", maxOccurs: "unbounded" });
-    expect(rule.imported?.requirementsAttributes).toEqual({
-      description: "Requirement-level prose, which lives on the element itself.",
-    });
+  });
+
+  // `ids.xsd` makes ifcVersion required, so a source stating none was already invalid and a reader
+  // would have had to assume something. The default is what the exporter has always written.
+  it("defaults ifcVersion for a source that states none", () => {
+    const { rules } = idsXmlToDrafts(
+      document(`<specification name="S"><applicability>
+        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+      </applicability></specification>`)
+    );
+
+    expect(rules[0].ifcVersion).toBe("IFC4");
   });
 
   it("distinguishes an applicability-only specification from one with empty requirements", () => {

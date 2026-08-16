@@ -2463,3 +2463,26 @@ col.col-message {
   margin: 0;
   padding-left: 1rem;
 }
+
+.docinfo-field.versions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.docinfo-field.versions label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+/* The rule's own panel sits inside a card that already has padding. */
+.rule-body > .docinfo {
+  margin: 0.55rem 0 0;
+}

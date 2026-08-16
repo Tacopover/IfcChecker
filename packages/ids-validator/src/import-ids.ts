@@ -18,6 +18,7 @@ import type {
   ValueDraft,
 } from "./rule-draft.js";
 import { patternValueDraft } from "./rule-draft.js";
+import { DEFAULT_IFC_VERSION } from "./build-ids.js";
 
 /** A specification kept out of the rule list because its applicability cannot be represented. */
 export interface RefusedSpecification {
@@ -150,6 +151,9 @@ function attributeOrNull(node: OrderedNode, name: string): string | null {
   return value === undefined ? null : String(value);
 }
 
+/** The `<specification>` attributes the metadata panel edits, each read into a field of its own. */
+const SPECIFICATION_FIELDS = ["name", "ifcVersion", "identifier", "description", "instructions"];
+
 /** Attributes with the parser's prefix stripped, so they can be written straight back out. */
 function plainAttributes(node: OrderedNode | null, except: string[] = []): Record<string, string> {
   const out: Record<string, string> = {};
@@ -267,16 +271,29 @@ function readSpecification(
   }
 
   const imported: ImportedRuleSource = {
-    attributes: plainAttributes(node, ["name"]),
+    // The five the panel edits are read into fields of their own; whatever else the source carried
+    // stays here and is written back verbatim, which is what keeps an unknown attribute.
+    attributes: plainAttributes(node, SPECIFICATION_FIELDS),
     applicabilityAttributes: plainAttributes(applicabilityNode),
     entityNamesAsEnumeration: asEnumeration,
-    requirementsAttributes: requirementsNode ? plainAttributes(requirementsNode) : null,
+    requirementsAttributes: requirementsNode
+      ? plainAttributes(requirementsNode, ["description"])
+      : null,
     passThrough,
   };
 
   rules.push({
     id: draftId("r"),
     name,
+    // `ids.xsd` makes ifcVersion required, so a source stating none was invalid on the way in and
+    // the default is what a reader would have had to assume anyway.
+    ifcVersion: attributeOrNull(node, "ifcVersion") ?? DEFAULT_IFC_VERSION,
+    identifier: attributeOrNull(node, "identifier"),
+    description: attributeOrNull(node, "description"),
+    instructions: attributeOrNull(node, "instructions"),
+    requirementsDescription: requirementsNode
+      ? attributeOrNull(requirementsNode, "description")
+      : null,
     entityTypes,
     // Absent rather than empty for the rule that states none, so a file whose applicability is an
     // entity list alone produces exactly the draft it always did.
