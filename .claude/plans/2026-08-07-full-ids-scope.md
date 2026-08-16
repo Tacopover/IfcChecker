@@ -1836,3 +1836,122 @@ the message now says which of the two faults a file has.
   `applicability/attribute` (the `<n>` files), 1 `applicability/material` (an `xs:annotation`).
 - **An annotation-carrying `ValueDraft` is now the single largest remaining mechanism**: 5 of the 24
   pass-throughs and 4 of the 17 refusals turn on it, which is more than anything else left.
+
+## Stage 6 — an annotation-carrying `ValueDraft`: the decision, written before the code
+
+An author may write prose inside an `<xs:restriction>`, and `ids.xsd` fixes it as the **first** child:
+
+```xml
+<value>
+  <xs:restriction base="xs:string">
+    <xs:annotation><xs:documentation>Why this rule exists</xs:documentation></xs:annotation>
+    <xs:pattern value="[0-9]\.[0-9]" />
+  </xs:restriction>
+</value>
+```
+
+### Three measurements taken first, and two of them changed the stage
+
+**The validator already reads through an annotation.** The session prompt said both readers refuse
+one. `parse-ids.ts` has carried `annotation` in `RESTRICTION_FACETS_READ` since `55f6871`, and a
+probe over the three places a restriction can stand confirms it: `unsupported` is empty and the
+facet compiles. So there is no validator behaviour to change, and the validator commit is a test
+that pins the tolerance rather than a change that creates it. **Nothing on any guard rail can move
+for it.**
+
+**0 of the 334 conformance cases writes an `xs:annotation`** — `grep -rl annotation` over
+`.conformance/TestCases` finds none. Measured before any code, the way the last two stages did. So
+**the scoreboard cannot move this stage in either direction**, and its only role is the ratchet: 317
+agreed / 15 wrong / 2 refused / 0 errored, 0 false passes, must all stay where they are.
+
+**The corpus holds annotations at two levels, and only one of them is this stage.** Six files carry
+one, 15 distinct fragments in all:
+
+| where it stands | count | what it costs today |
+| --- | --- | --- |
+| first child of an `<xs:restriction>` | 12 | 7 pass-throughs, 2 whole-specification refusals |
+| child of an `<xs:enumeration>`, one per member | 3 | **nothing yet — silently dropped** |
+
+The second level is the one worth writing down. `readValueDraft` reads an `<xs:enumeration>`'s
+`value` attribute and never looks at its children, so a per-member annotation is read past and lost.
+All three sit in `IDS_random_example.ids`'s `ramen`, which is refused whole today and therefore kept
+verbatim — so the loss is latent, not live. **This stage is what would make it live**, because
+reading the annotation on `ramen`'s applicability classification is exactly what turns that
+specification into a rule. Neither the round-trip nor the info-fidelity harness could see it:
+`parseIdsXml` ignores an enumeration's children too, so both sides of the comparison would agree
+about a document that had lost the author's prose.
+
+### The decision: an `annotation` field on the five restriction-bearing `ValueDraft` variants
+
+```ts
+export type ValueDraft = { kind: "simple"; value: string } | RestrictionValueDraft;
+
+export type RestrictionValueDraft = (
+  | { kind: "enum"; values: string[] }
+  | { kind: "pattern"; source: string }
+  | { kind: "affix"; operator: AffixOperator; literal: string }
+  | { kind: "bounds"; base: string; min: BoundDraft | null; max: BoundDraft | null }
+  | ({ kind: "length" } & LengthDraft)
+) & { annotation?: string };
+```
+
+**Not on `simple`, and that asymmetry is the schema's.** The annotation lives inside the
+`<xs:restriction>`, and a `<simpleValue>` has no restriction to put one in. A field on all six
+variants would let the builder hold prose the exporter has nowhere to write.
+
+**Why on the value rather than beside it.** `ids.xsd` types **nine** parameters across the six facet
+kinds as an `idsValue`, four of the kinds carrying two of them, plus the rule's own
+`entityPredefinedType`. Storing the annotation beside the value the way `explicitCardinality` is
+stored beside the cardinality means ten new fields — `nameAnnotation`, `valueAnnotation`,
+`systemAnnotation`, `propertySetAnnotation`, `baseNameAnnotation` and a `predefinedTypeAnnotation`
+in each of the three places one nests. One field on the value instead reaches all ten through the
+three functions that already serve every parameter: `idsValueXml` writes them all, `readValueDraft`
+reads them all, `FacetValueEditor` edits them all. The analogy to `explicitCardinality` argues the
+other way once it is stated plainly: a cardinality is a bare string with no room for a flag, and a
+`ValueDraft` is an object with room.
+
+**What it costs the other way.** Two things, both real:
+
+- **A change of operator drops it.** `valueDraftForOperator` builds a fresh value from an operator
+  and a literal, so switching a row from `matches` to `be exactly` produces a `simple` value that
+  cannot carry an annotation — the author's prose is destroyed by an edit that is not about it.
+  Stored beside the value, it would survive. This is paid rather than avoided: the editor carries
+  the annotation across every operator that can hold one, and the one that cannot is the one whose
+  file has no restriction left to put it in.
+- **The applicability `<entity><name>` still cannot hold one.** That name is `entityTypes: string[]`
+  on the rule, not a `ValueDraft`, so there is no value for the field to sit on. It keeps refusing,
+  and the corpus says that costs nothing: all three annotated entity names are
+  `<xs:pattern value="IFCFLOWFITTING|IFCFLOWSEGMENT"/>` and its like, refused for the pattern
+  whatever happens to the annotation. **None of the 12 `entity/name` refusals is claimed by this
+  stage** — the note at the end of the metadata section said four of the refusals turn on an
+  annotation, and the true number is two.
+
+### Read only what the exporter reproduces exactly
+
+The same discipline `affixReadingOf` and the non-string base check already apply. `<xs:annotation>`
+has a content model of its own — `(appinfo | documentation)*`, an `id`, and `source` and `xml:lang`
+on each `<xs:documentation>`, whose content is mixed and may hold markup. The draft carries a plain
+string, so a string is claimed only where writing it back reproduces the source:
+
+- exactly one `<xs:documentation>` child, holding text and no elements;
+- no attributes on either element;
+- standing as the restriction's first element child, which is where XSD puts it.
+
+Anything else keeps the facet verbatim, with a reason naming what stopped it. `""` and absent stay
+different, the way `undefined` and `""` had to differ on `ifcVersion`: a document stating an empty
+`<xs:documentation>` gets one back.
+
+**An annotation inside a restriction facet refuses.** A `ValueDraft`'s `enum` is a list of strings
+and has nowhere to hold prose per member. Refusing keeps the whole facet verbatim, which is what
+already happens to `ramen` today — the difference is that it will now be refused for the reason it
+has, rather than passed through for a different one and then read past.
+
+### The staging, and what each commit is predicted to move
+
+| | commit | predicted refusals | predicted pass-through | why |
+| --- | --- | --- | --- | --- |
+| **1** | the validator's tolerance is pinned | 17, unmoved | 24, unmoved | it already reads through one; the test only records it |
+| **2** | the draft carries it, both ways | 17 → **15** | 24 → **18** | 7 annotated facets read, less the one `ramen` enum-annotation now refused for its own reason |
+| **3** | the row shows it, and an edit keeps it | 15 | 18 | authoring-side; a number moving here means the draft model leaked into the engine |
+
+Refused-whole and pass-through are read as a pair, so the number to watch is **41 → 33**.
