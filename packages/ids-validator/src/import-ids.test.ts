@@ -465,6 +465,23 @@ describe("idsXmlToDrafts values", () => {
     ).toEqual({ kind: "pattern", sources: ["[a-z]{2}[0-9]{2}", "[A-Z]{2}[0-9]{2}"] });
   });
 
+  // An enumeration lists values of whatever type its base names, and the suite writes one over
+  // `xs:double`. The base reaches the compiled restriction no more than a range's does —
+  // `matchesLiteral` compares "42" and 42 correctly — so it is carried for the export alone.
+  it("keeps the base an enumeration was written with, and states none for the string one", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:double"><xs:enumeration value="42" /><xs:enumeration value="43" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "enum", values: ["42", "43"], base: "xs:double" });
+
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:enumeration value="A" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "enum", values: ["A"] });
+  });
+
   // No operator states a disjunction, so the row shows it rather than mislabelling it — the same
   // honest `null` a numeric range and a length already get.
   it("gives several patterns no friendly reading", () => {
@@ -895,8 +912,15 @@ describe("idsXmlToDrafts pass-through", () => {
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="D.*" /><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation></xs:restriction></value></attribute>`,
       /not the first thing in the restriction/,
     ],
+    // A pattern is matched against a string and a length counts characters, so a numeric base on
+    // either is a document the exporter would retype. An enumeration lists values of whatever type
+    // the base names, which is why it is read rather than kept.
     [
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:enumeration value="42" /></xs:restriction></value></attribute>`,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:pattern value="4.*" /></xs:restriction></value></attribute>`,
+      /base="xs:double"/,
+    ],
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minLength value="2" /></xs:restriction></value></attribute>`,
       /base="xs:double"/,
     ],
     // XSD intersects a range with an enumeration; a ValueDraft states one of the two, so importing

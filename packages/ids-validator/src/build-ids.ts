@@ -62,9 +62,12 @@ function restrictionPartsOf(
   itemIndent: string
 ): { base: string; body: string } {
   switch (value.kind) {
+    // The author's base, or the string base every authored rule states. An enumeration is the one
+    // string-shaped restriction whose members may be typed — `matchesLiteral` compares "42" and 42
+    // correctly either way, so this is reproduction and not a change of meaning.
     case "enum":
       return {
-        base: "xs:string",
+        base: escapeXml(value.base ?? "xs:string"),
         body: value.values
           .map((entry) => `\n${itemIndent}<xs:enumeration value="${escapeXml(entry)}" />`)
           .join(""),

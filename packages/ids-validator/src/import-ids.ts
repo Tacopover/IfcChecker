@@ -1003,22 +1003,32 @@ function readValueDraft(
   // A range keeps whatever base the author wrote, right down to a capitalised `xs:Decimal`.
   if (bounds.length > 0) return carrying(readBoundsDraft(base ?? "xs:double", bounds));
 
-  // A pattern, an enumeration and a length are all string constructs, so anything left here is
-  // based on a type we would retype on the way back out.
-  if (base !== null && base.slice(base.indexOf(":") + 1) !== "string") {
-    return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
-  }
+  // A pattern and a length are string constructs — IDS says a pattern is matched against a string,
+  // and a length counts characters — so a numeric base on either is a document we would retype on
+  // the way back out. An enumeration is not: it lists values of whatever type the base names, and
+  // the suite writes one over `xs:double`.
+  const nonString = base !== null && base.slice(base.indexOf(":") + 1) !== "string";
 
   if (patterns.length > 0) {
+    if (nonString) {
+      return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
+    }
     return carrying({
       value: patternValueDraft(patterns.map((node) => attributeOrNull(node, "value") ?? "")),
     });
   }
-  if (lengths.length > 0) return carrying(readLengthDraft(lengths));
+  if (lengths.length > 0) {
+    if (nonString) {
+      return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
+    }
+    return carrying(readLengthDraft(lengths));
+  }
   return carrying({
     value: {
       kind: "enum",
       values: enumerations.map((child) => attributeOrNull(child, "value") ?? ""),
+      // Absent for the string base every authored rule writes, so an old file imports as it did.
+      ...(nonString ? { base: base as string } : {}),
     },
   });
 }

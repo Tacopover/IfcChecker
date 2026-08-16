@@ -89,7 +89,15 @@ export type ValueDraft = { kind: "simple"; value: string } | RestrictionValueDra
  * all six variants would let a draft hold prose the exporter has nowhere to write.
  */
 export type RestrictionValueDraft = (
-  | { kind: "enum"; values: string[] }
+  /**
+   * The values the parameter may hold, and the type they are written as.
+   *
+   * `base` is absent for everything the builder authors, which is `xs:string`. A file may state a
+   * numeric one — the suite's `typecast_checking_may_also_occur_within_enumeration_restrictions`
+   * writes `xs:double` — and it reaches the compiled restriction no more than a range's base does:
+   * `matchesLiteral` already compares `"42"` and `42` correctly. It is carried for the export.
+   */
+  | { kind: "enum"; values: string[]; base?: string }
   /**
    * The regexes the value may match — a **list**, because XSD 1.0 §4.3.4 reads several
    * `<xs:pattern>` in one restriction step as a disjunction, and joining them into one source
