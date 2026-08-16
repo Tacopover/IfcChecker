@@ -4,6 +4,7 @@ import { friendlyReadingOf, plainName, plainNameOf, valueDraftForOperator } from
 import type { FieldsForResult } from "./introspect.js";
 import type { ObservedValue } from "./ValuePicker.js";
 import { FacetValueEditor, OPERATORS } from "./FacetValueEditor.js";
+import { FacetRowFrame, errorIdOf } from "./FacetRowFrame.js";
 import { conditionProblem } from "./completeness.js";
 import { nextDraftId } from "./draftIds.js";
 
@@ -189,8 +190,7 @@ export function ConditionRow({
           (field) => field.name
         );
 
-  const scoreClass = matched === 0 ? "empty" : hits === matched ? "all-pass" : "has-fail";
-  const errorId = `cond-error-${condition.id}`;
+  const errorId = errorIdOf(condition.id);
 
   /** The same operator and text, with the ticked values dropped — a new field has its own. */
   function retargetedValue() {
@@ -255,7 +255,17 @@ export function ConditionRow({
 
 
   return (
-    <div className={condition.cardinality === "prohibited" ? "cond prohibited" : "cond"}>
+    <FacetRowFrame
+      id={condition.id}
+      prohibited={condition.cardinality === "prohibited"}
+      hits={hits}
+      matched={matched}
+      instructions={condition.instructions}
+      uri={uri}
+      error={error}
+      onDuplicate={onDuplicate}
+      onDelete={onDelete}
+    >
       <select
         aria-label="Condition kind"
         value={condition.kind}
@@ -359,44 +369,6 @@ export function ConditionRow({
         errorId={errorId}
         invalid={error !== null}
       />
-
-      <span className={`cond-score score ${scoreClass}`}>
-        <span className="score-text num">
-          {hits}/{matched}
-        </span>
-        <button
-          type="button"
-          className="iconbtn"
-          title="Duplicate condition"
-          aria-label="Duplicate condition"
-          onClick={onDuplicate}
-        >
-          ⧉
-        </button>
-        <button
-          type="button"
-          className="iconbtn danger"
-          title="Remove condition"
-          aria-label="Remove condition"
-          onClick={onDelete}
-        >
-          ✕
-        </button>
-      </span>
-
-      {(condition.instructions || uri) && (
-        <span className="cond-note">
-          {condition.instructions}
-          {/* Shown as text, never as a link: the address comes from a file someone else wrote. */}
-          {uri && <span className="cond-uri">{uri}</span>}
-        </span>
-      )}
-
-      {error && (
-        <span className="cond-error" id={errorId}>
-          {error}
-        </span>
-      )}
-    </div>
+    </FacetRowFrame>
   );
 }
