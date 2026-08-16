@@ -2099,3 +2099,50 @@ of these". The row says what it holds rather than mislabelling it, and the value
 | **3** | the row states what it holds | 318 | 15 |
 
 Refusals stay at 15: no applicability facet in the corpus writes two patterns.
+
+## Stage 7 — several patterns, and a typed enumeration — landed and measured 2026-08-16
+
+Three commits, continuing on `feat/ids-annotation`.
+
+| | commit | conformance | refused whole | pass-through | gate |
+| --- | --- | --- | --- | --- | --- |
+| **1** | the validator ORs several patterns | **317 → 318** | 15 | 18 | 880 → 882 |
+| **2** | the draft carries them, both ways | 318 | 15 | **18 → 15** | 882 → 888 |
+| **3** | an enumeration keeps its base | 318 | 15 | **15 → 14** | **890** |
+
+**Refused-whole plus pass-through fell 33 → 29.** The predicted third commit of the plan above —
+"the row states what it holds" — landed inside commit 2 rather than beside it: the row's phrase is
+part of the same rename, and a commit that changed `source` to `sources` without it would not have
+compiled.
+
+`restriction/pass-regex_patterns_work_in_OR_2_3` is the case gained, and it is the only one, with
+none lost and 0 false passes. Commits 2 and 3 moved nothing on the scoreboard, which is what says
+the draft model stayed out of the engine.
+
+### The importer was stricter than the validator in the one place it should not have been
+
+Commit 1 is a plain correctness fix and the only one of the three that is: `parseRestriction` read
+`nodesNamed(restrictionChildren, "pattern")[0]` and dropped the rest, so a rule matched fewer
+elements than its author wrote and reported a clean verdict about the difference. We agreed with two
+of the three suite cases by reading whichever pattern happened to be written first.
+
+Commits 2 and 3 are the mirror image: the **validator** already handled both, and the **importer**
+kept the facet verbatim. `matchesLiteral` compares `"42"` and `42` correctly whatever base a
+restriction states, which is why `attribute/pass-typecast_checking_may_also_occur_within_enumeration_restrictions`
+agreed all along while its facet could not be shown.
+
+### What is left, and the pair is now 29
+
+- **12 `applicability/entity/name` refusals**: 8 are the `<n>` files, 4 are genuine patterns. The
+  builder's applicability is a list of type chips and a pattern names an open-ended set of classes,
+  so it stays an honest refusal.
+- **2 `applicability/attribute`** (the `<n>` files) and **1 `applicability/classification`** stating
+  no `<system>`, which `ids.xsd` makes mandatory.
+- **13 permanent pass-throughs**: 8 `property` with a pre-1.0 `<name>` and 5 with `measure`.
+- **1 pass-through** for an `<xs:enumeration>` carrying an `<xs:annotation>` of its own. A
+  `ValueDraft`'s enum is a list of strings, so per-member prose needs a model change worth one facet
+  in 7,784 files.
+
+**Nothing left on either list can move the conformance board.** The 14 remaining wrong answers are
+attribute selects, IFC2X3 type-mapping, table and material properties, and inherited psets — none of
+them a restriction question.
