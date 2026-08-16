@@ -2036,3 +2036,66 @@ the stored type alone and leaves one number repeated instead of a split to be id
 - The 15 refusals: 12 `applicability/entity/name` (8 of them the `<n>` files, 4 genuine patterns), 2
   `applicability/attribute` (the `<n>` files), 1 `applicability/classification` stating no
   `<system>`. **No annotation is left on either list.**
+
+## Stage 7 — several `<xs:pattern>` on one value: the decision, written before the code
+
+The note calling this "two restriction families on one value" and "a range intersected with an
+enumeration" described something the corpus does not contain. Reading the three facets settles what
+it is: **two `<xs:pattern>` children inside one `<xs:restriction>`**, which XSD 1.0 §4.3.4 reads as
+a **disjunction** — a value is valid if it matches any one of them. All three are conformance files,
+and their own names say so: `restriction/*-regex_patterns_work_in_OR_*`.
+
+### This is a wrong answer, not only a fidelity gap
+
+Both readers take the first pattern and drop the rest — `parseRestriction` by
+`nodesNamed(restrictionChildren, "pattern")[0]`, the importer by refusing `patterns.length > 1`. On
+the validator side that is a rule that under-matches and reports a clean verdict, which is the
+direction a check must never be wrong in.
+
+The suite says exactly how much: the value in all three models is `XY99`.
+
+| case | patterns, in order | first matches | our answer | expected |
+| --- | --- | --- | --- | --- |
+| `pass-…_1_3` | `[A-Z]{2}[0-9]{2}`, `[a-z]{2}[0-9]{2}` | yes | pass | pass — **agree by luck** |
+| `pass-…_2_3` | `[a-z]{2}[0-9]{2}`, `[A-Z]{2}[0-9]{2}` | no | fail | pass — **wrong** |
+| `fail-…_3_3` | `[a-z]{3}[0-9]{2}`, `[A-Z]{3}[0-9]{2}` | no | fail | fail — agree |
+
+So **the scoreboard can move here, and this is the only remaining mechanism that can**: 317 → 318,
+with the two lucky agreements becoming read ones.
+
+### The decision: the draft holds the list, the compiled restriction holds the disjunction
+
+`ParsedRestriction` does not change at all. A disjunction of anchored patterns is one anchored
+pattern — `^(?:A)$ or ^(?:B)$` is exactly `^(?:A|B)$`, because `|` binds loosest inside the group —
+so `parseRestriction` joins the sources and `compilePattern` compiles one regex. `facet-evaluation`
+is untouched, and its message names the disjunction the author wrote.
+
+The **draft** is where the two must stay apart, because it is what the exporter writes from:
+
+```ts
+| { kind: "pattern"; sources: string[] }   // was: source: string
+```
+
+**Why not join them in the draft too.** `"[a-z]{2}[0-9]{2}|[A-Z]{2}[0-9]{2}"` is a regex the author
+did not write. Handing that back is the thing the import work exists not to do, and it is the same
+rule that keeps `entityNamesAsEnumeration`, a bound's literal `"1.50"` and a range's capitalised
+`xs:Decimal` base.
+
+**Why a list on the existing variant rather than a second kind.** `bounds` holds two edges in one
+variant and `length` holds three; a `patterns` kind beside `pattern` would be the same concept under
+two names, and every switch would carry both arms anyway. The cost is a rename across roughly thirty
+sites, nearly all of them tests.
+
+**What the row shows.** `friendlyReadingOf` answers `matches` for one source and **`null` for
+several**, the honest answer it already gives a range and a length: no operator states "matches any
+of these". The row says what it holds rather than mislabelling it, and the value is kept.
+
+### The staging, and what each commit is predicted to move
+
+| | commit | predicted conformance | predicted pass-through |
+| --- | --- | --- | --- |
+| **1** | the validator ORs them | **317 → 318** | 18, unmoved — the importer is untouched |
+| **2** | the draft carries them, both ways | 318 | **18 → 15** |
+| **3** | the row states what it holds | 318 | 15 |
+
+Refusals stay at 15: no applicability facet in the corpus writes two patterns.

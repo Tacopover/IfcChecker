@@ -1,9 +1,9 @@
 {
-  "generated": "2026-08-12",
+  "generated": "2026-08-16",
   "totals": {
     "cases": 334,
-    "agreed": 317,
-    "wrong": 15,
+    "agreed": 318,
+    "wrong": 14,
     "refused": 2,
     "errored": 0
   },
@@ -59,8 +59,8 @@
     },
     "restriction": {
       "total": 25,
-      "agreed": 24,
-      "wrong": 1,
+      "agreed": 25,
+      "wrong": 0,
       "refused": 0,
       "errored": 0
     },
@@ -354,6 +354,7 @@
     "restriction/pass-regex_patterns_can_be_used_1_3",
     "restriction/pass-regex_patterns_can_be_used_2_3",
     "restriction/pass-regex_patterns_work_in_OR_1_3",
+    "restriction/pass-regex_patterns_work_in_OR_2_3",
     "tolerance/fail-comparison_tolerance_for_floating_point_negative_high_number_lower_bound",
     "tolerance/fail-comparison_tolerance_for_floating_point_negative_high_number_upper_bound",
     "tolerance/fail-comparison_tolerance_for_floating_point_negative_low_number_lower_bound",
@@ -484,12 +485,6 @@
     },
     {
       "case": "property/pass-properties_can_be_inherited_from_the_type_2_2",
-      "expected": "pass",
-      "actual": "fail",
-      "detail": "1 applicable, 0 passed, 1 failed"
-    },
-    {
-      "case": "restriction/pass-regex_patterns_work_in_OR_2_3",
       "expected": "pass",
       "actual": "fail",
       "detail": "1 applicable, 0 passed, 1 failed"

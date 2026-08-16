@@ -706,3 +706,45 @@ describe("parseIdsXml — an xs:annotation", () => {
     expect(spec.applicabilityComplete).toBe(true);
   });
 });
+
+/**
+ * XSD 1.0 §4.3.4: several `<xs:pattern>` in one restriction step are a disjunction. The suite says
+ * so in three case names, and reading only the first was a rule that matched less than it says —
+ * which is a clean verdict on elements the author meant to catch.
+ */
+describe("parseIdsXml — several patterns on one value", () => {
+  const named = (patterns: string) =>
+    slotRestriction(
+      parseIdsXml(
+        specificationXml(
+          `<attribute><name><simpleValue>Name</simpleValue></name>
+             <value><xs:restriction base="xs:string">${patterns}</xs:restriction></value>
+           </attribute>`
+        )
+      )[0].requirements[0]
+    );
+
+  it("admits a value matching any one of them, whichever order they stand in", () => {
+    const first = named(`<xs:pattern value="[A-Z]{2}[0-9]{2}" /><xs:pattern value="[a-z]{2}[0-9]{2}" />`);
+    const second = named(`<xs:pattern value="[a-z]{2}[0-9]{2}" /><xs:pattern value="[A-Z]{2}[0-9]{2}" />`);
+
+    if (first?.kind !== "pattern" || second?.kind !== "pattern") throw new Error("expected patterns");
+    for (const restriction of [first, second]) {
+      expect(restriction.regex.test("XY99")).toBe(true);
+      expect(restriction.regex.test("xy99")).toBe(true);
+      // Still anchored, and still admitting nothing either pattern states.
+      expect(restriction.regex.test("XY999")).toBe(false);
+      expect(restriction.regex.test("XYZ99")).toBe(false);
+    }
+  });
+
+  // A pattern that is itself a disjunction joins the others without bracketing changing anything:
+  // `|` binds loosest inside the group `compilePattern` wraps the whole source in.
+  it("keeps one pattern's own alternation intact when it joins the rest", () => {
+    const restriction = named(`<xs:pattern value="a|b" /><xs:pattern value="c" />`);
+
+    if (restriction?.kind !== "pattern") throw new Error("expected a pattern");
+    for (const value of ["a", "b", "c"]) expect(restriction.regex.test(value)).toBe(true);
+    expect(restriction.regex.test("d")).toBe(false);
+  });
+});
