@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ApplicabilityFacetDraft, FacetDraft, RuleDraft } from "@ifc-qa/ids-validator";
+import { plainName } from "@ifc-qa/ids-validator";
 import type { ModelIntrospection } from "./introspect.js";
 import { evaluateRuleDraft } from "./evaluateDraft.js";
 import {
@@ -12,7 +13,17 @@ import {
 import { ruleProblems } from "./completeness.js";
 import { FailingElementsTable } from "./FailingElementsTable.js";
 import { ApplicabilityRow, RequirementRow } from "./FacetRow.js";
+import { FacetValueEditor } from "./FacetValueEditor.js";
+import { predefinedTypeOptions } from "./EntityRow.js";
 import { nextDraftId } from "./draftIds.js";
+
+/**
+ * What the "narrow by" select carries for the entity's predefined type.
+ *
+ * Not a facet kind, so it cannot collide with one — it is a field on the `<entity>` and is stored
+ * beside the type chips rather than in `applicabilityFacets`.
+ */
+const PREDEFINED_TYPE_OPTION = "entityPredefinedType";
 
 export interface RuleCardProps {
   rule: RuleDraft;
@@ -48,7 +59,7 @@ export function RuleCard({
   // depends on, so renaming the rule does not re-evaluate it.
   const evaluation = useMemo(
     () => evaluateRuleDraft(rule, elements),
-    [rule.entityTypes, rule.applicabilityFacets, rule.conditions, elements]
+    [rule.entityTypes, rule.entityPredefinedType, rule.applicabilityFacets, rule.conditions, elements]
   );
   const source = useMemo(
     () => introspection.fieldsFor(rule.entityTypes),
@@ -60,6 +71,9 @@ export function RuleCard({
   const ratio = matched ? passed / matched : 0;
   const scoreClass =
     matched === 0 || rule.conditions.length === 0 ? "empty" : failing === 0 ? "all-pass" : "has-fail";
+
+  const predefinedType = rule.entityPredefinedType ?? null;
+  const predefinedTypes = useMemo(() => predefinedTypeOptions(source, null), [source]);
 
   const problems = ruleProblems(rule);
   const preserved = rule.imported?.passThrough ?? [];
@@ -248,6 +262,39 @@ export function RuleCard({
                 </optgroup>
               </select>
             </div>
+            {/* Not a facet, so not a `FacetRowFrame`: it narrows the type chips above rather than
+                standing beside them, and there is nothing sensible to duplicate. Shown only when
+                the rule states one, because 6 of 41,751 corpus specifications do. */}
+            {predefinedType !== null && (
+              <div className="cond applicability-facet">
+                <span className="tok">Predefined type</span>
+                <span className="glue">selects only those whose predefined type must</span>
+                <FacetValueEditor
+                  id={rule.id}
+                  label="Predefined type"
+                  operatorLabel="Predefined type operator"
+                  value={predefinedType}
+                  // The row's presence is the statement, so the absent reading is the ✕ beside it
+                  // rather than an operator that would leave an empty row behind.
+                  onChange={(value) =>
+                    onChange({ ...rule, entityPredefinedType: value ?? predefinedType })
+                  }
+                  observed={predefinedTypes}
+                  absentLabel={null}
+                />
+                <span className="cond-score">
+                  <button
+                    type="button"
+                    className="iconbtn danger"
+                    title="Remove the predefined type this rule selects by"
+                    aria-label="Remove the predefined type this rule selects by"
+                    onClick={() => onChange({ ...rule, entityPredefinedType: null })}
+                  >
+                    ✕
+                  </button>
+                </span>
+              </div>
+            )}
             {(rule.applicabilityFacets ?? []).map((facet, index) => (
               <ApplicabilityRow
                 key={facet.id}
@@ -263,13 +310,18 @@ export function RuleCard({
               aria-label="Narrow what this rule selects"
               value=""
               onChange={(event) => {
-                if (!event.target.value) return;
+                const picked = event.target.value;
+                if (!picked) return;
+                if (picked === PREDEFINED_TYPE_OPTION) {
+                  onChange({
+                    ...rule,
+                    entityPredefinedType: plainName(predefinedTypes[0]?.value ?? ""),
+                  });
+                  return;
+                }
                 updateApplicabilityFacets([
                   ...(rule.applicabilityFacets ?? []),
-                  defaultApplicabilityFacetFor(
-                    event.target.value as ApplicabilityFacetDraft["kind"],
-                    source
-                  ),
+                  defaultApplicabilityFacetFor(picked as ApplicabilityFacetDraft["kind"], source),
                 ]);
               }}
             >
@@ -279,6 +331,11 @@ export function RuleCard({
                   {entry.label}
                 </option>
               ))}
+              {/* Offered here because it is where the user looks to narrow the selection, even
+                  though it is a field on the `<entity>` rather than a facet standing beside it. */}
+              {predefinedType === null && (
+                <option value={PREDEFINED_TYPE_OPTION}>Predefined type</option>
+              )}
             </select>
             {problems.applicability && <p className="rule-error">{problems.applicability}</p>}
           </div>

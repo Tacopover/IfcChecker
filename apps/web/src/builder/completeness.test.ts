@@ -136,6 +136,28 @@ describe("exportBlockers", () => {
     expect(blocker).toMatch(/Enter a value/);
   });
 
+  // `<name>` is mandatory inside an `<entity>`, so a rule naming no type writes no `<entity>` and
+  // the predefined type is dropped on the way out. The page would otherwise show a narrowing the
+  // file does not carry.
+  it("blocks a predefined type on a rule that names no element type", () => {
+    const [blocker] = exportBlockers([
+      {
+        ...RULE,
+        entityTypes: [],
+        entityPredefinedType: plainName("PARTITIONING"),
+        applicabilityFacets: [CONDITION],
+      },
+    ]);
+
+    expect(blocker).toMatch(/predefined type narrows the element types/);
+  });
+
+  it("blocks an empty predefined type, which would select nothing and say nothing", () => {
+    const [blocker] = exportBlockers([{ ...RULE, entityPredefinedType: plainName("") }]);
+
+    expect(blocker).toMatch(/Enter a value/);
+  });
+
   it("blocks a rule whose applicability facet is incomplete, not only its conditions", () => {
     const [blocker] = exportBlockers([
       {

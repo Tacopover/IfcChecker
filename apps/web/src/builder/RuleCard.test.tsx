@@ -173,6 +173,34 @@ describe("RuleCard", () => {
     expect(row.queryByLabelText("Cardinality")).toBeNull();
   });
 
+  // A field on the `<entity>` rather than a facet, so it narrows the chips above it and has no
+  // cardinality, no score and nothing to duplicate. Offered in the same select for the same reason
+  // a user reaches for it: it is how you narrow the selection.
+  it("narrows the type chips by a predefined type, and removes it again", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    expect(screen.queryByLabelText("Predefined type")).toBeNull();
+
+    await user.selectOptions(
+      screen.getByLabelText("Narrow what this rule selects"),
+      "entityPredefinedType"
+    );
+
+    const row = within(container.querySelector<HTMLElement>(".applicability-facet")!);
+    expect(row.getByLabelText("Predefined type")).toBeInTheDocument();
+    // The row's presence is the statement, so there is no "be anything" reading to fall back to.
+    const operators = Array.from(
+      row.getByLabelText("Predefined type operator").querySelectorAll("option")
+    ).map((option) => option.getAttribute("value"));
+    expect(operators).not.toContain("exists");
+
+    await user.click(
+      screen.getByRole("button", { name: "Remove the predefined type this rule selects by" })
+    );
+    expect(screen.queryByLabelText("Predefined type")).toBeNull();
+  });
+
   it("renames without remounting the row underneath it", async () => {
     const user = userEvent.setup();
     render(<Harness />);

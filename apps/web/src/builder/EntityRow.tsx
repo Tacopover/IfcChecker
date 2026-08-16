@@ -19,7 +19,10 @@ function classOptions(source: FieldsForResult): ObservedValue[] {
  * A pattern-valued class reaches a set of classes, so no single list is the right one — the same
  * answer a pattern-valued classification system and a pattern-valued partOf class both get.
  */
-function predefinedTypeOptions(source: FieldsForResult, ifcType: string | null): ObservedValue[] {
+export function predefinedTypeOptions(
+  source: FieldsForResult,
+  ifcType: string | null
+): ObservedValue[] {
   const merged = new Map<string, number>();
   for (const entry of source.ifcTypes) {
     if (ifcType !== null && entry.ifcType !== ifcType) continue;
