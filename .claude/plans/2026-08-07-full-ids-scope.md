@@ -1609,3 +1609,230 @@ the invariant it was written for.
   not on its own.
 - **The document metadata panel** — `<info>`, per-specification identifier/description/instructions,
   `ifcVersion`. Untouched.
+
+## Stage 5, the authoring UI — landed and measured 2026-08-16
+
+Nine commits on `feat/ids-facet-controls`, off `master` at `9da2437`, plus three more for the
+applicability entity's predefined type. **Every facet kind `ids.xsd` allows, on both sides, now has
+controls** — the nine read-only kinds are gone, and so are the two components that showed them.
+
+| | commit | conformance | refused whole | pass-through | gate |
+| --- | --- | --- | --- | --- | --- |
+| **1** | one value editor behind every `idsValue` | 317 | 23 | 23 | 787 → 800 |
+| **2** | the rail knows what the selection is classified in | 317 | 23 | 23 | 800 |
+| **3** | a classification requirement is editable | 317 | 23 | 23 | 800 |
+| **4** | a material requirement is editable, rows share a frame | 317 | 23 | 23 | 800 |
+| **5** | a partOf requirement is editable | 317 | 23 | 23 | 810 |
+| **6** | a requirement entity is editable | 317 | 23 | 23 | 820 |
+| **7** | the condition row shares the frame | 317 | 23 | 23 | 820 |
+| **8** | the applicability side is editable | 317 | 23 | 23 | 830 |
+| **9** | every facet kind can be added | 317 | 23 | 23 | 839 |
+| **A** | the validator narrows by an entity predefinedType | 317 | 23 | 23 | 843 |
+| **B** | the draft carries it | 317 | **23 → 17** | 23 → 24 | 846 |
+| **C** | the builder states it | 317 | 17 | 24 | **849** |
+
+**Conformance never moved**: 317 agreed / 15 wrong / 2 refused / 0 errored of 334, 0 false passes,
+at all twelve commits. That is the point of checking it here — this is authoring-side work, and a
+conformance number moving would mean something had leaked out of the draft model into the engine.
+The corpus reproduced **7,784 / 7,784** with 0 drifted, 3 schema-invalid in and out, and **0 files
+losing a requirement facet**, throughout.
+
+### The two decisions, both written before the code
+
+**The shared piece is a value editor *and* a row frame, not one row switching on kind.**
+`FacetValueEditor` is one `idsValue` wherever `ids.xsd` puts one — nine parameters over six kinds,
+four of which carry two — and `FacetRowFrame` is the head and tail all five rows repeat. One prop
+decides more than it looks like: whether the parameter may be absent. A classification's `<system>`
+and a partOf's `<entity><name>` are mandatory and the editor withholds the absent reading there; a
+`<value>` on a material is optional and `null` means "any". Backwards, that exports a document no
+conforming checker reads.
+
+**One row per kind taking a `side`, not two sets of components.** The two sides differ in exactly
+four things — cardinality, the author's note, the score, and the sentence's lead — and share every
+control. `ConditionRow` is 400 lines and serves the two most frequent applicability facets in the
+corpus (property 41,300, attribute 41,294); a second copy is a second place for the
+pattern-valued-name phrases, the retargeting rules and the stored-as picker to diverge. The cost
+paid instead is that `hits` and `matched` become optional on the frame, once.
+
+### Each kind's cardinality alphabet differs, and that is the thing to get right
+
+| kind | cardinality |
+| --- | --- |
+| attribute, property, classification, material (requirements) | required / optional / prohibited |
+| partOf (requirements) | required / prohibited — **no optional** |
+| entity (requirements) | **none at all** |
+| every facet in an applicability | **none at all** |
+
+A `partOf cardinality="optional"` is a document the importer already refuses, so a builder that
+could write one would write what its own reader rejects.
+
+### Editing an imported facet is half of writing one
+
+The rows landed first and could only edit a facet that came in from a file: `+ condition` minted a
+property or an attribute, and the applicability side had no add control at all. `defaultFacetFor`
+fills every mandatory parameter **from the selection** — the first system the elements are
+classified in, the first class they are part of, the first class they are — and leaves one the model
+cannot fill *empty*, so the row says "Enter a value" rather than the builder inventing a rule.
+
+`exportBlockers` and `isRuleComplete` had to grow to both sides with it. They read only
+`rule.conditions` before, which was safe while an applicability facet could only arrive from a file
+the importer had already validated.
+
+### The rail grew a fourth section, and its spelling is load-bearing
+
+`FieldsForResult` carries classifications, materials, wholes and now `ifcTypes`. The last holds the
+class **as the file spells it** — `IFCWALL`, not the `IfcWall` the applicability chips carry —
+because `evaluateEntity` matches a requirement entity name exactly and case-sensitively. Offering
+the canonical name would author a requirement no element satisfies. Both predefined-type literals
+are offered for the same reason `evaluateEntity` accepts both.
+
+### The applicability entity's predefined type
+
+**0 of the 334 conformance cases writes one**, measured before any code, so the scoreboard could
+only ratchet. The evidence is the corpus — **6 specifications, refused whole 23 → 17, exactly as
+predicted** — plus hand-written tests and the real model.
+
+Pass-through rose 23 → 24 at the same commit. That is the mechanism commit E recorded last session,
+not a regression: a specification refused whole hides its kept requirement facets in one verbatim
+block counted once, and once it imports as a rule they are counted one by one. The riser is a
+classification carrying an `xs:annotation`. **Refused-whole plus pass-through fell 46 → 41**, which
+is the pair the rail is read on.
+
+Three things it decided:
+
+- **A field beside `entityTypes`, not a facet.** It narrows the one facet the builder enumerates
+  rather than standing beside it, and `ids.xsd` makes `<name>` mandatory inside an `<entity>` — so a
+  rule naming no type has nowhere to put it. `compileDraft` drops it in step with the exporter and
+  `ruleProblems` says so, rather than the page showing a narrowing the file does not carry.
+- **The reading mirrors `evaluateEntity`**: the resolved name or the stored `USERDEFINED` literal.
+- **An element stating no predefined type is not selected.** Selecting it would report it under a
+  rule whose author scoped it away, which on this side is a rule matching more than it says.
+
+### Measured on the real 37 MB model, which is the only evidence for most of this
+
+Parse **2,752 ms**, inside the 2,593–2,988 ms band already recorded. Checking one specification over
+28,645 scoped entities takes **9–37 ms**. Applicability held at `IFCFLOWFITTING` (286 elements),
+every row against a value the model has and one it does not:
+
+| the rule as written | applicable | passed | failed |
+| --- | --- | --- | --- |
+| material = `AIPS-copper` | 286 | **94** | 192 |
+| material = `Titanium` | 286 | **0** | 286 |
+| material **prohibited** = `AIPS-copper` | 286 | **192** | 94 |
+| classified in `Default Classification` | 286 | **103** | 183 |
+| classified in `Uniformat`, code starting `D20` | 286 | **0** | 286 |
+| partOf: assigned to an `IFCSYSTEM` | 286 | **244** | 42 |
+| partOf **prohibited**: assigned to an `IFCSYSTEM` | 286 | **42** | 244 |
+| partOf: aggregated into an `IFCBUILDINGSTOREY` | 286 | **0** | 286 |
+| entity: must be an `IFCFLOWSEGMENT` | 286 | **0** | 286 |
+
+And the same rows on the applicability side, narrowing rather than judging: `+ made of AIPS-copper`
+**94**, `+ classified in Default Classification` **103**, `+ assigned to an IFCSYSTEM` **244**.
+
+The predefined-type narrowing needed a class that states one, because `IFCFLOWFITTING` states none:
+`IFCCOVERING` is **128 → 128** narrowed to `NOTDEFINED` and **128 → 0** narrowed to `CEILING`;
+`IFCPIPEFITTINGTYPE` is **164** narrowed to `NOTDEFINED`. The whole model states 323 predefined
+types across 28,645 scoped entities and every one of them is `NOTDEFINED`.
+
+### Two components deleted rather than emptied
+
+`UnshownFacetRow` and `ApplicabilityFacetRow` both matched nothing once the last kind got controls.
+Their `Exclude` had no name left to state, and a component matching no facet is dead code.
+`RuleCard`'s five-arm ternary chain became `RequirementRow` and `ApplicabilityRow`, two dispatchers
+that take `onChange` over the whole union — which is what lets each arm hand a narrower row its
+callback without a cast.
+
+### What is left
+
+- **A pattern-valued applicability entity name, 12 of the 17 remaining refusals.** The hard one, and
+  untouched: the builder's applicability is a list of type chips and a pattern names an open-ended
+  set of classes. Still open whether it is worth a control at all or stays an honest refusal.
+- **The document metadata panel** — `<info>`, per-specification identifier/description/instructions,
+  `ifcVersion`. Roughly 12 fields, untouched.
+- The other 5 refusals: 2 `applicability/classification` (one states no `<system>`, one carries an
+  `xs:annotation`), 2 `applicability/attribute` (the markdown-mangled `<n>` files), 1
+  `applicability/material` (an `xs:annotation`).
+
+## The metadata panel — landed and measured 2026-08-16
+
+Three commits. `<info>` and the `<specification>` attributes are the last untouched part of the
+document, and they had the same shape of problem as the facets did: carried faithfully through a
+round trip, and impossible to edit. A document authored here stated a title and nothing else.
+
+| | commit | conformance | refused whole | pass-through | gate |
+| --- | --- | --- | --- | --- | --- |
+| **M1** | the document's own metadata is editable | 317 | 17 | 24 | 849 → 858 |
+| **M2** | a specification's own metadata is editable | 317 | 17 | 24 | 858 → 863 |
+| **M3** | an `<entity>` with no `<name>` says so | 317 | 17 | 24 | **864** |
+
+### Neither existing harness could speak for it, and that had to be built first
+
+The corpus round-trip compares **what `parseIdsXml` sees**, and `parseIdsXml` reads no `<info>` at
+all and none of the `<specification>` attributes beyond `name` and `ifcVersion`. It also pins the
+date so its output is stable. So a change to how the metadata is carried can pass 7,784 / 7,784 and
+still lose the author's name.
+
+`.claude/plans/corpus-info-fidelity.mjs` is the check that closes it: import, export, compare the
+eight `<info>` children and the five `<specification>` attributes, text for text.
+**7,784 / 7,784 `<info>` blocks and 41,751 / 41,751 attribute sets reproduced.**
+
+Three things it had to be taught, each a difference no reader can see:
+
+- **XML 1.0 §2.11 requires CRLF to be folded to LF** before the application sees it. That is the
+  only difference in 7,445 Japanese descriptions.
+- `escapeXml` writes `&apos;` inside a double-quoted attribute where the source wrote a bare `'`.
+  Legal, unnecessary, and the only difference in one Dutch description.
+- One file writes `<ids:title />`, which is the same empty string as `<title></title>`.
+
+### Empty means absent, except where the schema says otherwise
+
+Measured before choosing the rule: 7,784 corpus files have an `<info>`, 7,452 state all eight
+children, and **the only empty element in any of them is one `<title>`**. So a cleared box writing
+no element costs nothing and stops a `<copyright></copyright>` nobody typed.
+
+`<title>` is the exception, and dropping it exported the one document this change made
+schema-invalid. **The round-trip's `schema-invalid out` caught it, 3 → 4** — the only guard rail
+that could have, and the reason it is counted separately from `drifted`.
+
+### Two constraints the exporter cannot fix up for the author
+
+`ids.xsd` narrows two of the eight beyond `xs:string`: `<author>` carries
+`[^@]+@[^\.]+\..+` and `<date>` is an `xs:date`. `infoProblems` transcribes both, as loosely as the
+schema writes them — tightening the address pattern would reject a document IDS accepts.
+
+`ifcVersion` is the third, and it is a closed enumeration of three, so the panel offers a checkbox
+each rather than a box. **`undefined` and `""` had to be different**: a rule that never stated one
+takes the exporter's default, one whose boxes the user cleared states none, and `ruleProblems` gains
+a `metadata` key so the panel and `exportBlockers` say the same thing. The exporter still writes the
+default either way, so a downloaded file is never invalid.
+
+### A pattern-valued applicability entity name: not worth a control, and the count was wrong
+
+The remaining item on the list, and reading the 12 refusals settles it against building anything.
+
+**They are not 12 patterns.** Eight are `NL_BIM_Basis_ILS.ids` specifications whose `<entity>` has
+no `<name>` at all — they spell it `<n>`, the same markdown mangling two applicability *attributes*
+already carry. Nothing about them is a pattern and no control can represent them; the file is
+broken, and reproducing it faithfully is the whole point.
+
+Of the four that do give a restriction:
+
+| file | what it writes |
+| --- | --- |
+| `IDS_SimpleBIM_examples.ids` | an `xs:annotation` inside the restriction |
+| `IDS_ucms_prefab_pipes_IFC2x3.ids` | an `xs:annotation` inside the restriction |
+| `IDS_ucms_prefab_pipes_IFC4.3.ids` | an `xs:annotation` inside the restriction |
+| `IDS_random_example.ids` | `<xs:pattern value="IFCCOVERING"/>` — one literal class |
+
+Three are refused for the annotation regardless of the pattern, and the fourth is a pattern in form
+only. **The corpus contains no open-ended entity pattern at all.** So the honest refusal stays, and
+the message now says which of the two faults a file has.
+
+### What is left
+
+- **The four remaining `entity/name` refusals**, claimed by an annotation-carrying `ValueDraft`
+  rather than by anything about patterns.
+- 2 `applicability/classification` (one states no `<system>`, one an `xs:annotation`), 2
+  `applicability/attribute` (the `<n>` files), 1 `applicability/material` (an `xs:annotation`).
+- **An annotation-carrying `ValueDraft` is now the single largest remaining mechanism**: 5 of the 24
+  pass-throughs and 4 of the 17 refusals turn on it, which is more than anything else left.

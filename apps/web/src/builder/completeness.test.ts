@@ -79,6 +79,7 @@ describe("ruleProblems", () => {
     expect(ruleProblems(stripped)).toEqual({
       applicability: expect.stringMatching(/No element types/),
       conditions: null,
+      metadata: null,
     });
   });
 
@@ -89,6 +90,7 @@ describe("ruleProblems", () => {
     expect(ruleProblems(stripped)).toEqual({
       applicability: null,
       conditions: expect.stringMatching(/No conditions/),
+      metadata: null,
     });
   });
 
@@ -96,7 +98,19 @@ describe("ruleProblems", () => {
     const both = ruleProblems({ ...RULE, entityTypes: [], conditions: [] });
     expect(both.applicability).not.toBeNull();
     expect(both.conditions).not.toBeNull();
-    expect(ruleProblems(RULE)).toEqual({ applicability: null, conditions: null });
+    expect(ruleProblems(RULE)).toEqual({
+      applicability: null,
+      conditions: null,
+      metadata: null,
+    });
+  });
+
+  // `undefined` is a rule that has never stated one, which the exporter defaults; `""` is one the
+  // user cleared, and `ids.xsd` makes the attribute required.
+  it("distinguishes a rule that never stated a schema version from one that cleared it", () => {
+    expect(ruleProblems(RULE).metadata).toBeNull();
+    expect(ruleProblems({ ...RULE, ifcVersion: "IFC2X3 IFC4" }).metadata).toBeNull();
+    expect(ruleProblems({ ...RULE, ifcVersion: "" }).metadata).toMatch(/Schema version/);
   });
 });
 
@@ -105,6 +119,18 @@ describe("isRuleComplete", () => {
     expect(isRuleComplete(RULE)).toBe(true);
     expect(
       isRuleComplete({ ...RULE, conditions: [{ ...CONDITION, ...stating("oneOf") }] })
+    ).toBe(false);
+  });
+
+  // Both sides became authorable together, so both are checked together — and the applicability
+  // side is the sharper case: an empty enumeration there does not merely accept anything, it
+  // selects everything the rule then reports on.
+  it("is false when an applicability facet is incomplete", () => {
+    expect(
+      isRuleComplete({
+        ...RULE,
+        applicabilityFacets: [{ ...CONDITION, id: "a1", ...stating("oneOf") }],
+      })
     ).toBe(false);
   });
 });
@@ -120,6 +146,40 @@ describe("exportBlockers", () => {
     ]);
 
     expect(blocker).toContain("Walls declare a fire rating");
+    expect(blocker).toContain("FireRating");
+    expect(blocker).toMatch(/Enter a value/);
+  });
+
+  // `<name>` is mandatory inside an `<entity>`, so a rule naming no type writes no `<entity>` and
+  // the predefined type is dropped on the way out. The page would otherwise show a narrowing the
+  // file does not carry.
+  it("blocks a predefined type on a rule that names no element type", () => {
+    const [blocker] = exportBlockers([
+      {
+        ...RULE,
+        entityTypes: [],
+        entityPredefinedType: plainName("PARTITIONING"),
+        applicabilityFacets: [CONDITION],
+      },
+    ]);
+
+    expect(blocker).toMatch(/predefined type narrows the element types/);
+  });
+
+  it("blocks an empty predefined type, which would select nothing and say nothing", () => {
+    const [blocker] = exportBlockers([{ ...RULE, entityPredefinedType: plainName("") }]);
+
+    expect(blocker).toMatch(/Enter a value/);
+  });
+
+  it("blocks a rule whose applicability facet is incomplete, not only its conditions", () => {
+    const [blocker] = exportBlockers([
+      {
+        ...RULE,
+        applicabilityFacets: [{ ...CONDITION, id: "a1", ...stating("contains", "") }],
+      },
+    ]);
+
     expect(blocker).toContain("FireRating");
     expect(blocker).toMatch(/Enter a value/);
   });

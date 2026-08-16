@@ -329,7 +329,11 @@ describe("parseIdsXml", () => {
 
     const [spec] = parseIdsXml(xml);
 
-    expect(spec.applicability).toEqual({ entityNames: null, facets: [] });
+    expect(spec.applicability).toEqual({
+      entityNames: null,
+      entityPredefinedType: null,
+      facets: [],
+    });
     expect(spec.applicabilityComplete).toBe(true);
     expect(isEvaluable(spec)).toBe(false);
   });
@@ -398,7 +402,9 @@ describe("parseIdsXml", () => {
     expect(isEvaluable(spec)).toBe(false);
   });
 
-  it("reports a predefinedType it cannot honour rather than widening the rule in silence", () => {
+  // It used to refuse this rather than widen the rule in silence. The predefined type is read now,
+  // so the rule is narrowed exactly as written and the specification runs.
+  it("reads a predefinedType narrowing the classes the applicability names", () => {
     const xml = SAMPLE_IDS.replace(
       "<name><simpleValue>IFCWALL</simpleValue></name>",
       "<name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>PARTITIONING</simpleValue></predefinedType>"
@@ -407,10 +413,25 @@ describe("parseIdsXml", () => {
     const [spec] = parseIdsXml(xml);
 
     expect(spec.applicability.entityNames).toEqual(["IFCWALL"]);
-    expect(spec.unsupported).toContainEqual(
-      expect.objectContaining({ section: "applicability", construct: "entity/predefinedType" })
+    expect(spec.applicability.entityPredefinedType).toEqual({ kind: "exact", value: "PARTITIONING" });
+    expect(spec.unsupported).toEqual([]);
+    expect(isEvaluable(spec)).toBe(true);
+  });
+
+  it("reads one given as an enumeration, the shape the corpus writes more often", () => {
+    const xml = SAMPLE_IDS.replace(
+      "<name><simpleValue>IFCWALL</simpleValue></name>",
+      `<name><simpleValue>IFCWALL</simpleValue></name><predefinedType><xs:restriction base="xs:string">
+         <xs:enumeration value="PARTITIONING" /><xs:enumeration value="SOLIDWALL" />
+       </xs:restriction></predefinedType>`
     );
-    expect(isEvaluable(spec)).toBe(false);
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicability.entityPredefinedType).toMatchObject({
+      values: ["PARTITIONING", "SOLIDWALL"],
+    });
+    expect(spec.unsupported).toEqual([]);
   });
 
   it("reads a numeric bound on a property rather than reporting it unsupported", () => {

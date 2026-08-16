@@ -78,16 +78,29 @@ function valuesOf(facet: FacetDraft): Array<ValueDraft | null> {
  */
 export function conditionProblem(facet: FacetDraft): string | null {
   for (const value of valuesOf(facet)) {
-    if (value === null) continue;
-    if (value.kind === "enum" && value.values.length === 0) {
-      return "Tick at least one value — with none, the exported rule accepts anything.";
-    }
-    if (statesNoText(value)) {
-      return "Enter a value — this condition can never pass while it is empty.";
-    }
-    const pattern = patternErrorIn(value);
-    if (pattern !== null) return `Invalid pattern — it can never match: ${pattern}`;
+    const problem = valueProblem(value);
+    if (problem !== null) return problem;
   }
+  return null;
+}
+
+/**
+ * Why one `idsValue` slot cannot be exported, or null when it can.
+ *
+ * Split out of `conditionProblem` because the applicability's entity predefined type is an
+ * `idsValue` that belongs to no facet — it narrows the type chips — and the same three faults are
+ * the same three faults wherever the value stands.
+ */
+export function valueProblem(value: ValueDraft | null): string | null {
+  if (value === null) return null;
+  if (value.kind === "enum" && value.values.length === 0) {
+    return "Tick at least one value — with none, the exported rule accepts anything.";
+  }
+  if (statesNoText(value)) {
+    return "Enter a value — this condition can never pass while it is empty.";
+  }
+  const pattern = patternErrorIn(value);
+  if (pattern !== null) return `Invalid pattern — it can never match: ${pattern}`;
   return null;
 }
 
@@ -104,6 +117,8 @@ function labelOf(facet: FacetDraft): string {
 export interface RuleProblems {
   applicability: string | null;
   conditions: string | null;
+  /** What the specification says about itself, rather than what it checks. */
+  metadata: string | null;
 }
 
 export function ruleProblems(rule: RuleDraft): RuleProblems {
@@ -119,26 +134,50 @@ export function ruleProblems(rule: RuleDraft): RuleProblems {
   const selectsNothing =
     rule.entityTypes.length === 0 && (rule.applicabilityFacets?.length ?? 0) === 0;
 
+  // `<name>` is mandatory inside an `<entity>`, so a rule naming no type writes no `<entity>` and
+  // the predefined type it states has nowhere to go. `compileDraft` drops it in step with the
+  // exporter, so the preview and the file agree — but they agree on less than the page shows.
+  const narrowsNothing = rule.entityTypes.length === 0 && (rule.entityPredefinedType ?? null) !== null;
+
   return {
     applicability: selectsNothing
       ? "No element types — IDS needs at least one, and this rule would apply to nothing."
-      : null,
+      : narrowsNothing
+        ? "A predefined type narrows the element types, and this rule names none — add a type or remove it."
+        : valueProblem(rule.entityPredefinedType ?? null),
     conditions:
       checksNothing && !applicabilityOnly
         ? "No conditions — there is nothing for this rule to check."
         : null,
+    // `undefined` is a rule that has never stated one, which the exporter defaults; `""` is one the
+    // user cleared, and `ids.xsd` makes the attribute required. The exporter still writes the
+    // default either way, so the file stays valid — this is what stops it being written silently.
+    metadata: rule.ifcVersion === "" ? "Schema version — IDS requires at least one." : null,
   };
 }
 
 function ruleProblemList(rule: RuleDraft): string[] {
-  const { applicability, conditions } = ruleProblems(rule);
-  return [applicability, conditions].filter((problem): problem is string => problem !== null);
+  const { applicability, conditions, metadata } = ruleProblems(rule);
+  return [applicability, conditions, metadata].filter(
+    (problem): problem is string => problem !== null
+  );
+}
+
+/**
+ * Every facet the rule states, on both sides.
+ *
+ * An applicability facet is checked by the same rules as a requirement one and for a sharper
+ * reason: an empty enumeration there does not merely accept anything, it *selects* everything the
+ * rule then reports on. Both sides became authorable together, so both are checked together.
+ */
+function facetsOf(rule: RuleDraft): FacetDraft[] {
+  return [...(rule.applicabilityFacets ?? []), ...rule.conditions];
 }
 
 export function isRuleComplete(rule: RuleDraft): boolean {
   return (
     ruleProblemList(rule).length === 0 &&
-    rule.conditions.every((condition) => conditionProblem(condition) === null)
+    facetsOf(rule).every((facet) => conditionProblem(facet) === null)
   );
 }
 
@@ -154,9 +193,9 @@ export function exportBlockers(rules: RuleDraft[], preservedCount = 0): string[]
   const blockers: string[] = [];
   for (const rule of rules) {
     const reasons = ruleProblemList(rule);
-    for (const condition of rule.conditions) {
-      const problem = conditionProblem(condition);
-      if (problem !== null) reasons.push(`${labelOf(condition)} — ${problem}`);
+    for (const facet of facetsOf(rule)) {
+      const problem = conditionProblem(facet);
+      if (problem !== null) reasons.push(`${labelOf(facet)} — ${problem}`);
     }
     if (reasons.length) blockers.push(`"${rule.name || "Untitled rule"}": ${reasons.join(" ")}`);
   }

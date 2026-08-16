@@ -285,17 +285,27 @@ describe("RuleBuilderPage importing an IDS file", () => {
   });
 
   // An applicability facet decides which elements the rule reaches, so the type chips alone are
-  // not the whole story. It is read-only, like the four requirement kinds with no controls yet.
-  it("shows what else the rule selects by, beside its type chips", async () => {
+  // not the whole story — and it is now editable, with the three attributes `ids.xsd` withholds on
+  // that side absent from the row rather than merely left alone.
+  it("edits what else the rule selects by, beside its type chips", async () => {
     const user = userEvent.setup();
-    renderBuilder([{ fileName: "tower.ifc" }]);
+    const { container } = renderBuilder([{ fileName: "tower.ifc" }]);
 
     await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
     await user.click(screen.getByRole("button", { name: "Expand Doors are named" }));
 
-    expect(
-      screen.getByText(/only those whose IsExternal in Pset_DoorCommon is TRUE/)
-    ).toBeInTheDocument();
+    const row = within(container.querySelector<HTMLElement>(".applicability-facet")!);
+    expect(row.getByLabelText("Property set")).toHaveValue("Pset_DoorCommon");
+    expect(row.getByLabelText("Field name")).toHaveValue("IsExternal");
+    expect(row.getByLabelText("Value")).toHaveValue("TRUE");
+
+    // `applicabilityType` references the base facet types; it is `requirementsType` that adds
+    // cardinality. A select here would let the builder write a document the schema does not describe.
+    expect(row.queryByLabelText("Cardinality")).toBeNull();
+
+    await user.clear(row.getByLabelText("Value"));
+    await user.type(row.getByLabelText("Value"), "FALSE");
+    expect(row.getByLabelText("Value")).toHaveValue("FALSE");
   });
 
   it("says permanently, on the rule itself, what it kept but cannot show", async () => {
@@ -325,6 +335,54 @@ describe("RuleBuilderPage importing an IDS file", () => {
     expect(xml).toContain(`ifcVersion="IFC2X3 IFC4"`);
     expect(xml).toContain(`<specification name="Everything with a wall-ish class is named"`);
     expect(xml).toContain(`<xs:pattern value="IFCWALL.*"`);
+  });
+
+  // It survived a round trip before this and could not be touched. A document authored here stated
+  // a title and nothing else, and one imported could not have its author corrected.
+  it("edits the document's own metadata, and writes the edit back out", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+    await user.click(screen.getByRole("button", { name: /About this document/ }));
+
+    expect(screen.getByLabelText("Author")).toHaveValue("bim@client.example");
+
+    await user.clear(screen.getByLabelText("Author"));
+    await user.type(screen.getByLabelText("Author"), "taco@mepover.com");
+    await user.type(screen.getByLabelText("Milestone"), "Design");
+
+    const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
+    expect(xml).toContain("<author>taco@mepover.com</author>");
+    expect(xml).toContain("<milestone>Design</milestone>");
+  });
+
+  // `ids.xsd` patterns <author> as an email address, so a half-typed one exports a document no
+  // conforming checker reads. Saying so up front beats the file being rejected later.
+  it("says which metadata fields the schema will not accept", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+    await user.click(screen.getByRole("button", { name: /About this document/ }));
+
+    await user.clear(screen.getByLabelText("Author"));
+    await user.type(screen.getByLabelText("Author"), "Taco");
+    await user.type(screen.getByLabelText("Date"), "16-08-2026");
+
+    expect(screen.getByText(/Author — IDS requires an email address/)).toBeInTheDocument();
+    expect(screen.getByText(/Date — IDS requires YYYY-MM-DD/)).toBeInTheDocument();
+  });
+
+  // An empty box writes no element, which is what `minOccurs="0"` is for — a cleared field must not
+  // leave a <copyright></copyright> nobody typed.
+  it("writes no element for a field left empty", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+
+    expect(screen.getByLabelText("IDS XML preview").textContent).not.toContain("<milestone>");
   });
 
   it("confirms before replacing work already on the page, and stops if the user declines", async () => {

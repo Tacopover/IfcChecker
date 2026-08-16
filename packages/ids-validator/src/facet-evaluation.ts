@@ -91,9 +91,32 @@ export function matchesApplicability(
   unitScales: UnitScales = {}
 ): boolean {
   if (!matchesApplicabilityEntity(element, applicability.entityNames)) return false;
+  if (!matchesApplicabilityPredefinedType(element, applicability.entityPredefinedType)) return false;
   return applicability.facets.every(
     (facet) => evaluateRequirement(element, facet, unitScales).passed
   );
+}
+
+/**
+ * Whether the element's predefined type is one the `<entity>` narrows to.
+ *
+ * The same reading `evaluateEntity` gives a requirement's, and for the same reason: an element
+ * storing `.USERDEFINED.` with its real name in `ObjectType` answers to **both** strings, so the
+ * resolved name alone cannot select it for an author who wrote `USERDEFINED`.
+ *
+ * An element with no predefined type at all is not selected. A specification narrowing `IFCDOOR` to
+ * `DOOR` is not about a door that states none — selecting it would then report it under a rule its
+ * author scoped away, which on the applicability side is a rule matching more than it says.
+ */
+export function matchesApplicabilityPredefinedType(
+  element: NormalizedElement,
+  predefinedType: ParsedRestriction | null
+): boolean {
+  if (predefinedType === null) return true;
+  if (element.predefinedType === null) return false;
+  const candidates = [element.predefinedType];
+  if (element.storedPredefinedType) candidates.push(element.storedPredefinedType);
+  return admitsAny(predefinedType, candidates);
 }
 
 /**

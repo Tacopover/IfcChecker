@@ -12,10 +12,30 @@ import {
   plainName,
 } from "./rule-draft.js";
 
+/**
+ * Everything `ids.xsd` puts in `<info>`, which is who wrote the document and what it is for.
+ *
+ * `title` is the one the schema makes mandatory; the other seven are `minOccurs="0"` and an empty
+ * one writes no element at all. **No corpus file writes an empty one** — 7,784 have an `<info>`,
+ * 7,452 of them state all eight children, and the only empty element in any of them is one
+ * `<title>` — so "empty means absent" costs nothing and keeps a cleared field from exporting a
+ * `<copyright></copyright>` nobody typed.
+ *
+ * Two carry a constraint the exporter cannot fix up for the author: `<author>` must match
+ * `[^@]+@[^\.]+\..+` and `<date>` must be an `xs:date`. `infoProblems` names both rather than
+ * letting a half-typed address become a document no conforming checker reads.
+ */
 export interface IdsDocumentInfo {
   title?: string;
-  date?: string;
-  /** `<info>` children an import could not represent, re-emitted after the date. */
+  /** `null` as well as absent, so the importer's own shape can be spread in without mapping. */
+  date?: string | null;
+  copyright?: string | null;
+  version?: string | null;
+  description?: string | null;
+  author?: string | null;
+  purpose?: string | null;
+  milestone?: string | null;
+  /** `<info>` children an import could not represent, re-emitted in schema order. */
   extraInfo?: string[];
   /** Whole specifications an import refused, re-emitted verbatim at their original positions. */
   untouched?: PassThrough[];
@@ -213,6 +233,20 @@ function attributeXml(name: string, value: string | null | undefined): string {
   return value === null || value === undefined ? "" : ` ${name}="${escapeXml(value)}"`;
 }
 
+/**
+ * What a rule states when it names no schema version.
+ *
+ * `ids.xsd` makes `ifcVersion` required, so there is no "state none" — this is the value the
+ * exporter has always written for an authored rule, kept as the default rather than becoming a
+ * choice the user has to make before their first export.
+ */
+export const DEFAULT_IFC_VERSION = "IFC4";
+
+/** An attribute the schema makes optional: empty and absent both write nothing. */
+function optionalAttributeXml(name: string, value: string | null | undefined): string {
+  return typeof value === "string" && value !== "" ? attributeXml(name, value) : "";
+}
+
 function attributesXml(attributes: Record<string, string>): string {
   return Object.entries(attributes)
     .map(([name, value]) => attributeXml(name, value))
@@ -253,19 +287,33 @@ function interleave(
  * several types are one facet whose name is an enumeration — emitting one `<entity>` per type
  * produces a document no conforming checker will read.
  */
-function entityApplicabilityXml(names: string[], asEnumeration: boolean): string[] {
+function entityApplicabilityXml(
+  names: string[],
+  asEnumeration: boolean,
+  predefinedType: ValueDraft | null
+): string[] {
   if (names.length === 0) return [];
-  if (names.length === 1 && !asEnumeration) {
+  // `<name>` is mandatory and `<predefinedType>` follows it, so the one-line form only survives
+  // while there is no second child to write.
+  if (names.length === 1 && !asEnumeration && predefinedType === null) {
     return [`        <entity><name><simpleValue>${escapeXml(names[0])}</simpleValue></name></entity>`];
   }
 
+  const nameXml =
+    names.length === 1 && !asEnumeration
+      ? [`          <name><simpleValue>${escapeXml(names[0])}</simpleValue></name>`]
+      : [
+          `          <name>`,
+          `            <xs:restriction base="xs:string">`,
+          ...names.map((name) => `              <xs:enumeration value="${escapeXml(name)}" />`),
+          `            </xs:restriction>`,
+          `          </name>`,
+        ];
+
   return [
     `        <entity>`,
-    `          <name>`,
-    `            <xs:restriction base="xs:string">`,
-    ...names.map((name) => `              <xs:enumeration value="${escapeXml(name)}" />`),
-    `            </xs:restriction>`,
-    `          </name>`,
+    ...nameXml,
+    ...idsValueXml("predefinedType", predefinedType, "          ").split("\n").filter(Boolean),
     `        </entity>`,
   ];
 }
@@ -274,7 +322,8 @@ function specificationXml(rule: RuleDraft): string {
   const source = rule.imported;
   const entities = entityApplicabilityXml(
     applicabilityEntityNamesOf(rule),
-    source?.entityNamesAsEnumeration ?? false
+    source?.entityNamesAsEnumeration ?? false,
+    rule.entityPredefinedType ?? null
   );
   // In the order the draft holds them, which is the order the source wrote them. `ids.xsd` fixes
   // the order of the kinds, so a file that reaches here in a different one was already invalid on
@@ -284,9 +333,15 @@ function specificationXml(rule: RuleDraft): string {
     facetXml(facet, "applicability")
   );
 
-  const specAttributes = source
-    ? attributeXml("name", rule.name) + attributesXml(source.attributes)
-    : `${attributeXml("name", rule.name)} ifcVersion="IFC4"`;
+  // The five the panel edits are written from the draft; anything else the source carried follows
+  // verbatim. Attribute order is not significant to a reader, so hoisting these changes no meaning.
+  const specAttributes =
+    attributeXml("name", rule.name) +
+    attributeXml("ifcVersion", rule.ifcVersion || DEFAULT_IFC_VERSION) +
+    optionalAttributeXml("identifier", rule.identifier) +
+    optionalAttributeXml("description", rule.description) +
+    optionalAttributeXml("instructions", rule.instructions) +
+    attributesXml(source?.attributes ?? {});
 
   const applicabilityAttributes = source
     ? attributesXml(source.applicabilityAttributes)
@@ -303,7 +358,7 @@ function specificationXml(rule: RuleDraft): string {
     source && source.requirementsAttributes === null && facets.length === 0
       ? []
       : [
-          `      <requirements${attributesXml(source?.requirementsAttributes ?? {})}>`,
+          `      <requirements${optionalAttributeXml("description", rule.requirementsDescription)}${attributesXml(source?.requirementsAttributes ?? {})}>`,
           ...facets,
           `      </requirements>`,
         ];
@@ -331,10 +386,33 @@ const INFO_ORDER = [
   "milestone",
 ];
 
-function infoXml(title: string, date: string, extraInfo: string[]): string[] {
+function infoXml(info: IdsDocumentInfo, title: string, date: string, extraInfo: string[]): string[] {
+  const stated: Array<[string, string | null | undefined]> = [
+    ["title", title],
+    ["copyright", info.copyright],
+    ["version", info.version],
+    ["description", info.description],
+    ["author", info.author],
+    ["date", date],
+    ["purpose", info.purpose],
+    ["milestone", info.milestone],
+  ];
+
   const entries = [
-    { order: INFO_ORDER.indexOf("title"), xml: `    <title>${escapeXml(title)}</title>` },
-    { order: INFO_ORDER.indexOf("date"), xml: `    <date>${escapeXml(date)}</date>` },
+    ...stated
+      // An empty one writes no element, which is what `minOccurs="0"` is for and what a cleared box
+      // means — but **not for `<title>`**, which the schema requires. One corpus file states an
+      // empty title, and dropping it exported the only document this change made schema-invalid.
+      // Reproducing someone else's empty title is right; `infoProblems` is what stops one being
+      // authored here.
+      .filter(
+        (entry): entry is [string, string] =>
+          typeof entry[1] === "string" && (entry[1] !== "" || entry[0] === "title")
+      )
+      .map(([tag, value]) => ({
+        order: INFO_ORDER.indexOf(tag),
+        xml: `    <${tag}>${escapeXml(value)}</${tag}>`,
+      })),
     ...extraInfo.map((xml) => {
       const tag = /<\s*([\w:.]+)/.exec(xml)?.[1] ?? "";
       const order = INFO_ORDER.indexOf(tag.slice(tag.indexOf(":") + 1));
@@ -343,6 +421,32 @@ function infoXml(title: string, date: string, extraInfo: string[]): string[] {
   ];
 
   return entries.sort((left, right) => left.order - right.order).map((entry) => entry.xml);
+}
+
+/**
+ * `ids.xsd` narrows two of the eight `<info>` children beyond `xs:string`, and neither can be fixed
+ * up on the author's behalf: `<author>` carries an `xs:pattern` and `<date>` is an `xs:date`.
+ *
+ * Transcribed from the schema rather than approximated. The pattern is deliberately as loose as the
+ * one in the file — it admits addresses no mail server would — because tightening it here would
+ * reject a document `ids.xsd` accepts.
+ */
+const AUTHOR_PATTERN = /^[^@]+@[^.]+\..+$/;
+const DATE_PATTERN = /^-?\d{4}-\d{2}-\d{2}(Z|[+-]\d{2}:\d{2})?$/;
+
+/** One line per `<info>` field that would make the document schema-invalid. Empty when it would not. */
+export function infoProblems(info: IdsDocumentInfo): string[] {
+  const problems: string[] = [];
+  if (info.title !== undefined && info.title.trim() === "") {
+    problems.push("Title — IDS requires one on every document.");
+  }
+  if (info.author && !AUTHOR_PATTERN.test(info.author)) {
+    problems.push(`Author — IDS requires an email address, and "${info.author}" is not one.`);
+  }
+  if (info.date && !DATE_PATTERN.test(info.date)) {
+    problems.push(`Date — IDS requires YYYY-MM-DD, and "${info.date}" is not.`);
+  }
+  return problems;
 }
 
 export function buildIdsXml(rules: RuleDraft[], info: IdsDocumentInfo = {}): string {
@@ -354,7 +458,7 @@ export function buildIdsXml(rules: RuleDraft[], info: IdsDocumentInfo = {}): str
     `<ids xmlns="http://standards.buildingsmart.org/IDS"`,
     `     xmlns:xs="http://www.w3.org/2001/XMLSchema">`,
     `  <info>`,
-    ...infoXml(title, date, info.extraInfo ?? []),
+    ...infoXml(info, title, date, info.extraInfo ?? []),
     `  </info>`,
     `  <specifications>`,
     ...interleave(rules.map(specificationXml), info.untouched ?? [], "    "),

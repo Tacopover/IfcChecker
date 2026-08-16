@@ -1,6 +1,11 @@
 import { Fragment, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import type { ConditionDraft, RefusedSpecification, RuleDraft } from "@ifc-qa/ids-validator";
+import type {
+  ConditionDraft,
+  IdsDocumentInfo,
+  RefusedSpecification,
+  RuleDraft,
+} from "@ifc-qa/ids-validator";
 import { plainName } from "@ifc-qa/ids-validator";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
@@ -8,7 +13,8 @@ import { ModelTree } from "./ModelTree.js";
 import { RuleCard } from "./RuleCard.js";
 import { RefusedSpecificationCard } from "./RefusedSpecificationCard.js";
 import { IdsXmlPreview } from "./IdsXmlPreview.js";
-import { defaultConditionFor } from "./ConditionRow.js";
+import { DocumentInfoPanel } from "./DocumentInfoPanel.js";
+import { defaultConditionFor } from "./defaultFacets.js";
 import { nextDraftId } from "./draftIds.js";
 import { importIdsText } from "./importIds.js";
 
@@ -136,7 +142,8 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   // Everything an imported document carries that is not a rule. Held beside the rules rather than
   // inside them because it belongs to the file as a whole, and re-export has to hand all of it back.
   const [refused, setRefused] = useState<RefusedSpecification[]>([]);
-  const [importedTitle, setImportedTitle] = useState<string | null>(null);
+  const [documentInfo, setDocumentInfo] = useState<IdsDocumentInfo>({});
+  const [infoOpen, setInfoOpen] = useState(false);
   const [extraInfo, setExtraInfo] = useState<string[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
 
@@ -316,7 +323,8 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     setImportError(null);
     setRules(outcome.result.rules);
     setRefused(outcome.result.refused);
-    setImportedTitle(outcome.result.title);
+    // The title is a field of the same block, so the panel edits all eight through one state.
+    setDocumentInfo({ ...outcome.result.info, title: outcome.result.title ?? undefined });
     setExtraInfo(outcome.result.extraInfo);
     setActiveRuleId(null);
     setOpenRuleIds(new Set());
@@ -490,6 +498,14 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
               </span>
             </div>
 
+            <DocumentInfoPanel
+              info={documentInfo}
+              titlePlaceholder={model.fileName}
+              open={infoOpen}
+              onToggle={() => setInfoOpen((wasOpen) => !wasOpen)}
+              onChange={setDocumentInfo}
+            />
+
             {rules.length === 0 && refused.length === 0 && (
               <p className="hint">
                 No rules yet — click a field on the left, start an empty one below, or import an
@@ -505,7 +521,8 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
 
             <IdsXmlPreview
               rules={rules}
-              title={importedTitle ?? model.fileName}
+              info={documentInfo}
+              title={documentInfo.title || model.fileName}
               refused={refused}
               extraInfo={extraInfo}
             />

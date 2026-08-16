@@ -139,7 +139,7 @@ describe("RuleCard", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole("button", { name: "+ condition" }));
+    await user.selectOptions(screen.getByLabelText("Add a requirement"), "property");
     expect(screen.getAllByLabelText("Operator")).toHaveLength(2);
 
     await user.click(screen.getAllByRole("button", { name: "Duplicate condition" })[0]);
@@ -147,6 +147,92 @@ describe("RuleCard", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Remove condition" })[0]);
     expect(screen.getAllByLabelText("Operator")).toHaveLength(2);
+  });
+
+  // Editing an imported facet is half of writing one. Until this control existed, a classification,
+  // material, partOf or entity requirement could only be reached by importing a file that had one.
+  it("adds a requirement of any of the six kinds, filled from the model", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...RULE, conditions: [] }} />);
+
+    await user.selectOptions(screen.getByLabelText("Add a requirement"), "material");
+    expect(screen.getByLabelText("Material operator")).toHaveValue("exists");
+
+    await user.selectOptions(screen.getByLabelText("Add a requirement"), "entity");
+    expect(screen.getByLabelText("Class")).toHaveValue("IFCWALL");
+  });
+
+  it("narrows what the rule selects, with the new facet stating no cardinality", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    await user.selectOptions(screen.getByLabelText("Narrow what this rule selects"), "material");
+
+    const row = within(container.querySelector<HTMLElement>(".applicability-facet")!);
+    expect(row.getByLabelText("Material operator")).toBeInTheDocument();
+    expect(row.queryByLabelText("Cardinality")).toBeNull();
+  });
+
+  // A field on the `<entity>` rather than a facet, so it narrows the chips above it and has no
+  // cardinality, no score and nothing to duplicate. Offered in the same select for the same reason
+  // a user reaches for it: it is how you narrow the selection.
+  it("narrows the type chips by a predefined type, and removes it again", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness />);
+
+    expect(screen.queryByLabelText("Predefined type")).toBeNull();
+
+    await user.selectOptions(
+      screen.getByLabelText("Narrow what this rule selects"),
+      "entityPredefinedType"
+    );
+
+    const row = within(container.querySelector<HTMLElement>(".applicability-facet")!);
+    expect(row.getByLabelText("Predefined type")).toBeInTheDocument();
+    // The row's presence is the statement, so there is no "be anything" reading to fall back to.
+    const operators = Array.from(
+      row.getByLabelText("Predefined type operator").querySelectorAll("option")
+    ).map((option) => option.getAttribute("value"));
+    expect(operators).not.toContain("exists");
+
+    await user.click(
+      screen.getByRole("button", { name: "Remove the predefined type this rule selects by" })
+    );
+    expect(screen.queryByLabelText("Predefined type")).toBeNull();
+  });
+
+  // Four attributes and the schema versions, all of which survived a round trip before this and
+  // none of which could be edited.
+  it("edits what the specification says about itself", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByRole("button", { name: /About this specification/ }));
+    await user.type(screen.getByLabelText("Identifier"), "S1");
+    await user.type(screen.getByLabelText("Instructions"), "Ask the architect.");
+
+    expect(screen.getByLabelText("Identifier")).toHaveValue("S1");
+    expect(screen.getByLabelText("Instructions")).toHaveValue("Ask the architect.");
+  });
+
+  // `ifcVersion` is a space-separated list drawn from a closed enumeration, so a text box would let
+  // a user write a value that makes the document invalid.
+  it("picks schema versions from the three the schema lists, and refuses none", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByRole("button", { name: /About this specification/ }));
+
+    const ifc4 = screen.getByRole("checkbox", { name: "IFC4" });
+    expect(ifc4).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "IFC2X3" })).not.toBeChecked();
+
+    await user.click(screen.getByRole("checkbox", { name: "IFC2X3" }));
+    expect(screen.getByRole("checkbox", { name: "IFC2X3" })).toBeChecked();
+
+    await user.click(ifc4);
+    await user.click(screen.getByRole("checkbox", { name: "IFC2X3" }));
+    expect(screen.getByText(/Schema version — IDS requires at least one/)).toBeInTheDocument();
   });
 
   it("renames without remounting the row underneath it", async () => {
@@ -206,16 +292,72 @@ describe("RuleCard", () => {
     expect(screen.getByText(/No conditions/)).toHaveClass("rule-error");
   });
 
-  // The importer keeps the other four kinds verbatim, so nothing puts one in a rule yet. When it
-  // starts reading them, the facet has to appear in the rule it belongs to rather than thinning
-  // the list — and it has to say it is checked, because it is.
-  it("shows a facet no condition row can edit, rather than dropping it from the rule", () => {
+  // The last of the six kinds to get controls, so there is no read-only requirement row left at
+  // all. `ids.xsd` gives this one no cardinality, which is what the missing select states.
+  it("edits an entity requirement in place, with no cardinality to state", async () => {
+    const user = userEvent.setup();
     render(
       <Harness
         initial={{
           ...RULE,
           conditions: [
-            ...RULE.conditions,
+            {
+              id: "e1",
+              kind: "entity",
+              name: { kind: "simple", value: "IFCWALL" },
+              predefinedType: null,
+            },
+          ],
+        }}
+      />
+    );
+
+    const box = screen.getByLabelText("Class");
+    expect(box).toHaveValue("IFCWALL");
+    expect(screen.queryByLabelText("Cardinality")).toBeNull();
+
+    await user.clear(box);
+    await user.type(box, "IFCDOOR");
+    expect(screen.getByLabelText("Class")).toHaveValue("IFCDOOR");
+  });
+
+  // partOf was that example until it got controls, and material before it. The row is the
+  // difference between a rule the user can read and one they can change.
+  it("edits a partOf requirement in place", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={{
+          ...RULE,
+          conditions: [
+            {
+              id: "p1",
+              kind: "partOf",
+              relation: null,
+              entityName: { kind: "simple", value: "IFCBUILDINGSTOREY" },
+              predefinedType: null,
+              cardinality: "required",
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(screen.getByLabelText("Class")).toHaveValue("IFCBUILDINGSTOREY");
+
+    await user.selectOptions(screen.getByLabelText("Relationship"), "IFCRELAGGREGATES");
+    expect(screen.getByLabelText("Relationship")).toHaveValue("IFCRELAGGREGATES");
+  });
+
+  // Material was that example until it got controls. The row is the difference between a rule the
+  // user can read and one they can change.
+  it("edits a material requirement in place", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={{
+          ...RULE,
+          conditions: [
             {
               id: "m1",
               kind: "material",
@@ -227,10 +369,10 @@ describe("RuleCard", () => {
       />
     );
 
-    expect(screen.getByText("material")).toBeInTheDocument();
-    expect(screen.getByText(/Must be made of a material.*not editable here yet/)).toBeInTheDocument();
-    // One operator select, from the property row — the material facet offers no controls.
-    expect(screen.getAllByLabelText("Operator")).toHaveLength(1);
+    expect(screen.getByLabelText("Material")).toHaveValue("Concrete");
+
+    await user.selectOptions(screen.getByLabelText("Cardinality"), "prohibited");
+    expect(screen.getByLabelText("Cardinality")).toHaveValue("prohibited");
   });
 
   // "classification" alone says a facet was kept. It does not say the rule in front of the user

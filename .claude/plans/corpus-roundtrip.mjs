@@ -104,7 +104,11 @@ for (const file of files) {
   try {
     imported = idsXmlToDrafts(source);
     out = buildIdsXml(imported.rules, {
+      ...imported.info,
       title: imported.title ?? undefined,
+      // Pinned so the output is stable across runs. `<info>` fidelity is therefore *not* what this
+      // harness measures — `parseIdsXml` reads no info at all, so a reader sees none of it either.
+      // `.claude/plans/corpus-info-fidelity.mjs` is the check for that.
       date: "2026-08-06",
       extraInfo: imported.extraInfo,
       untouched: imported.refused.map((entry) => entry.passThrough),

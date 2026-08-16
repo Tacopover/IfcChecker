@@ -77,11 +77,6 @@ describe("idsXmlToDrafts applicability", () => {
       `<entity><name><xs:restriction base="xs:string"><xs:pattern value="IFC.*" /></xs:restriction></name></entity>`,
       "entity/name",
     ],
-    [
-      "a predefined type narrowing the entity",
-      `<entity><name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>SOLIDWALL</simpleValue></predefinedType></entity>`,
-      "entity/predefinedType",
-    ],
     ["an applicability that selects nothing", ``, "applicability"],
   ])("refuses a specification whose applicability uses %s", (_label, applicability, construct) => {
     const result = idsXmlToDrafts(
@@ -93,6 +88,25 @@ describe("idsXmlToDrafts applicability", () => {
     expect(result.rules).toEqual([]);
     expect(result.refused.map((entry) => entry.name)).toEqual(["S"]);
     expect(result.refused[0].reasons.map((reason) => reason.construct)).toContain(construct);
+  });
+
+  // Two different documents reached one message. 8 of the 12 corpus specifications refused for
+  // `entity/name` have no `<name>` at all — they spell it `<n>`, from markdown mangling — so
+  // "gives its types as a pattern" described a fault those files do not have.
+  it("tells a pattern-valued entity name apart from an <entity> with no name", () => {
+    const pattern = idsXmlToDrafts(
+      document(`<specification name="S" ifcVersion="IFC4"><applicability>
+        <entity><name><xs:restriction base="xs:string"><xs:pattern value="IFC.*" /></xs:restriction></name></entity>
+      </applicability></specification>`)
+    );
+    expect(pattern.refused[0].reasons[0].description).toMatch(/as a pattern/);
+
+    const mangled = idsXmlToDrafts(
+      document(`<specification name="S" ifcVersion="IFC4"><applicability>
+        <entity><n><simpleValue>IFCWALL</simpleValue></n></entity>
+      </applicability></specification>`)
+    );
+    expect(mangled.refused[0].reasons[0].description).toMatch(/states no <name>/);
   });
 
   it("reads an applicability property beside the entity names", () => {
@@ -128,6 +142,46 @@ describe("idsXmlToDrafts applicability", () => {
         instructions: null,
       },
     ]);
+  });
+
+  // Beside `entityTypes` rather than in `applicabilityFacets`: it narrows the one facet the builder
+  // enumerates rather than standing beside it. 6 corpus specifications write one, in the two shapes
+  // below, and no conformance case writes any.
+  it("reads a predefined type narrowing the entity, in both shapes the corpus writes", () => {
+    const exact = onlyRule(
+      idsXmlToDrafts(
+        document(`<specification name="S" ifcVersion="IFC4"><applicability>
+          <entity><name><simpleValue>IFCWINDOW</simpleValue></name>
+            <predefinedType><simpleValue>WINDOW</simpleValue></predefinedType></entity>
+        </applicability></specification>`)
+      )
+    );
+    expect(exact.entityTypes).toEqual(["IFCWINDOW"]);
+    expect(exact.entityPredefinedType).toEqual({ kind: "simple", value: "WINDOW" });
+
+    const enumerated = onlyRule(
+      idsXmlToDrafts(
+        document(`<specification name="S" ifcVersion="IFC4"><applicability>
+          <entity><name><simpleValue>IFCDOOR</simpleValue></name>
+            <predefinedType><xs:restriction base="xs:string">
+              <xs:enumeration value="DOOR" /><xs:enumeration value="TRAPDOOR" />
+            </xs:restriction></predefinedType></entity>
+        </applicability></specification>`)
+      )
+    );
+    expect(enumerated.entityPredefinedType).toEqual({ kind: "enum", values: ["DOOR", "TRAPDOOR"] });
+  });
+
+  it("leaves it absent on the rule that states none, so an old file imports as it always did", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`<specification name="S" ifcVersion="IFC4"><applicability>
+          <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+        </applicability></specification>`)
+      )
+    );
+
+    expect(rule.entityPredefinedType).toBeUndefined();
   });
 
   it("reads an applicability attribute, restriction-valued and all", () => {
@@ -399,7 +453,7 @@ describe("idsXmlToDrafts values", () => {
     ] as const;
 
     for (const [value, operator] of readings) {
-      expect(friendlyReadingOf(attributeValue(value))?.operator).toBe(operator);
+      expect(friendlyReadingOf(attributeValue(value).value)?.operator).toBe(operator);
     }
   });
 
@@ -854,19 +908,40 @@ describe("idsXmlToDrafts pass-through", () => {
 });
 
 describe("idsXmlToDrafts document metadata", () => {
-  it("carries specification, applicability and requirements attributes the builder has no field for", () => {
+  // The five `ids.xsd` names on a `<specification>` are fields of the rule now, so the metadata
+  // panel can edit them. What stays in the verbatim bag is only what the schema does not name.
+  it("reads the specification attributes the schema names into fields of their own", () => {
     const [rule] = idsXmlToDrafts(MIXED).rules;
 
-    expect(rule.imported?.attributes).toEqual({
+    expect(rule).toMatchObject({
       identifier: "S1",
       ifcVersion: "IFC2X3 IFC4",
       description: "Spec-level prose the builder has no field for.",
       instructions: "Fill these in from the wall schedule.",
+      requirementsDescription: "Requirement-level prose, which lives on the element itself.",
     });
+    expect(rule.imported?.attributes).toEqual({});
+    expect(rule.imported?.requirementsAttributes).toEqual({});
+  });
+
+  // `minOccurs` and `maxOccurs` stay verbatim: they belong to the applicability, not to the
+  // specification, and the builder states no control for them.
+  it("still carries the applicability's own attributes verbatim", () => {
+    const [rule] = idsXmlToDrafts(MIXED).rules;
+
     expect(rule.imported?.applicabilityAttributes).toEqual({ minOccurs: "0", maxOccurs: "unbounded" });
-    expect(rule.imported?.requirementsAttributes).toEqual({
-      description: "Requirement-level prose, which lives on the element itself.",
-    });
+  });
+
+  // `ids.xsd` makes ifcVersion required, so a source stating none was already invalid and a reader
+  // would have had to assume something. The default is what the exporter has always written.
+  it("defaults ifcVersion for a source that states none", () => {
+    const { rules } = idsXmlToDrafts(
+      document(`<specification name="S"><applicability>
+        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+      </applicability></specification>`)
+    );
+
+    expect(rules[0].ifcVersion).toBe("IFC4");
   });
 
   it("distinguishes an applicability-only specification from one with empty requirements", () => {
@@ -877,11 +952,22 @@ describe("idsXmlToDrafts document metadata", () => {
     expect(storeys?.imported?.requirementsAttributes).toBeNull();
   });
 
-  it("reads the title and keeps the other info children verbatim", () => {
-    const { title, extraInfo } = idsXmlToDrafts(MIXED);
+  // Read as text now rather than kept as XML, because the metadata panel puts each one in its own
+  // box. Only a child `ids.xsd` does not name still comes through verbatim, and none exists in it.
+  it("reads every info child the schema names, and keeps any it does not verbatim", () => {
+    const { title, info, extraInfo } = idsXmlToDrafts(MIXED);
 
     expect(title).toBe("Mixed fidelity");
-    expect(extraInfo).toEqual(["<version>1.1</version>", "<author>taco@mepover.com</author>"]);
+    expect(info).toEqual({
+      copyright: null,
+      version: "1.1",
+      description: null,
+      author: "taco@mepover.com",
+      date: "2026-08-06",
+      purpose: null,
+      milestone: null,
+    });
+    expect(extraInfo).toEqual([]);
   });
 
   it("returns nothing for a document with no specifications", () => {

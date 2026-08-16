@@ -18,6 +18,7 @@ import type {
   ValueDraft,
 } from "./rule-draft.js";
 import { patternValueDraft } from "./rule-draft.js";
+import { DEFAULT_IFC_VERSION } from "./build-ids.js";
 
 /** A specification kept out of the rule list because its applicability cannot be represented. */
 export interface RefusedSpecification {
@@ -34,8 +35,27 @@ export interface IdsImportResult {
   refused: RefusedSpecification[];
   /** `<info><title>`, or `null` when the document has none. */
   title: string | null;
-  /** `<info>` children other than title and date, verbatim. */
+  /**
+   * The rest of `<info>`, each field `null` where the document states none.
+   *
+   * Read as text rather than kept as XML, because the panel that shows them has to put each one in
+   * its own box. `ids.xsd` types all eight as simple content, so nothing is lost — and the two it
+   * constrains further, `<author>` and `<date>`, are carried exactly as written so a document that
+   * was already invalid comes back out as it went in rather than being corrected.
+   */
+  info: ImportedDocumentInfo;
+  /** `<info>` children the schema does not name, verbatim. */
   extraInfo: string[];
+}
+
+export interface ImportedDocumentInfo {
+  copyright: string | null;
+  version: string | null;
+  description: string | null;
+  author: string | null;
+  date: string | null;
+  purpose: string | null;
+  milestone: string | null;
 }
 
 /**
@@ -131,6 +151,9 @@ function attributeOrNull(node: OrderedNode, name: string): string | null {
   return value === undefined ? null : String(value);
 }
 
+/** The `<specification>` attributes the metadata panel edits, each read into a field of its own. */
+const SPECIFICATION_FIELDS = ["name", "ifcVersion", "identifier", "description", "instructions"];
+
 /** Attributes with the parser's prefix stripped, so they can be written straight back out. */
 function plainAttributes(node: OrderedNode | null, except: string[] = []): Record<string, string> {
   const out: Record<string, string> = {};
@@ -153,10 +176,21 @@ function draftId(prefix: string): string {
 export function idsXmlToDrafts(idsXml: string): IdsImportResult {
   const root = descend(importParser.parse(idsXml) as OrderedNode[], "ids");
 
-  const info = descend(root, "info");
-  const title = readInfoText(info, "title");
-  const extraInfo = elementsOf(info)
-    .filter((node) => tagOf(node) !== "title" && tagOf(node) !== "date")
+  const infoNodes = descend(root, "info");
+  const title = readInfoText(infoNodes, "title");
+  const info: ImportedDocumentInfo = {
+    copyright: readInfoText(infoNodes, "copyright"),
+    version: readInfoText(infoNodes, "version"),
+    description: readInfoText(infoNodes, "description"),
+    author: readInfoText(infoNodes, "author"),
+    date: readInfoText(infoNodes, "date"),
+    purpose: readInfoText(infoNodes, "purpose"),
+    milestone: readInfoText(infoNodes, "milestone"),
+  };
+  // Whatever `ids.xsd` does not name stays XML, because there is no box on the panel for it and
+  // the document should still come back out carrying it.
+  const extraInfo = elementsOf(infoNodes)
+    .filter((node) => !INFO_TAGS.has(tagOf(node) ?? ""))
     .map(serialize);
 
   const rules: RuleDraft[] = [];
@@ -167,8 +201,20 @@ export function idsXmlToDrafts(idsXml: string): IdsImportResult {
     readSpecification(node, rules, refused);
   }
 
-  return { rules, refused, title, extraInfo };
+  return { rules, refused, title, info, extraInfo };
 }
+
+/** The eight children `ids.xsd` names inside `<info>`, all of which the panel shows. */
+const INFO_TAGS = new Set([
+  "title",
+  "copyright",
+  "version",
+  "description",
+  "author",
+  "date",
+  "purpose",
+  "milestone",
+]);
 
 function readInfoText(info: OrderedNode[], tag: string): string | null {
   const node = findChild(info, tag);
@@ -185,10 +231,8 @@ function readSpecification(
   const applicabilityNode = findChild(children, "applicability");
 
   const reasons: UnsupportedConstruct[] = [];
-  const { entityTypes, asEnumeration, applicabilityFacets } = readApplicability(
-    applicabilityNode,
-    reasons
-  );
+  const { entityTypes, entityPredefinedType, asEnumeration, applicabilityFacets } =
+    readApplicability(applicabilityNode, reasons);
 
   // A rule may name no type and still select something, because `ids.xsd` makes `<entity>`
   // minOccurs="0" — "every element carrying this property" is a whole applicability on its own.
@@ -227,19 +271,33 @@ function readSpecification(
   }
 
   const imported: ImportedRuleSource = {
-    attributes: plainAttributes(node, ["name"]),
+    // The five the panel edits are read into fields of their own; whatever else the source carried
+    // stays here and is written back verbatim, which is what keeps an unknown attribute.
+    attributes: plainAttributes(node, SPECIFICATION_FIELDS),
     applicabilityAttributes: plainAttributes(applicabilityNode),
     entityNamesAsEnumeration: asEnumeration,
-    requirementsAttributes: requirementsNode ? plainAttributes(requirementsNode) : null,
+    requirementsAttributes: requirementsNode
+      ? plainAttributes(requirementsNode, ["description"])
+      : null,
     passThrough,
   };
 
   rules.push({
     id: draftId("r"),
     name,
+    // `ids.xsd` makes ifcVersion required, so a source stating none was invalid on the way in and
+    // the default is what a reader would have had to assume anyway.
+    ifcVersion: attributeOrNull(node, "ifcVersion") ?? DEFAULT_IFC_VERSION,
+    identifier: attributeOrNull(node, "identifier"),
+    description: attributeOrNull(node, "description"),
+    instructions: attributeOrNull(node, "instructions"),
+    requirementsDescription: requirementsNode
+      ? attributeOrNull(requirementsNode, "description")
+      : null,
     entityTypes,
     // Absent rather than empty for the rule that states none, so a file whose applicability is an
     // entity list alone produces exactly the draft it always did.
+    ...(entityPredefinedType !== null ? { entityPredefinedType } : {}),
     ...(applicabilityFacets.length > 0 ? { applicabilityFacets } : {}),
     conditions,
     imported,
@@ -286,11 +344,19 @@ function readEntityNames(
 function readApplicability(
   applicabilityNode: OrderedNode | null,
   reasons: UnsupportedConstruct[]
-): { entityTypes: string[]; asEnumeration: boolean; applicabilityFacets: ApplicabilityFacetDraft[] } {
+): {
+  entityTypes: string[];
+  entityPredefinedType: ValueDraft | null;
+  asEnumeration: boolean;
+  applicabilityFacets: ApplicabilityFacetDraft[];
+} {
   const entityTypes: string[] = [];
   const applicabilityFacets: ApplicabilityFacetDraft[] = [];
+  let entityPredefinedType: ValueDraft | null = null;
   let asEnumeration = false;
-  if (!applicabilityNode) return { entityTypes, asEnumeration, applicabilityFacets };
+  if (!applicabilityNode) {
+    return { entityTypes, entityPredefinedType, asEnumeration, applicabilityFacets };
+  }
 
   for (const node of elementsOf(childrenOf(applicabilityNode))) {
     const tag = tagOf(node);
@@ -312,27 +378,56 @@ function readApplicability(
     const children = childrenOf(node);
     const read = readEntityNames(descend(children, "name"));
     if (read === null) {
+      // Two different documents reached this one message, and only one of them is about patterns.
+      // 8 of the 12 corpus specifications refused here have **no `<name>` child at all** — they
+      // spell it `<n>`, the markdown mangling two applicability attributes already carry — so
+      // saying "gives its types as a pattern" described a fault the file does not have.
       reasons.push({
         section: "applicability",
         construct: "entity/name",
-        description: "Gives its entity types as a pattern rather than plain names.",
+        description:
+          findChild(children, "name") === null
+            ? "Its <entity> states no <name>, which ids.xsd requires."
+            : "Gives its entity types as a pattern rather than plain names.",
       });
       continue;
     }
     entityTypes.push(...read.names);
     asEnumeration = read.asEnumeration;
 
-    for (const child of elementsOf(children)) {
-      if (tagOf(child) === "name") continue;
+    const predefined = readValueDraft(children, "predefinedType");
+    if ("refused" in predefined) {
       reasons.push({
         section: "applicability",
-        construct: `entity/${tagOf(child)}`,
-        description: `Narrows <${read.names.join(", ")}> by <${tagOf(child)}>, which the builder cannot show.`,
+        construct: "entity/predefinedType",
+        description: predefined.refused,
+      });
+    } else if (predefined.value !== null) {
+      // `ids.xsd` allows one `<entity>` here, so there is no second predefined type to combine
+      // with the first — and two would be an intersection where two name lists are a union.
+      if (entityPredefinedType !== null) {
+        reasons.push({
+          section: "applicability",
+          construct: "entity/predefinedType",
+          description: "States a predefined type on more than one <entity>, which the schema does not allow.",
+        });
+      } else {
+        entityPredefinedType = predefined.value;
+      }
+    }
+
+    for (const child of elementsOf(children)) {
+      const tagName = tagOf(child);
+      if (tagName === "name" || tagName === "predefinedType") continue;
+      reasons.push({
+        section: "applicability",
+        construct: `entity/${tagName}`,
+        description: `Narrows <${read.names.join(", ")}> by <${tagName}>, which the builder cannot show.`,
       });
     }
   }
 
-  return { entityTypes, asEnumeration, applicabilityFacets };
+  return { entityTypes, entityPredefinedType, asEnumeration, applicabilityFacets };
 }
 
 /**

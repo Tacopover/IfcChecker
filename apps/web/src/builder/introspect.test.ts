@@ -296,7 +296,15 @@ describe("introspectModel — fieldsFor", () => {
   it("returns an empty selection cleanly instead of dividing by zero", () => {
     const { fieldsFor } = introspectModel(FIELD_MODEL);
 
-    expect(fieldsFor([])).toEqual({ total: 0, attributes: [], propertySets: [] });
+    expect(fieldsFor([])).toEqual({
+      total: 0,
+      attributes: [],
+      propertySets: [],
+      classifications: [],
+      materials: [],
+      wholes: [],
+      ifcTypes: [],
+    });
     expect(fieldsFor(["IfcWindow"]).total).toBe(0);
   });
 
@@ -311,6 +319,140 @@ describe("introspectModel — fieldsFor", () => {
 
     expect(predefined).toMatchObject({ hits: 2, coverage: 2 / 3 });
     expect(predefined?.values.map((v) => v.value).sort()).toEqual(["PARTITIONING", "SOLIDWALL"]);
+  });
+});
+
+// The three sections the rail needs before a classification, material or partOf row can offer
+// anything from the user's own file. `NormalizedElement` has carried all three since the missing
+// facets landed, so nothing here asks the adapters for anything new.
+describe("introspectModel — what the selection is classified in, made of and part of", () => {
+  const walls = [
+    element("IfcWall", {
+      classifications: [{ system: "Uniformat", identifications: ["B2010", "B20"] }],
+      materials: ["Concrete", "Cast in situ"],
+      partOf: [
+        {
+          relation: "IFCRELCONTAINEDINSPATIALSTRUCTURE",
+          ifcType: "IFCBUILDINGSTOREY",
+          predefinedType: null,
+        },
+        { relation: "IFCRELAGGREGATES", ifcType: "IFCBUILDING", predefinedType: "ELEMENT" },
+      ],
+    }),
+    element("IfcWall", {
+      classifications: [
+        { system: "Uniformat", identifications: ["B2010"] },
+        { system: null, identifications: ["21.22"] },
+      ],
+      materials: ["Concrete"],
+      partOf: [
+        {
+          relation: "IFCRELCONTAINEDINSPATIALSTRUCTURE",
+          ifcType: "IFCBUILDINGSTOREY",
+          predefinedType: null,
+        },
+      ],
+    }),
+    // No association at all, which offers nothing to pick and must not become an empty entry.
+    element("IfcWall", { materials: null }),
+  ];
+
+  it("lists each classification system with the codes seen under it, commonest first", () => {
+    const { classifications } = introspectModel(walls).fieldsFor(["IfcWall"]);
+
+    expect(classifications).toEqual([
+      {
+        system: "Uniformat",
+        hits: 2,
+        values: [
+          { value: "B2010", count: 2 },
+          { value: "B20", count: 1 },
+        ],
+      },
+      // A reference whose system the file leaves unnamed still contributes its codes.
+      { system: null, hits: 1, values: [{ value: "21.22", count: 1 }] },
+    ]);
+  });
+
+  it("lists the materials, counting every string a material facet could match", () => {
+    const { materials } = introspectModel(walls).fieldsFor(["IfcWall"]);
+
+    expect(materials).toEqual([
+      { value: "Concrete", count: 2 },
+      { value: "Cast in situ", count: 1 },
+    ]);
+  });
+
+  // A facet states the relation and the class together, so the pair is what the rail offers: an
+  // element contained in a storey and aggregated into a building is two entries, not one.
+  it("lists a whole per relation and class, with the predefined types seen", () => {
+    const { wholes } = introspectModel(walls).fieldsFor(["IfcWall"]);
+
+    expect(wholes).toEqual([
+      {
+        relation: "IFCRELCONTAINEDINSPATIALSTRUCTURE",
+        ifcType: "IFCBUILDINGSTOREY",
+        hits: 2,
+        predefinedTypes: [],
+      },
+      {
+        relation: "IFCRELAGGREGATES",
+        ifcType: "IFCBUILDING",
+        hits: 1,
+        predefinedTypes: [{ value: "ELEMENT", count: 1 }],
+      },
+    ]);
+  });
+
+  it("offers nothing for a selection that carries none of the three", () => {
+    const bare = introspectModel([element("IfcDoor")]).fieldsFor(["IfcDoor"]);
+
+    expect(bare.classifications).toEqual([]);
+    expect(bare.materials).toEqual([]);
+    expect(bare.wholes).toEqual([]);
+  });
+});
+
+// The fourth section, which the requirement-side entity row reads. A requirement entity name is
+// matched exactly and case-sensitively against `NormalizedElement.ifcType`, so what this section
+// offers has to be the file's own spelling rather than the canonical name the type chips carry.
+describe("introspectModel — what the selection is", () => {
+  const model = [
+    element("IFCFLOWSEGMENT", { predefinedType: "RIGIDSEGMENT" }),
+    element("IFCFLOWSEGMENT", { predefinedType: "RIGIDSEGMENT" }),
+    element("IFCFLOWSEGMENT", { predefinedType: "FLEXIBLESEGMENT" }),
+    element("IFCFLOWFITTING", { predefinedType: null }),
+  ];
+
+  it("lists each class as the file spells it, with the predefined types seen on it", () => {
+    const { ifcTypes } = introspectModel(model).fieldsFor(["IfcFlowSegment", "IfcFlowFitting"]);
+
+    expect(ifcTypes).toEqual([
+      {
+        ifcType: "IFCFLOWSEGMENT",
+        hits: 3,
+        predefinedTypes: [
+          { value: "RIGIDSEGMENT", count: 2 },
+          { value: "FLEXIBLESEGMENT", count: 1 },
+        ],
+      },
+      { ifcType: "IFCFLOWFITTING", hits: 1, predefinedTypes: [] },
+    ]);
+  });
+
+  // `evaluateEntity` matches either literal, so a rule asking USERDEFINED and one asking the real
+  // name both pass. Offering only the resolved name would hide half of what the file satisfies.
+  it("offers the stored USERDEFINED literal beside the name it resolves to", () => {
+    const userDefined = [
+      element("IFCWALL", { predefinedType: "WALDO", storedPredefinedType: "USERDEFINED" }),
+    ];
+
+    const { ifcTypes } = introspectModel(userDefined).fieldsFor(["IfcWall"]);
+
+    expect(ifcTypes[0].predefinedTypes).toEqual([
+      { value: "USERDEFINED", count: 1 },
+      { value: "WALDO", count: 1 },
+    ]);
   });
 });
 

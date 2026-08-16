@@ -4,12 +4,18 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ConditionDraft, PropertyFacetDraft } from "@ifc-qa/ids-validator";
 import { plainName } from "@ifc-qa/ids-validator";
-import { ConditionRow, defaultConditionFor } from "./ConditionRow";
+import { ConditionRow } from "./ConditionRow";
 import type { FieldsForResult } from "./introspect";
 import { stating } from "../test/conditions";
 
 const SOURCE: FieldsForResult = {
   total: 10,
+  // The three rail sections a classification, material or partOf row reads. Empty here: this file
+  // is about the two kinds the condition row shows, and neither consults them.
+  classifications: [],
+  materials: [],
+  wholes: [],
+  ifcTypes: [],
   attributes: [
     { name: "Tag", propertySet: null, hits: 9, coverage: 0.9, values: [{ value: "W-1", count: 1 }], dataTypes: [] },
     { name: "Name", propertySet: null, hits: 10, coverage: 1, values: [{ value: "Wall", count: 10 }], dataTypes: [] },
@@ -428,26 +434,5 @@ describe("the stored-as picker", () => {
     expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toContain(
       "IFCBOOLEAN (not in file)"
     );
-  });
-});
-
-describe("defaultConditionFor", () => {
-  it("points at the first property set of the selection", () => {
-    expect(defaultConditionFor(SOURCE)).toMatchObject({
-      kind: "property",
-      propertySet: plainName("Pset_WallCommon"),
-      name: plainName("FireRating"),
-      value: null,
-      cardinality: "required",
-      dataType: "IFCLABEL",
-    });
-  });
-
-  it("falls back to an attribute when the selection has no property sets", () => {
-    expect(defaultConditionFor({ ...SOURCE, propertySets: [] })).toMatchObject({
-      kind: "attribute",
-      propertySet: null,
-      name: plainName("Tag"),
-    });
   });
 });

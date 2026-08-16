@@ -1,30 +1,13 @@
 import { useMemo } from "react";
-import type {
-  ConditionDraft,
-  ConditionOperator,
-  ConditionalCardinality,
-  ValueDraft,
-} from "@ifc-qa/ids-validator";
-import {
-  friendlyReadingOf,
-  plainName,
-  plainNameOf,
-  valueDraftForOperator,
-} from "@ifc-qa/ids-validator";
+import type { ConditionDraft, ConditionalCardinality, ValueDraft } from "@ifc-qa/ids-validator";
+import { friendlyReadingOf, plainName, plainNameOf, valueDraftForOperator } from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
-import { ValuePicker, type ObservedValue } from "./ValuePicker.js";
-import { conditionProblem, OPERATORS_NEEDING_TEXT } from "./completeness.js";
-import { nextDraftId } from "./draftIds.js";
+import type { ObservedValue } from "./ValuePicker.js";
+import { FacetValueEditor, OPERATORS } from "./FacetValueEditor.js";
+import { FacetRowFrame, errorIdOf, rowNoun, type FacetSide } from "./FacetRowFrame.js";
+import { conditionProblem } from "./completeness.js";
 
-export const OPERATORS: Array<{ id: ConditionOperator; label: string }> = [
-  { id: "exists", label: "be filled in" },
-  { id: "equals", label: "be exactly" },
-  { id: "oneOf", label: "be one of" },
-  { id: "contains", label: "contain" },
-  { id: "startsWith", label: "start with" },
-  { id: "endsWith", label: "end with" },
-  { id: "matches", label: "match pattern" },
-];
+export { OPERATORS } from "./FacetValueEditor.js";
 
 /**
  * The three cardinalities `ids.xsd` gives an attribute or a property, worded so the row still reads
@@ -40,8 +23,6 @@ export const CARDINALITIES: Array<{ id: ConditionalCardinality; label: string }>
   { id: "optional", label: "if present, must" },
   { id: "prohibited", label: "must NOT" },
 ];
-
-const MAX_SUGGESTIONS = 40;
 
 /** The value a `dataType` select carries when the facet should declare none. */
 export const NO_DATA_TYPE = "";
@@ -137,45 +118,6 @@ export function observedValuesFor(source: FieldsForResult, condition: ConditionD
   return field?.values ?? [];
 }
 
-/** A fresh condition points at whatever the current selection actually carries, so it is never empty. */
-export function defaultConditionFor(source: FieldsForResult): ConditionDraft {
-  const set = source.propertySets[0];
-  if (set) {
-    const name = set.fields[0]?.name ?? "";
-    return {
-      id: nextDraftId("c"),
-      kind: "property",
-      propertySet: plainName(set.name),
-      name: plainName(name),
-      value: null,
-      cardinality: "required",
-      dataType: dataTypeFromModel(source, set.name, name),
-    };
-  }
-  return {
-    id: nextDraftId("c"),
-    kind: "attribute",
-    propertySet: null,
-    name: plainName(source.attributes[0]?.name ?? "Name"),
-    value: null,
-    cardinality: "required",
-  };
-}
-
-/**
- * Why a condition has no operator row, for the ones the eight operators cannot state.
- *
- * Unreachable from the builder's own controls today — the importer refuses all three — but the
- * draft model can hold them, and a row that silently dropped its value would be worse than one
- * that says what it is holding.
- */
-function unshownValue(condition: ConditionDraft): string {
-  if (condition.value?.kind === "length") {
-    return "A limit on how many characters the value holds. Not editable here yet.";
-  }
-  return "A numeric range. Not editable here yet.";
-}
-
 function optionsWith(list: string[], current: string | null) {
   const options = list.map((value) => ({ value, label: value }));
   if (current && !list.includes(current)) {
@@ -187,28 +129,39 @@ function optionsWith(list: string[], current: string | null) {
 export interface ConditionRowProps {
   condition: ConditionDraft;
   source: FieldsForResult;
-  hits: number;
-  matched: number;
+  side?: FacetSide;
+  hits?: number;
+  matched?: number;
   onChange: (next: ConditionDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }
 
+/**
+ * A property or an attribute, on either side of the specification.
+ *
+ * These are the two most frequent applicability facets in the corpus — 41,300 and 41,294 — and the
+ * row serving them is the same one, because the two sides differ in four things and share every
+ * control: the property-set select, the field select, the stored-as picker, the value editor and
+ * the phrases each degrades to when a name is a restriction rather than a plain name.
+ */
 export function ConditionRow({
   condition,
   source,
+  side = "requirements",
   hits,
   matched,
   onChange,
   onDuplicate,
   onDelete,
 }: ConditionRowProps) {
+  const selects = side === "applicability";
   const observed = useMemo(() => observedValuesFor(source, condition), [source, condition]);
   const dataTypeOptions = useMemo(() => dataTypeOptionsFor(source, condition), [source, condition]);
   const error = conditionProblem(condition);
-  // The operator is a reading of the stored value, never the storage. `null` is the honest answer
-  // for a value none of the eight operators states.
-  const reading = friendlyReadingOf(condition);
+  // Read here as well as inside the editor, because retargeting the row to another field keeps the
+  // operator and the text and drops only the ticked values — a new field has its own.
+  const reading = friendlyReadingOf(condition.value);
   // ids.xsd gives uri to the property and not to the attribute, so the row asks before showing it.
   const uri = condition.kind === "property" ? condition.uri : null;
   // A restriction-valued name shows as a phrase instead of a select: it names a set of fields, and
@@ -222,8 +175,7 @@ export function ConditionRow({
           (field) => field.name
         );
 
-  const scoreClass = matched === 0 ? "empty" : hits === matched ? "all-pass" : "has-fail";
-  const errorId = `cond-error-${condition.id}`;
+  const errorId = errorIdOf(condition.id);
 
   /** The same operator and text, with the ticked values dropped — a new field has its own. */
   function retargetedValue() {
@@ -286,26 +238,21 @@ export function ConditionRow({
     });
   }
 
-  // The cardinality is left alone: "must not be Steel" is one control changing, not two.
-  function changeOperator(operator: ConditionOperator) {
-    onChange({
-      ...condition,
-      value: valueDraftForOperator(operator, reading?.text ?? "", reading?.values ?? []),
-    });
-  }
-
-  function changeText(text: string) {
-    if (!reading) return;
-    onChange({ ...condition, value: valueDraftForOperator(reading.operator, text, reading.values) });
-  }
-
-  function changeValues(values: string[]) {
-    if (!reading) return;
-    onChange({ ...condition, value: valueDraftForOperator(reading.operator, reading.text, values) });
-  }
 
   return (
-    <div className={condition.cardinality === "prohibited" ? "cond prohibited" : "cond"}>
+    <FacetRowFrame
+      id={condition.id}
+      side={side}
+      prohibited={condition.cardinality === "prohibited"}
+      hits={hits}
+      matched={matched}
+      instructions={condition.instructions}
+      uri={uri}
+      error={error}
+      what={rowNoun(side, condition.kind)}
+      onDuplicate={onDuplicate}
+      onDelete={onDelete}
+    >
       <select
         aria-label="Condition kind"
         value={condition.kind}
@@ -383,101 +330,36 @@ export function ConditionRow({
         </select>
       )}
 
-      <select
-        aria-label="Cardinality"
-        title="Whether the field has to be there at all"
-        value={condition.cardinality}
-        onChange={(event) =>
-          onChange({ ...condition, cardinality: event.target.value as ConditionalCardinality })
-        }
-      >
-        {CARDINALITIES.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.label}
-          </option>
-        ))}
-      </select>
-
-      {reading === null ? (
-        <span className="cond-unshown">{unshownValue(condition)}</span>
+      {selects ? (
+        <span className="glue">selects only those where it must</span>
       ) : (
-        <>
-          <select
-            aria-label="Operator"
-            value={reading.operator}
-            onChange={(event) => changeOperator(event.target.value as ConditionOperator)}
-          >
-            {OPERATORS.map((operator) => (
-              <option key={operator.id} value={operator.id}>
-                {operator.label}
-              </option>
-            ))}
-          </select>
-
-          {OPERATORS_NEEDING_TEXT.has(reading.operator) && (
-            <>
-              <input
-                className="tok"
-                type="text"
-                aria-label="Value"
-                aria-invalid={error ? true : undefined}
-                aria-describedby={error ? errorId : undefined}
-                list={`values-${condition.id}`}
-                placeholder={reading.operator === "matches" ? "regex, e.g. [A-Z]{2}-\\d{4}" : "value"}
-                value={reading.text}
-                onChange={(event) => changeText(event.target.value)}
-              />
-              <datalist id={`values-${condition.id}`}>
-                {observed.slice(0, MAX_SUGGESTIONS).map((entry) => (
-                  <option key={entry.value} value={entry.value} />
-                ))}
-              </datalist>
-            </>
-          )}
-
-          {reading.operator === "oneOf" && (
-            <ValuePicker observed={observed} selected={reading.values} onChange={changeValues} />
-          )}
-        </>
-      )}
-
-      <span className={`cond-score score ${scoreClass}`}>
-        <span className="score-text num">
-          {hits}/{matched}
-        </span>
-        <button
-          type="button"
-          className="iconbtn"
-          title="Duplicate condition"
-          aria-label="Duplicate condition"
-          onClick={onDuplicate}
+        <select
+          aria-label="Cardinality"
+          title="Whether the field has to be there at all"
+          value={condition.cardinality}
+          onChange={(event) =>
+            onChange({ ...condition, cardinality: event.target.value as ConditionalCardinality })
+          }
         >
-          ⧉
-        </button>
-        <button
-          type="button"
-          className="iconbtn danger"
-          title="Remove condition"
-          aria-label="Remove condition"
-          onClick={onDelete}
-        >
-          ✕
-        </button>
-      </span>
-
-      {(condition.instructions || uri) && (
-        <span className="cond-note">
-          {condition.instructions}
-          {/* Shown as text, never as a link: the address comes from a file someone else wrote. */}
-          {uri && <span className="cond-uri">{uri}</span>}
-        </span>
+          {CARDINALITIES.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
       )}
 
-      {error && (
-        <span className="cond-error" id={errorId}>
-          {error}
-        </span>
-      )}
-    </div>
+      <FacetValueEditor
+        id={condition.id}
+        label="Value"
+        operatorLabel="Operator"
+        value={condition.value}
+        onChange={(value) => onChange({ ...condition, value })}
+        observed={observed}
+        absentLabel="be filled in"
+        errorId={errorId}
+        invalid={error !== null}
+      />
+    </FacetRowFrame>
   );
 }

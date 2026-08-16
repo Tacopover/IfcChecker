@@ -132,7 +132,15 @@ const FACET_CHILDREN: Record<string, SequenceEntry[]> = {
 };
 
 const IFC_VERSIONS = ["IFC2X3", "IFC4", "IFC4X3_ADD2"];
-const RELATIONS = [
+/**
+ * The `relation` values `ids.xsd` allows on a `partOf` facet, exactly as the enumeration writes
+ * them — the last member names two IFC relationships in one value.
+ *
+ * Exported because the builder's own relation select must offer these and nothing else. A second
+ * copy of the list in the UI is a copy that drifts, and the document it would then export is one no
+ * conforming checker reads.
+ */
+export const PART_OF_RELATIONS = [
   "IFCRELAGGREGATES",
   "IFCRELASSIGNSTOGROUP",
   "IFCRELCONTAINEDINSPATIALSTRUCTURE",
@@ -244,7 +252,7 @@ function checkFacet(
 
   const attributes = attributesOf(facet);
   const relation = attributes["@_relation"];
-  if (relation !== undefined && !RELATIONS.includes(String(relation))) {
+  if (relation !== undefined && !PART_OF_RELATIONS.includes(String(relation))) {
     violations.push(`${where} <partOf> uses relation "${relation}", which the schema does not list`);
   }
 

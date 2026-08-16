@@ -292,6 +292,15 @@ export interface RuleDraft {
   name: string;
   entityTypes: string[];
   /**
+   * The predefined type the applicability's `<entity>` narrows those classes to.
+   *
+   * Beside `entityTypes` rather than in `applicabilityFacets`, because it belongs to the one facet
+   * the builder enumerates rather than tests — it narrows the type chips, it does not stand beside
+   * them. `ids.xsd` makes `<name>` mandatory inside an `<entity>`, so a rule stating this and no
+   * type is a document that cannot be written, and `ruleProblems` says so.
+   */
+  entityPredefinedType?: ValueDraft | null;
+  /**
    * What else the rule's applicability states, beyond the classes it selects.
    *
    * Absent is the common case and means the entity list is the whole of the selection. Present, the
@@ -307,6 +316,22 @@ export interface RuleDraft {
    * starts reading a `<material>`, nothing downstream has to be taught what one is.
    */
   conditions: FacetDraft[];
+  /**
+   * The schema versions this specification is written against, space-separated.
+   *
+   * `ids.xsd` makes it **required** and lists exactly three values, so a rule states one or more of
+   * `IFC2X3`, `IFC4` and `IFC4X3_ADD2` and nothing else. Absent means `IFC4`, which is what the
+   * exporter wrote for every authored rule before this field existed. 344 of the 464 hand-authored
+   * corpus specifications say `"IFC2X3 IFC4"`.
+   */
+  ifcVersion?: string;
+  /** A machine-readable id the author may give the specification. `ids.xsd` does not make it unique. */
+  identifier?: string | null;
+  /** What the specification is about, and what to do about it — both optional attributes. */
+  description?: string | null;
+  instructions?: string | null;
+  /** `<requirements description>`, which is prose about the requirements rather than about the rule. */
+  requirementsDescription?: string | null;
   imported?: ImportedRuleSource;
 }
 
@@ -456,28 +481,30 @@ export interface FriendlyReading {
 }
 
 /**
- * The friendly reading of a condition's value, or `null` when no operator states what it says.
+ * The friendly reading of one facet parameter, or `null` when no operator states what it says.
  *
- * Cardinality is deliberately not consulted: it is a separate control on the row, so an optional
- * facet and a prohibited value are both fully editable and only the value can be unreadable here.
+ * Takes the value rather than the whole facet, because that is all it reads — and because
+ * `ids.xsd` types nine parameters across the six facet kinds as an `idsValue`, four of the kinds
+ * carrying two of them. Cardinality is a separate control and a separate question.
  *
- * `null` is not a fault — it is the honest answer for the two value shapes the operators cannot
- * express, a numeric range and a length. The row shows those rather than mislabelling them.
+ * `null` in is a facet stating no value, which reads as `exists`. `null` out is not a fault — it is
+ * the honest answer for the two value shapes the operators cannot express, a numeric range and a
+ * length. The row shows those rather than mislabelling them.
  */
-export function friendlyReadingOf(condition: ConditionDraft): FriendlyReading | null {
+export function friendlyReadingOf(value: ValueDraft | null): FriendlyReading | null {
   const none = { text: "", values: [] };
 
-  if (condition.value === null) return { operator: "exists", ...none };
+  if (value === null) return { operator: "exists", ...none };
 
-  switch (condition.value.kind) {
+  switch (value.kind) {
     case "simple":
-      return { operator: "equals", text: condition.value.value, values: [] };
+      return { operator: "equals", text: value.value, values: [] };
     case "enum":
-      return { operator: "oneOf", text: "", values: [...condition.value.values] };
+      return { operator: "oneOf", text: "", values: [...value.values] };
     case "affix":
-      return { operator: condition.value.operator, text: condition.value.literal, values: [] };
+      return { operator: value.operator, text: value.literal, values: [] };
     case "pattern":
-      return { operator: "matches", text: condition.value.source, values: [] };
+      return { operator: "matches", text: value.source, values: [] };
     case "bounds":
     case "length":
       return null;
@@ -579,6 +606,9 @@ function applicabilityOf(rule: RuleDraft): ParsedApplicability {
   const entityNames = applicabilityEntityNamesOf(rule);
   return {
     entityNames: entityNames.length === 0 ? null : entityNames,
+    // Dropped with the names it narrows: `<name>` is mandatory inside an `<entity>`, so a rule with
+    // no type writes no `<entity>` and there is nowhere for this to go.
+    entityPredefinedType: entityNames.length === 0 ? null : compileValue(rule.entityPredefinedType ?? null),
     facets: (rule.applicabilityFacets ?? []).map((facet) => compileFacet(facet)),
   };
 }

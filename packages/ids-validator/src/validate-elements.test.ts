@@ -199,6 +199,52 @@ describe("validateBySpecification", () => {
     expect(outcome.violations).toEqual([]);
   });
 
+  // 6 corpus specifications state one and no conformance case does, so the suite cannot speak for
+  // this and the evidence is here and in the corpus round-trip. The reading mirrors
+  // `evaluateEntity`: the resolved name or the stored `USERDEFINED` literal, either of which counts.
+  describe("an applicability entity predefinedType", () => {
+    const narrowed = (predefinedType: string) =>
+      IDS_XML.replace(
+        "</entity>",
+        `<predefinedType><simpleValue>${predefinedType}</simpleValue></predefinedType></entity>`
+      );
+
+    it("narrows the selection to the elements that state it", () => {
+      const partition = makeElement({ globalId: "wall-4", name: "W-004", predefinedType: "PARTITIONING" });
+      const solid = makeElement({ globalId: "wall-5", name: "W-005", predefinedType: "SOLIDWALL" });
+
+      const [outcome] = validateBySpecification([partition, solid], narrowed("PARTITIONING"));
+
+      expect(outcome.checked).toBe(true);
+      expect(outcome.unsupported).toEqual([]);
+      expect(outcome.applicableCount).toBe(1);
+    });
+
+    // Selecting it would report the element under a rule whose author scoped it away, which on the
+    // applicability side is a rule matching more than it says.
+    it("does not select an element that states no predefined type at all", () => {
+      const [outcome] = validateBySpecification([compliantWall], narrowed("PARTITIONING"));
+
+      expect(outcome.applicableCount).toBe(0);
+    });
+
+    // `entity-facet.md` marks both as matching, and the requirement side has answered it this way
+    // since the requirement entity facet landed.
+    it("matches the stored USERDEFINED literal as well as the name it resolves to", () => {
+      const userDefined = makeElement({
+        globalId: "wall-6",
+        name: "W-006",
+        predefinedType: "WALDO",
+        storedPredefinedType: "USERDEFINED",
+      });
+
+      expect(validateBySpecification([userDefined], narrowed("WALDO"))[0].applicableCount).toBe(1);
+      expect(
+        validateBySpecification([userDefined], narrowed("USERDEFINED"))[0].applicableCount
+      ).toBe(1);
+    });
+  });
+
   it("refuses an applicability facet stating a cardinality, which ids.xsd gives it none of", () => {
     const idsXml = IDS_XML.replace(
       "</applicability>",

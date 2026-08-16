@@ -189,7 +189,7 @@ describe("the friendly operators are a reading of the value, not the storage", (
       const needsValues = operator === "oneOf";
       const text = needsValues ? "" : "A.B(C)";
       const values = needsValues ? ["SA", "RA"] : [];
-      const reading = friendlyReadingOf(condition({ operator, text, values }));
+      const reading = friendlyReadingOf(condition({ operator, text, values }).value);
 
       expect(reading).toEqual({
         operator,
@@ -204,7 +204,7 @@ describe("the friendly operators are a reading of the value, not the storage", (
   // cleared the field.
   it("holds an affix operator whose text is still empty", () => {
     for (const operator of ["contains", "startsWith", "endsWith"] as const) {
-      expect(friendlyReadingOf(condition({ operator, text: "" }))).toEqual({
+      expect(friendlyReadingOf(condition({ operator, text: "" }).value)).toEqual({
         operator,
         text: "",
         values: [],
@@ -215,11 +215,11 @@ describe("the friendly operators are a reading of the value, not the storage", (
   it("has no reading for the two value shapes no operator states", () => {
     // A range.
     expect(
-      friendlyReadingOf(condition({ value: { kind: "bounds", base: "xs:double", min: null, max: null } }))
+      friendlyReadingOf({ kind: "bounds", base: "xs:double", min: null, max: null })
     ).toBeNull();
     // A length.
     expect(
-      friendlyReadingOf(condition({ value: { kind: "length", exact: "2", min: null, max: null } }))
+      friendlyReadingOf({ kind: "length", exact: "2", min: null, max: null })
     ).toBeNull();
   });
 
@@ -232,9 +232,9 @@ describe("the friendly operators are a reading of the value, not the storage", (
 
     for (const cardinality of ["required", "optional", "prohibited"] as const) {
       expect(
-        friendlyReadingOf(condition({ cardinality, value: { kind: "simple", value: "Steel" } }))
+        friendlyReadingOf(condition({ cardinality, value: { kind: "simple", value: "Steel" } }).value)
       ).toEqual(equalsSteel);
-      expect(friendlyReadingOf(condition({ cardinality }))).toEqual({
+      expect(friendlyReadingOf(condition({ cardinality }).value)).toEqual({
         operator: "exists",
         text: "",
         values: [],

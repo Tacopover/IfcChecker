@@ -31,10 +31,63 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
+/**
+ * One classification system the selected elements are classified in, with the codes seen under it.
+ *
+ * Systems and codes are kept apart rather than flattened, because `ids.xsd` gives a classification
+ * facet two independent parameters and the builder offers each from its own list. A reference whose
+ * system the file leaves unnamed still contributes its codes, under `null`.
+ */
+export interface ClassificationSummary {
+  system: string | null;
+  hits: number;
+  values: Array<{ value: string; count: number }>;
+}
+
+/**
+ * One whole the selected elements are part of, per relationship.
+ *
+ * Keyed by relation *and* class, because a facet states both and the pair is what a rule selects
+ * on: an element aggregated into an `IfcBuilding` and contained in an `IfcBuildingStorey` offers
+ * two entries, not one.
+ */
+export interface PartOfSummary {
+  relation: string;
+  ifcType: string;
+  hits: number;
+  predefinedTypes: Array<{ value: string; count: number }>;
+}
+
+/**
+ * One IFC class the selection holds, with the predefined types seen on it.
+ *
+ * `ifcType` is spelled as the **file** spells it — `IFCWALL`, not `IfcWall` — because a requirement
+ * entity facet is matched exactly and case-sensitively against `NormalizedElement.ifcType`. The
+ * canonical mixed-case name the type chips use is the applicability's spelling, and offering it here
+ * would write a requirement no element satisfies.
+ */
+export interface EntitySummary {
+  ifcType: string;
+  hits: number;
+  predefinedTypes: Array<{ value: string; count: number }>;
+}
+
 export interface FieldsForResult {
   total: number;
   attributes: FieldSummary[];
   propertySets: Array<{ name: string; fields: FieldSummary[] }>;
+  /**
+   * What the selection is classified in, made of, part of, and is — the four sections the rail needs
+   * before a classification, material, partOf or entity row can offer anything from the user's own
+   * file.
+   *
+   * Derived from `NormalizedElement`, which has carried all of them since the missing facets landed,
+   * so this is introspection work rather than anything the adapters have to grow.
+   */
+  classifications: ClassificationSummary[];
+  materials: Array<{ value: string; count: number }>;
+  wholes: PartOfSummary[];
+  ifcTypes: EntitySummary[];
 }
 
 export interface ModelIntrospection {
@@ -208,8 +261,59 @@ export function introspectModel(elements: NormalizedElement[]): ModelIntrospecti
     const pool = resolveTypes(names).flatMap((type) => byType.get(type) ?? []);
     const attributes = new Map<string, FieldAccumulator>();
     const propertySets = new Map<string, Map<string, FieldAccumulator>>();
+    // Keyed by system, and by relation + class, because those are the parameters a facet states.
+    const classifications = new Map<string, { system: string | null; hits: number; values: Map<string, number> }>();
+    const materials = new Map<string, number>();
+    const wholes = new Map<string, { relation: string; ifcType: string; hits: number; predefinedTypes: Map<string, number> }>();
+    const ifcTypes = new Map<string, { ifcType: string; hits: number; predefinedTypes: Map<string, number> }>();
 
     for (const element of pool) {
+      let entity = ifcTypes.get(element.ifcType);
+      if (!entity) {
+        entity = { ifcType: element.ifcType, hits: 0, predefinedTypes: new Map() };
+        ifcTypes.set(element.ifcType, entity);
+      }
+      entity.hits++;
+      // Both literals, because `evaluateEntity` matches either: an element storing `USERDEFINED`
+      // with a real name elsewhere satisfies a requirement asking for either one. The stored
+      // literal is populated only where it differs, so nothing is counted twice.
+      for (const literal of [element.predefinedType, element.storedPredefinedType]) {
+        if (literal) entity.predefinedTypes.set(literal, (entity.predefinedTypes.get(literal) ?? 0) + 1);
+      }
+
+      for (const reference of element.classifications ?? []) {
+        const key = reference.system ?? "";
+        let record = classifications.get(key);
+        if (!record) {
+          record = { system: reference.system, hits: 0, values: new Map() };
+          classifications.set(key, record);
+        }
+        record.hits++;
+        for (const code of reference.identifications) {
+          record.values.set(code, (record.values.get(code) ?? 0) + 1);
+        }
+      }
+      // `null` is an element with no material association at all and offers nothing to pick; an
+      // association naming nothing is `[]`, and offers nothing either.
+      for (const material of element.materials ?? []) {
+        materials.set(material, (materials.get(material) ?? 0) + 1);
+      }
+      for (const whole of element.partOf ?? []) {
+        const key = `${whole.relation}\u0000${whole.ifcType}`;
+        let record = wholes.get(key);
+        if (!record) {
+          record = { relation: whole.relation, ifcType: whole.ifcType, hits: 0, predefinedTypes: new Map() };
+          wholes.set(key, record);
+        }
+        record.hits++;
+        if (whole.predefinedType !== null) {
+          record.predefinedTypes.set(
+            whole.predefinedType,
+            (record.predefinedTypes.get(whole.predefinedType) ?? 0) + 1
+          );
+        }
+      }
+
       for (const [name, value] of attributeEntries(element)) {
         accumulate(attributes, name, null, value);
       }
@@ -240,6 +344,11 @@ export function introspectModel(elements: NormalizedElement[]): ModelIntrospecti
     });
     const rank = (a: FieldSummary, b: FieldSummary) => b.hits - a.hits || a.name.localeCompare(b.name);
 
+    const counted = (bag: Map<string, number>) =>
+      [...bag.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+
     return {
       total: pool.length,
       attributes: [...attributes.values()].map(summarise).sort(rank),
@@ -247,6 +356,21 @@ export function introspectModel(elements: NormalizedElement[]): ModelIntrospecti
         .map(([name, bag]) => ({ name, fields: [...bag.values()].map(summarise).sort(rank) }))
         .filter((set) => set.fields.length > 0)
         .sort((a, b) => b.fields[0].hits - a.fields[0].hits || a.name.localeCompare(b.name)),
+      classifications: [...classifications.values()]
+        .map((record) => ({ system: record.system, hits: record.hits, values: counted(record.values) }))
+        .sort((a, b) => b.hits - a.hits || (a.system ?? "").localeCompare(b.system ?? "")),
+      materials: counted(materials),
+      wholes: [...wholes.values()]
+        .map((record) => ({ ...record, predefinedTypes: counted(record.predefinedTypes) }))
+        .sort(
+          (a, b) =>
+            b.hits - a.hits ||
+            a.ifcType.localeCompare(b.ifcType) ||
+            a.relation.localeCompare(b.relation)
+        ),
+      ifcTypes: [...ifcTypes.values()]
+        .map((record) => ({ ...record, predefinedTypes: counted(record.predefinedTypes) }))
+        .sort((a, b) => b.hits - a.hits || a.ifcType.localeCompare(b.ifcType)),
     };
   };
 
