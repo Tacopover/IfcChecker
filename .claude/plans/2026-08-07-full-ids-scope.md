@@ -1955,3 +1955,84 @@ has, rather than passed through for a different one and then read past.
 | **3** | the row shows it, and an edit keeps it | 15 | 18 | authoring-side; a number moving here means the draft model leaked into the engine |
 
 Refused-whole and pass-through are read as a pair, so the number to watch is **41 → 33**.
+
+## Stage 6, the annotation — landed and measured 2026-08-16
+
+Three commits on `feat/ids-annotation`, off `master` at `cb90673`.
+
+| | commit | conformance | refused whole | pass-through | gate |
+| --- | --- | --- | --- | --- | --- |
+| **1** | the validator's tolerance is pinned | 317 | 17 | 24 | 864 → 867 |
+| **2** | the draft carries it, both ways | 317 | **17 → 15** | **24 → 18** | 867 → 873 |
+| **3** | the row shows it, and an edit keeps it | 317 | 15 | 18 | **880** |
+
+**Refused-whole plus pass-through fell 41 → 33**, which is the pair the rail is read on, and every
+prediction in the section above held to the number. Conformance never moved: 317 agreed / 15 wrong /
+2 refused / 0 errored, **0 cases gained and 0 lost** against a refreshed baseline, 0 false passes.
+The corpus reproduced 7,784 / 7,784 with 0 drifted, 3 schema-invalid in and out and 0 files losing a
+requirement facet; metadata held at 7,784 / 7,784 `<info>` blocks and 41,751 / 41,751 attribute sets.
+
+### The premise the stage was planned on was wrong, and checking it first was the whole saving
+
+The validator was said to refuse an annotation. It has read past one since `55f6871`. So commit 1 is
+a test rather than a change, and the "land each reader as its own commit" staging still holds —
+there is simply nothing for the first reader to do. Had it been assumed rather than probed, the
+first commit would have been a rewrite of a function that was already correct.
+
+### The second level of annotation, which no harness could have caught
+
+XSD lets **every** restriction facet carry an `<xs:annotation>`, not only the restriction itself, and
+`IDS_random_example.ids` writes one inside each of three `<xs:enumeration>` elements. `readValueDraft`
+took each enumeration's `value` attribute and never looked at its children, so that prose was read
+past and dropped — and `parseIdsXml` ignores it too, so **both sides of the round-trip comparison
+agreed about a document that had lost it**. The info-fidelity harness looks at `<info>` and the
+`<specification>` attributes, so it could not see it either.
+
+It cost nothing only because the one specification holding it was refused whole and kept verbatim.
+Reading the annotation on that same specification's applicability classification is exactly what
+turns it into a rule — so this stage is what would have made a latent loss live. It refuses instead,
+and that refusal is the single riser in the pass-through count: 7 annotated facets read, 1 new
+refusal, 24 → 18.
+
+### What the field costs, paid rather than avoided
+
+`carryAnnotation` moves the prose onto whatever restriction replaces the one it documented, because
+`valueDraftForOperator` and the row's retargeting both build a **fresh** value. Without it, changing
+the operator, the field or the property set would destroy a sentence the edit was not about. It
+stops at `simple`, and it has to: a `<simpleValue>` has no `<xs:restriction>` to hold an annotation.
+The note vanishing beside the control is what tells the author that.
+
+### Measured on the real 37 MB model
+
+The user's own `3.6_contain_NlSfb.ids` carries no annotation, so one was added to its `<xs:pattern>`
+and the same rule run both ways. Parse **2,784 ms**, inside the 2,593–2,988 ms band; 28,645 scoped
+entities; checking the one specification takes **10–15 ms**.
+
+| the file | applicable | passed | failed | re-export carries it |
+| --- | --- | --- | --- | --- |
+| as written | 286 | 198 | 88 | — |
+| with an `<xs:annotation>` | 286 | 198 | 88 | yes |
+
+Identical, which is the claim: prose constrains nothing, and `compileValue` drops it with everything
+else that records how the file was written. Two details the run had to correct for, both already
+known: `IFCELEMENT` is abstract and an imported rule keeps the author's list unexpanded, so it
+selects 0 of 28,645 — the measurement uses `IFCFLOWFITTING` (286); and the file declares
+`dataType="IFCLABEL"` where the model stores its NL/SfB codes as `IFCTEXT`, which fails all 286 on
+the stored type alone and leaves one number repeated instead of a split to be identical about.
+
+### What is left
+
+- **Two `<xs:pattern>` children on one value — 3 pass-throughs, and it is not what the note said.**
+  All three are `restriction/*regex_patterns_work_in_OR*` conformance files writing two patterns in
+  one `<xs:restriction>`, which XSD **ORs**. Not a range intersected with an enumeration — the
+  corpus writes no such thing. Both readers take the *first* pattern and drop the second:
+  `parseRestriction` by `nodesNamed(...)[0]`, the importer by refusing `patterns.length > 1`. **This
+  one can move the scoreboard**, and it is the only remaining mechanism that can:
+  `restriction/pass-regex_patterns_work_in_OR_2_3` is one of the 15 wrong answers, and we agree with
+  the other two by luck rather than by reading them.
+- A non-string base on an enumeration — 1 pass-through, the same shape as the base a `bounds` draft
+  already carries.
+- 8 `property` pre-1.0 `<name>` and 5 `measure`, which are permanent.
+- The 15 refusals: 12 `applicability/entity/name` (8 of them the `<n>` files, 4 genuine patterns), 2
+  `applicability/attribute` (the `<n>` files), 1 `applicability/classification` stating no
+  `<system>`. **No annotation is left on either list.**
