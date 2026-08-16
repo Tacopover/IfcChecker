@@ -523,6 +523,72 @@ describe("buildIdsXml / compileDraft round-trip", () => {
     expect(comparable(parseIdsXml(xml))).toEqual(comparable(compileDraft(drafts)));
   });
 
+  // `ids.xsd` fixes `<xs:annotation>` as the restriction's **first** child, so it cannot be
+  // appended to the facets the way every other part of a restriction is built.
+  it("writes an annotation before the facets it documents, and leaves the compiled rule alone", () => {
+    const annotated = (value: ValueDraft): RuleDraft[] => [
+      {
+        id: "r",
+        name: "Annotated",
+        entityTypes: ["IfcWall"],
+        conditions: [
+          {
+            id: "c1",
+            kind: "attribute",
+            propertySet: null,
+            name: plainName("Name"),
+            value,
+            cardinality: "required",
+          },
+        ],
+      },
+    ];
+
+    const drafts = annotated({ kind: "enum", values: ["60"], annotation: "Minutes of fire rating" });
+    const xml = buildIdsXml(drafts);
+
+    expect(xml).toContain(
+      `<xs:restriction base="xs:string">\n            <xs:annotation><xs:documentation>Minutes of fire rating</xs:documentation></xs:annotation>\n            <xs:enumeration value="60" />`
+    );
+    // Prose constrains nothing, so the validator's reading of the file is the same either way.
+    expect(comparable(parseIdsXml(xml))).toEqual(comparable(compileDraft(drafts)));
+    expect(comparable(parseIdsXml(xml))).toEqual(
+      comparable(compileDraft(annotated({ kind: "enum", values: ["60"] })))
+    );
+    expect(idsSchemaViolations(xml)).toEqual([]);
+  });
+
+  // Absent and empty are different, the way they are on every `<info>` child: a document stating an
+  // empty `<xs:documentation>` gets an empty one back rather than losing the element.
+  it("writes an empty documentation for an empty annotation, and none for an absent one", () => {
+    const value = (annotation?: string): ValueDraft =>
+      annotation === undefined
+        ? { kind: "pattern", source: "D.*" }
+        : { kind: "pattern", source: "D.*", annotation };
+    const rule = (annotation?: string): RuleDraft[] => [
+      {
+        id: "r",
+        name: "Annotated",
+        entityTypes: ["IfcWall"],
+        conditions: [
+          {
+            id: "c1",
+            kind: "attribute",
+            propertySet: null,
+            name: plainName("Name"),
+            value: value(annotation),
+            cardinality: "required",
+          },
+        ],
+      },
+    ];
+
+    expect(buildIdsXml(rule(""))).toContain(
+      `<xs:annotation><xs:documentation></xs:documentation></xs:annotation>`
+    );
+    expect(buildIdsXml(rule())).not.toContain("xs:annotation");
+  });
+
   it("keeps the compiled and exported regexes behaviourally identical", () => {
     const [exported] = parseIdsXml(buildIdsXml(DRAFTS));
     const [compiled] = compileDraft(DRAFTS);

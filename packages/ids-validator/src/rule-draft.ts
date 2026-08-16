@@ -79,13 +79,36 @@ export type AffixOperator = "contains" | "startsWith" | "endsWith";
  * 4 `xs:integer`, and 6 with a capitalised spelling `xs:Decimal` or `xs:Integer` that no XSD type
  * has. Assuming `xs:double` would hand 8 authors back a file they did not write.
  */
-export type ValueDraft =
-  | { kind: "simple"; value: string }
+export type ValueDraft = { kind: "simple"; value: string } | RestrictionValueDraft;
+
+/**
+ * Every value that reaches a file as an `<xs:restriction>`, which is all of them but `simple`.
+ *
+ * Named because the annotation belongs to exactly this set. `ids.xsd` puts an `<xs:annotation>`
+ * inside the restriction, and a `<simpleValue>` has no restriction to put one in — so a field on
+ * all six variants would let a draft hold prose the exporter has nowhere to write.
+ */
+export type RestrictionValueDraft = (
   | { kind: "enum"; values: string[] }
   | { kind: "pattern"; source: string }
   | { kind: "affix"; operator: AffixOperator; literal: string }
   | { kind: "bounds"; base: string; min: BoundDraft | null; max: BoundDraft | null }
-  | ({ kind: "length" } & LengthDraft);
+  | ({ kind: "length" } & LengthDraft)
+) & {
+  /**
+   * The author's prose about the restriction, as the one `<xs:documentation>` it holds.
+   *
+   * On the value rather than beside it because `ids.xsd` types **nine** parameters across the six
+   * facet kinds as an `idsValue`, four of the kinds carrying two — so a field beside the value
+   * would be ten fields, where one on the value reaches all of them through `idsValueXml`,
+   * `readValueDraft` and `FacetValueEditor`.
+   *
+   * It constrains nothing, so `compileValue` drops it the way it drops every other record of how
+   * the file was written. `""` and absent are different: a document stating an empty
+   * `<xs:documentation>` gets an empty one back.
+   */
+  annotation?: string;
+};
 
 /**
  * What every facet in `<requirements>` carries. `instructions` is the only field `ids.xsd` gives
@@ -411,7 +434,7 @@ export function affixReadingOf(
 }
 
 /** A pattern read from a file, as the operator it was written as where that is what it says. */
-export function patternValueDraft(source: string): ValueDraft {
+export function patternValueDraft(source: string): RestrictionValueDraft {
   const affix = affixReadingOf(source);
   return affix ? { kind: "affix", ...affix } : { kind: "pattern", source };
 }

@@ -124,10 +124,18 @@ function idsValueXml(tag: string, value: ValueDraft | null, indent = "        ")
   if (value.kind === "simple") {
     return `\n${indent}<${tag}><simpleValue>${escapeXml(value.value)}</simpleValue></${tag}>`;
   }
-  const { base, body } = restrictionPartsOf(value, `${indent}    `);
+  const itemIndent = `${indent}    `;
+  const { base, body } = restrictionPartsOf(value, itemIndent);
+  // First, because `ids.xsd` fixes `<xs:annotation>` as the restriction's first child — it cannot
+  // be appended to the facets. `undefined` writes nothing; `""` writes an empty documentation,
+  // which is what a document stating one gets back.
+  const annotation =
+    value.annotation === undefined
+      ? ""
+      : `\n${itemIndent}<xs:annotation><xs:documentation>${escapeXml(value.annotation)}</xs:documentation></xs:annotation>`;
   return (
     `\n${indent}<${tag}>` +
-    `\n${indent}  <xs:restriction base="${base}">${body}` +
+    `\n${indent}  <xs:restriction base="${base}">${annotation}${body}` +
     `\n${indent}  </xs:restriction>` +
     `\n${indent}</${tag}>`
   );

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Every shape the importer has to preserve rather than represent, in one file: spec-level metadata
-  the builder has no field for, a requirement facet outside its model, an author's annotation, and
-  one specification whose applicability makes it unshowable at all.
+  the builder has no field for, a requirement facet outside its model, and one specification whose
+  applicability makes it unshowable at all. The author's annotation is here for the opposite reason
+  now — it is carried on the value it documents, and the round trip has to put it back as the
+  restriction's first child, where ids.xsd fixes it.
   Trimmed from the patterns found across the goal 3a corpus; not copied from any single file.
 
   The facet kept verbatim states two restriction families on one value — a range and an enumeration,
