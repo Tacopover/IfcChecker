@@ -69,10 +69,14 @@ function restrictionPartsOf(
           .map((entry) => `\n${itemIndent}<xs:enumeration value="${escapeXml(entry)}" />`)
           .join(""),
       };
+    // One element per source, in the order the file wrote them. XSD reads them as a disjunction, so
+    // joining them into one would be rewriting the author's regexes into a regex they did not write.
     case "pattern":
       return {
         base: "xs:string",
-        body: `\n${itemIndent}<xs:pattern value="${escapeXml(value.source)}" />`,
+        body: value.sources
+          .map((source) => `\n${itemIndent}<xs:pattern value="${escapeXml(source)}" />`)
+          .join(""),
       };
     case "affix":
       return {

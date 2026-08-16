@@ -90,7 +90,13 @@ export type ValueDraft = { kind: "simple"; value: string } | RestrictionValueDra
  */
 export type RestrictionValueDraft = (
   | { kind: "enum"; values: string[] }
-  | { kind: "pattern"; source: string }
+  /**
+   * The regexes the value may match — a **list**, because XSD 1.0 §4.3.4 reads several
+   * `<xs:pattern>` in one restriction step as a disjunction, and joining them into one source
+   * would hand the author back a regex they did not write. `compileValue` joins; the exporter
+   * writes one `<xs:pattern>` per entry. Authored rules always state exactly one.
+   */
+  | { kind: "pattern"; sources: string[] }
   | { kind: "affix"; operator: AffixOperator; literal: string }
   | { kind: "bounds"; base: string; min: BoundDraft | null; max: BoundDraft | null }
   | ({ kind: "length" } & LengthDraft)
@@ -433,10 +439,15 @@ export function affixReadingOf(
   return null;
 }
 
-/** A pattern read from a file, as the operator it was written as where that is what it says. */
-export function patternValueDraft(source: string): RestrictionValueDraft {
-  const affix = affixReadingOf(source);
-  return affix ? { kind: "affix", ...affix } : { kind: "pattern", source };
+/**
+ * The patterns read from a file, as the operator they were written as where that is what they say.
+ *
+ * Only one source can be an affix: "contains X" is a single regex, and a facet stating two of them
+ * says something no operator does. Several stay a pattern list, which the row shows and keeps.
+ */
+export function patternValueDraft(sources: string[]): RestrictionValueDraft {
+  const affix = sources.length === 1 ? affixReadingOf(sources[0]) : null;
+  return affix ? { kind: "affix", ...affix } : { kind: "pattern", sources: [...sources] };
 }
 
 /**
@@ -475,8 +486,10 @@ export function compileValue(value: ValueDraft | null): ParsedRestriction | null
       return { kind: "exact", value: value.value };
     case "enum":
       return { kind: "enum", values: [...value.values] };
+    // Joined the way `parseRestriction` joins them, so the two readers compile one file the same
+    // way: several `<xs:pattern>` are a disjunction, and a disjunction of anchored patterns is one.
     case "pattern":
-      return patternRestriction(value.source);
+      return patternRestriction(value.sources.join("|"));
     case "affix":
       return patternRestriction(affixPatternSource(value.operator, value.literal));
     case "bounds": {
@@ -511,8 +524,9 @@ export interface FriendlyReading {
  * carrying two of them. Cardinality is a separate control and a separate question.
  *
  * `null` in is a facet stating no value, which reads as `exists`. `null` out is not a fault — it is
- * the honest answer for the two value shapes the operators cannot express, a numeric range and a
- * length. The row shows those rather than mislabelling them.
+ * the honest answer for the value shapes the operators cannot express: a numeric range, a length,
+ * and a list of patterns, which no single "match pattern" box states. The row shows those rather
+ * than mislabelling them.
  */
 export function friendlyReadingOf(value: ValueDraft | null): FriendlyReading | null {
   const none = { text: "", values: [] };
@@ -526,8 +540,12 @@ export function friendlyReadingOf(value: ValueDraft | null): FriendlyReading | n
       return { operator: "oneOf", text: "", values: [...value.values] };
     case "affix":
       return { operator: value.operator, text: value.literal, values: [] };
+    // One pattern is `matches`; several are a disjunction the box cannot hold, and joining them
+    // into the box would let a keystroke rewrite them as one regex the author never wrote.
     case "pattern":
-      return { operator: "matches", text: value.source, values: [] };
+      return value.sources.length === 1
+        ? { operator: "matches", text: value.sources[0], values: [] }
+        : null;
     case "bounds":
     case "length":
       return null;
@@ -568,7 +586,7 @@ export function valueDraftForOperator(
     case "oneOf":
       return { kind: "enum", values: [...values] };
     case "matches":
-      return { kind: "pattern", source: text };
+      return { kind: "pattern", sources: [text] };
     default:
       return { kind: "affix", operator, literal: text };
   }

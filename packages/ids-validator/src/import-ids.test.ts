@@ -386,7 +386,7 @@ describe("idsXmlToDrafts values", () => {
       )
     );
 
-    expect(condition.propertySet).toEqual({ kind: "pattern", source: "Foo_\\d+" });
+    expect(condition.propertySet).toEqual({ kind: "pattern", sources: ["Foo_\\d+"] });
     expect(condition.name).toEqual({ kind: "enum", values: ["A", "B"] });
   });
 
@@ -441,15 +441,40 @@ describe("idsXmlToDrafts values", () => {
     [".*-01", { kind: "affix", operator: "endsWith", literal: "-01" }],
     // Not something escapeRegExp would ever produce, so reading it as startsWith("W-") would
     // re-export the author's `W\-.*` as `W-.*` — the same matches, rewritten behind their back.
-    ["W\\-.*", { kind: "pattern", source: "W\\-.*" }],
-    ["W-\\d+", { kind: "pattern", source: "W-\\d+" }],
-    [".*[AB].*", { kind: "pattern", source: ".*[AB].*" }],
+    ["W\\-.*", { kind: "pattern", sources: ["W\\-.*"] }],
+    ["W-\\d+", { kind: "pattern", sources: ["W-\\d+"] }],
+    [".*[AB].*", { kind: "pattern", sources: [".*[AB].*"] }],
   ])("stores the pattern %s as %o", (pattern, value) => {
     expect(
       attributeValue(
         `<value><xs:restriction base="xs:string"><xs:pattern value="${pattern}" /></xs:restriction></value>`
       ).value
     ).toEqual(value);
+  });
+
+  // XSD reads several <xs:pattern> in one restriction step as a disjunction. Both were kept
+  // verbatim before, on the reading that two of anything is an intersection a ValueDraft cannot
+  // state — which is true of two families and not of two patterns.
+  it("reads several patterns as the list they are, in the order the file wrote them", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:string">
+           <xs:pattern value="[a-z]{2}[0-9]{2}" /><xs:pattern value="[A-Z]{2}[0-9]{2}" />
+         </xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "pattern", sources: ["[a-z]{2}[0-9]{2}", "[A-Z]{2}[0-9]{2}"] });
+  });
+
+  // No operator states a disjunction, so the row shows it rather than mislabelling it — the same
+  // honest `null` a numeric range and a length already get.
+  it("gives several patterns no friendly reading", () => {
+    const value = attributeValue(
+      `<value><xs:restriction base="xs:string">
+         <xs:pattern value="A.*" /><xs:pattern value="B.*" />
+       </xs:restriction></value>`
+    ).value;
+
+    expect(friendlyReadingOf(value)).toBeNull();
   });
 
   // What the row shows is derived from the value, so the two have to agree on a real file.
@@ -615,7 +640,7 @@ describe("idsXmlToDrafts classification", () => {
     ).toMatchObject({
       kind: "classification",
       system: { kind: "simple", value: "NL/SfB" },
-      value: { kind: "pattern", source: "21\\.\\d+" },
+      value: { kind: "pattern", sources: ["21\\.\\d+"] },
     });
   });
 
@@ -874,12 +899,9 @@ describe("idsXmlToDrafts pass-through", () => {
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:enumeration value="42" /></xs:restriction></value></attribute>`,
       /base="xs:double"/,
     ],
-    [
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="[a-z]{2}" /><xs:pattern value="[A-Z]{2}" /></xs:restriction></value></attribute>`,
-      /Combines several restrictions/,
-    ],
     // XSD intersects a range with an enumeration; a ValueDraft states one of the two, so importing
-    // it would export a rule that checks less than the file asks for.
+    // it would export a rule that checks less than the file asks for. Several patterns are the one
+    // multiplicity that is *not* an intersection, and they are read.
     [
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minInclusive value="0" /><xs:enumeration value="1" /></xs:restriction></value></attribute>`,
       /Combines several restrictions/,

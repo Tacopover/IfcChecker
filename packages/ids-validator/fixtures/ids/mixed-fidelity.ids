@@ -7,11 +7,12 @@
   restriction's first child, where ids.xsd fixes it.
   Trimmed from the patterns found across the goal 3a corpus; not copied from any single file.
 
-  The facet kept verbatim states two restriction families on one value — a range and an enumeration,
-  which XSD intersects and a ValueDraft cannot. 3 corpus facets do this. It has to be something
-  really unrepresentable: the classification, the material, the bound and the pattern-valued baseName
-  this file used to keep are all read now, and a fixture whose "kept" facet has quietly become
-  representable stops testing the thing it was written for.
+  The facet kept verbatim states two restriction *families* on one value — a range and an
+  enumeration, which XSD intersects and a ValueDraft cannot. It has to be something really
+  unrepresentable: the classification, the material, the bound, the pattern-valued baseName and the
+  two-pattern value this file used to keep are all read now, and a fixture whose "kept" facet has
+  quietly become representable stops testing the thing it was written for. Two patterns are the one
+  multiplicity that is not an intersection — XSD ORs them — so they are no longer an example here.
 
   The whole specification kept verbatim names its entity types with an xs:pattern. 12 corpus
   specifications do this, and it is the applicability the builder cannot show for a structural

@@ -28,20 +28,26 @@ export function patternError(condition: ConditionDraft): string | null {
 }
 
 function patternErrorIn(value: ValueDraft | null): string | null {
-  if (value?.kind !== "pattern" || value.source === "") return null;
-  try {
-    new RegExp(`^(?:${value.source})$`);
-    return null;
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+  if (value?.kind !== "pattern") return null;
+  // Each source is compiled on its own, so a file stating two patterns names the one that is
+  // broken. `compileValue` joins them, and a joined source would report the disjunction instead.
+  for (const source of value.sources) {
+    if (source === "") continue;
+    try {
+      new RegExp(`^(?:${source})$`);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
   }
+  return null;
 }
 
 /** Whether the box the user types into is still empty. */
 function statesNoText(value: ValueDraft): boolean {
   if (value.kind === "simple") return value.value === "";
   if (value.kind === "affix") return value.literal === "";
-  if (value.kind === "pattern") return value.source === "";
+  // A rule the builder authored states exactly one, and the box behind it is what may be empty.
+  if (value.kind === "pattern") return value.sources.length === 1 && value.sources[0] === "";
   return false;
 }
 

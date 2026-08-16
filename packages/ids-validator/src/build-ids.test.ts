@@ -563,8 +563,8 @@ describe("buildIdsXml / compileDraft round-trip", () => {
   it("writes an empty documentation for an empty annotation, and none for an absent one", () => {
     const value = (annotation?: string): ValueDraft =>
       annotation === undefined
-        ? { kind: "pattern", source: "D.*" }
-        : { kind: "pattern", source: "D.*", annotation };
+        ? { kind: "pattern", sources: ["D.*"] }
+        : { kind: "pattern", sources: ["D.*"], annotation };
     const rule = (annotation?: string): RuleDraft[] => [
       {
         id: "r",

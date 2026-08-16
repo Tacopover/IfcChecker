@@ -16,6 +16,23 @@ export const OPERATORS: Array<{ id: ConditionOperator; label: string }> = [
   { id: "matches", label: "match pattern" },
 ];
 
+/**
+ * What a value none of the operators states holds, said plainly rather than mislabelled.
+ *
+ * Three shapes reach here. Two are pending controls; the third is not — XSD reads several
+ * `<xs:pattern>` as a disjunction, and one "match pattern" box cannot state it without joining
+ * them into a regex the author never wrote.
+ */
+function unshownPhrase(value: ValueDraft | null): string {
+  if (value?.kind === "length") {
+    return "A limit on how many characters the value holds. Not editable here yet.";
+  }
+  if (value?.kind === "pattern") {
+    return `Any of ${value.sources.length} patterns: ${value.sources.join(" or ")}`;
+  }
+  return "A numeric range. Not editable here yet.";
+}
+
 export interface FacetValueEditorProps {
   /** The parameter as the draft holds it. `null` is "the facet states none". */
   value: ValueDraft | null;
@@ -77,11 +94,7 @@ export function FacetValueEditor({
   if (reading === null) {
     return (
       <>
-        <span className="cond-unshown">
-          {value?.kind === "length"
-            ? "A limit on how many characters the value holds. Not editable here yet."
-            : "A numeric range. Not editable here yet."}
-        </span>
+        <span className="cond-unshown">{unshownPhrase(value)}</span>
         {annotation}
       </>
     );

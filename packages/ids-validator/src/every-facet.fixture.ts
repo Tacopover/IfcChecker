@@ -28,7 +28,7 @@ export const EVERY_FACET: RuleDraft[] = [
         kind: "property",
         propertySet: { kind: "simple", value: "Pset_WallCommon" },
         // A pattern-valued name, which `ids.xsd` allows here exactly as it allows one on a value.
-        name: { kind: "pattern", source: "Fire.*" },
+        name: { kind: "pattern", sources: ["Fire.*"] },
         value: { kind: "enum", values: ["60", "90"] },
         cardinality: "required",
       },
@@ -42,7 +42,7 @@ export const EVERY_FACET: RuleDraft[] = [
         id: "f4",
         kind: "classification",
         system: { kind: "simple", value: "NL/SfB" },
-        value: { kind: "pattern", source: "21\\..*" },
+        value: { kind: "pattern", sources: ["21\\..*"] },
         uri: "https://example.org/nlsfb",
         cardinality: "required",
       },

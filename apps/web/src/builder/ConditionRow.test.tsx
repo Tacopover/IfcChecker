@@ -334,7 +334,7 @@ describe("a name given as a restriction", () => {
       <Harness
         initial={{
           ...CONDITION,
-          propertySet: { kind: "pattern", source: "Foo_.*" },
+          propertySet: { kind: "pattern", sources: ["Foo_.*"] },
           name: { kind: "enum", values: ["A", "B"] },
         }}
       />
@@ -350,7 +350,7 @@ describe("a name given as a restriction", () => {
     const user = userEvent.setup();
     render(
       <Harness
-        initial={{ ...CONDITION, name: { kind: "pattern", source: "Fire.*" }, ...stating("equals", "60") }}
+        initial={{ ...CONDITION, name: { kind: "pattern", sources: ["Fire.*"] }, ...stating("equals", "60") }}
       />
     );
 
@@ -362,7 +362,7 @@ describe("a name given as a restriction", () => {
   // The rail's suggestions come from one field, and there is no one field here. An empty list
   // beats offering the values of whichever field the pattern happened to be typed near.
   it("declares no stored type and offers no observed values", () => {
-    render(<Harness initial={{ ...CONDITION, name: { kind: "pattern", source: "Fire.*" } }} />);
+    render(<Harness initial={{ ...CONDITION, name: { kind: "pattern", sources: ["Fire.*"] } }} />);
 
     const picker = screen.getByLabelText("Stored as");
     expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
@@ -446,7 +446,7 @@ describe("the stored-as picker", () => {
 describe("ConditionRow — an author's annotation", () => {
   const ANNOTATED: PropertyFacetDraft = {
     ...CONDITION,
-    value: { kind: "pattern", source: "[0-9]\\.[0-9]", annotation: "A number, a dot, a number." },
+    value: { kind: "pattern", sources: ["[0-9]\\.[0-9]"], annotation: "A number, a dot, a number." },
   };
 
   it("shows the prose beside the value it documents", () => {
@@ -475,5 +475,36 @@ describe("ConditionRow — an author's annotation", () => {
 
     await user.selectOptions(screen.getByLabelText("Operator"), "equals");
     expect(screen.queryByText("A number, a dot, a number.")).toBeNull();
+  });
+});
+
+/**
+ * XSD reads several `<xs:pattern>` in one restriction as a disjunction. No operator states that, so
+ * the row says what it holds — the honest `null` reading a numeric range and a length already get.
+ * The alternative would be joining them into the "match pattern" box, where the next keystroke
+ * would rewrite two of the author's regexes into one they never wrote.
+ */
+describe("ConditionRow — several patterns on one value", () => {
+  const TWO_PATTERNS: PropertyFacetDraft = {
+    ...CONDITION,
+    value: { kind: "pattern", sources: ["[a-z]{2}[0-9]{2}", "[A-Z]{2}[0-9]{2}"] },
+  };
+
+  it("states them as a list rather than offering one pattern box", () => {
+    render(<Harness initial={TWO_PATTERNS} />);
+
+    expect(screen.getByText(/Any of 2 patterns/)).toHaveTextContent(
+      "[a-z]{2}[0-9]{2} or [A-Z]{2}[0-9]{2}"
+    );
+    expect(screen.queryByLabelText("Value")).toBeNull();
+  });
+
+  it("still edits everything else on the row, and keeps the patterns while it does", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={TWO_PATTERNS} />);
+
+    await user.selectOptions(screen.getByLabelText("Field name"), "Status");
+    expect(screen.getByLabelText("Field name")).toHaveValue("Status");
+    expect(screen.getByText(/Any of 2 patterns/)).toBeInTheDocument();
   });
 });

@@ -983,11 +983,12 @@ function readValueDraft(
   );
 
   // XSD would intersect two families, and a `ValueDraft` states one thing. Dropping either half
-  // would export a rule that checks less than the file asks for.
+  // would export a rule that checks less than the file asks for. Several patterns are **not** two
+  // families: XSD reads them as a disjunction, and the draft holds the list.
   const families = [patterns.length, enumerations.length, bounds.length, lengths.length].filter(
     (count) => count > 0
   );
-  if (families.length !== 1 || patterns.length > 1) {
+  if (families.length !== 1) {
     return refused("Combines several restrictions on one value, which the builder cannot show.");
   }
 
@@ -1008,8 +1009,10 @@ function readValueDraft(
     return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
   }
 
-  if (patterns.length === 1) {
-    return carrying({ value: patternValueDraft(attributeOrNull(patterns[0], "value") ?? "") });
+  if (patterns.length > 0) {
+    return carrying({
+      value: patternValueDraft(patterns.map((node) => attributeOrNull(node, "value") ?? "")),
+    });
   }
   if (lengths.length > 0) return carrying(readLengthDraft(lengths));
   return carrying({

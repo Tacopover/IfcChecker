@@ -101,7 +101,7 @@ describe("EntityRow", () => {
   it("offers every predefined type when the class is a pattern", async () => {
     const user = userEvent.setup();
     render(
-      <Harness initial={{ ...FACET, name: { kind: "pattern", source: "IFC.*" } }} />
+      <Harness initial={{ ...FACET, name: { kind: "pattern", sources: ["IFC.*"] } }} />
     );
 
     await user.selectOptions(screen.getByLabelText("Predefined type operator"), "equals");

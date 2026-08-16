@@ -59,8 +59,9 @@ export function nameSummary(value: ValueDraft): string {
       return value.value;
     case "enum":
       return `one of ${value.values.join(", ")}`;
+    // Several are a disjunction, so "or" is what the file means rather than a joined regex.
     case "pattern":
-      return `matching ${value.source}`;
+      return `matching ${value.sources.join(" or ")}`;
     case "affix": {
       const label = OPERATORS.find((operator) => operator.id === value.operator)?.label ?? "";
       return `${label.replace(/^must /, "")} ${value.literal}`;
