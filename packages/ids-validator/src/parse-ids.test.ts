@@ -641,3 +641,110 @@ describe("parseIdsXml — length", () => {
     ]);
   });
 });
+
+/**
+ * An `<xs:annotation>` is prose about the restriction rather than a constraint on it, so the
+ * validator reads past it and checks the facets beside it. That has been true since bounds landed —
+ * `annotation` has sat in `RESTRICTION_FACETS_READ` throughout — and nothing pinned it, which left
+ * the tolerance looking like an oversight rather than the decision it is.
+ *
+ * The importer is the reader that cannot lose it: prose it dropped would come back out of a file it
+ * was only meant to open. Here there is nothing to lose, because a compiled requirement carries
+ * nothing about how the file was written.
+ */
+describe("parseIdsXml — an xs:annotation", () => {
+  const ANNOTATION = `<xs:annotation><xs:documentation>Why this rule exists</xs:documentation></xs:annotation>`;
+
+  it("reads past one on a requirement and reports nothing unsupported", () => {
+    const spec = parseIdsXml(
+      specificationXml(
+        `<attribute><name><simpleValue>Name</simpleValue></name>
+           <value><xs:restriction base="xs:string">${ANNOTATION}<xs:pattern value="W-.*" /></xs:restriction></value>
+         </attribute>`
+      )
+    )[0];
+
+    expect(slotRestriction(spec.requirements[0])).toMatchObject({ kind: "pattern", source: "W-.*" });
+    expect(spec.unsupported).toEqual([]);
+  });
+
+  // The one place it decides a verdict rather than a message: an unreadable applicability refuses
+  // the whole specification, so reading past the prose is what keeps these two rules running.
+  it("leaves an applicability complete, wherever the annotated restriction stands", () => {
+    const annotated = `<value><xs:restriction base="xs:string">${ANNOTATION}<xs:pattern value="[0-9]\\.[0-9]" /></xs:restriction></value>`;
+    const xml = SAMPLE_IDS.replace(
+      "</applicability>",
+      `<material>${annotated}</material>
+       <classification>${annotated}<system><simpleValue>NL-Sfb</simpleValue></system></classification></applicability>`
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicability.facets).toMatchObject([
+      { kind: "material", value: { kind: "pattern" } },
+      { kind: "classification", value: { kind: "pattern" } },
+    ]);
+    expect(spec.unsupported).toEqual([]);
+    expect(spec.applicabilityComplete).toBe(true);
+    expect(isEvaluable(spec)).toBe(true);
+  });
+
+  // Not a pattern, so `readEntityNames` reads the list rather than refusing it — the one entity
+  // shape an applicability can enumerate. No corpus file writes this, and the tolerance is still
+  // the parser's, not an accident of ordering.
+  it("reads an entity name enumeration that carries one", () => {
+    const xml = SAMPLE_IDS.replace(
+      "<name><simpleValue>IFCWALL</simpleValue></name>",
+      `<name><xs:restriction base="xs:string">${ANNOTATION}
+         <xs:enumeration value="IFCWALL" /><xs:enumeration value="IFCSLAB" />
+       </xs:restriction></name>`
+    );
+
+    const [spec] = parseIdsXml(xml);
+
+    expect(spec.applicability.entityNames).toEqual(["IFCWALL", "IFCSLAB"]);
+    expect(spec.applicabilityComplete).toBe(true);
+  });
+});
+
+/**
+ * XSD 1.0 §4.3.4: several `<xs:pattern>` in one restriction step are a disjunction. The suite says
+ * so in three case names, and reading only the first was a rule that matched less than it says —
+ * which is a clean verdict on elements the author meant to catch.
+ */
+describe("parseIdsXml — several patterns on one value", () => {
+  const named = (patterns: string) =>
+    slotRestriction(
+      parseIdsXml(
+        specificationXml(
+          `<attribute><name><simpleValue>Name</simpleValue></name>
+             <value><xs:restriction base="xs:string">${patterns}</xs:restriction></value>
+           </attribute>`
+        )
+      )[0].requirements[0]
+    );
+
+  it("admits a value matching any one of them, whichever order they stand in", () => {
+    const first = named(`<xs:pattern value="[A-Z]{2}[0-9]{2}" /><xs:pattern value="[a-z]{2}[0-9]{2}" />`);
+    const second = named(`<xs:pattern value="[a-z]{2}[0-9]{2}" /><xs:pattern value="[A-Z]{2}[0-9]{2}" />`);
+
+    if (first?.kind !== "pattern" || second?.kind !== "pattern") throw new Error("expected patterns");
+    for (const restriction of [first, second]) {
+      expect(restriction.regex.test("XY99")).toBe(true);
+      expect(restriction.regex.test("xy99")).toBe(true);
+      // Still anchored, and still admitting nothing either pattern states.
+      expect(restriction.regex.test("XY999")).toBe(false);
+      expect(restriction.regex.test("XYZ99")).toBe(false);
+    }
+  });
+
+  // A pattern that is itself a disjunction joins the others without bracketing changing anything:
+  // `|` binds loosest inside the group `compilePattern` wraps the whole source in.
+  it("keeps one pattern's own alternation intact when it joins the rest", () => {
+    const restriction = named(`<xs:pattern value="a|b" /><xs:pattern value="c" />`);
+
+    if (restriction?.kind !== "pattern") throw new Error("expected a pattern");
+    for (const value of ["a", "b", "c"]) expect(restriction.regex.test(value)).toBe(true);
+    expect(restriction.regex.test("d")).toBe(false);
+  });
+});

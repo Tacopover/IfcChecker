@@ -1088,6 +1088,17 @@ caption {
   color: var(--faint);
 }
 
+/* The author's prose from inside an <xs:restriction>, which belongs to one parameter
+   rather than to the facet — so it sits beside the control it documents, on both sides
+   of the specification, rather than in the row's own note. */
+.cond-annotation {
+  flex-basis: 100%;
+  margin: 0.15rem 0 0;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--faint);
+}
+
 .cond-uri {
   margin-left: 0.4rem;
   font-family: var(--mono);

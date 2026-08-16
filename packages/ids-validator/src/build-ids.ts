@@ -62,17 +62,24 @@ function restrictionPartsOf(
   itemIndent: string
 ): { base: string; body: string } {
   switch (value.kind) {
+    // The author's base, or the string base every authored rule states. An enumeration is the one
+    // string-shaped restriction whose members may be typed — `matchesLiteral` compares "42" and 42
+    // correctly either way, so this is reproduction and not a change of meaning.
     case "enum":
       return {
-        base: "xs:string",
+        base: escapeXml(value.base ?? "xs:string"),
         body: value.values
           .map((entry) => `\n${itemIndent}<xs:enumeration value="${escapeXml(entry)}" />`)
           .join(""),
       };
+    // One element per source, in the order the file wrote them. XSD reads them as a disjunction, so
+    // joining them into one would be rewriting the author's regexes into a regex they did not write.
     case "pattern":
       return {
         base: "xs:string",
-        body: `\n${itemIndent}<xs:pattern value="${escapeXml(value.source)}" />`,
+        body: value.sources
+          .map((source) => `\n${itemIndent}<xs:pattern value="${escapeXml(source)}" />`)
+          .join(""),
       };
     case "affix":
       return {
@@ -124,10 +131,18 @@ function idsValueXml(tag: string, value: ValueDraft | null, indent = "        ")
   if (value.kind === "simple") {
     return `\n${indent}<${tag}><simpleValue>${escapeXml(value.value)}</simpleValue></${tag}>`;
   }
-  const { base, body } = restrictionPartsOf(value, `${indent}    `);
+  const itemIndent = `${indent}    `;
+  const { base, body } = restrictionPartsOf(value, itemIndent);
+  // First, because `ids.xsd` fixes `<xs:annotation>` as the restriction's first child — it cannot
+  // be appended to the facets. `undefined` writes nothing; `""` writes an empty documentation,
+  // which is what a document stating one gets back.
+  const annotation =
+    value.annotation === undefined
+      ? ""
+      : `\n${itemIndent}<xs:annotation><xs:documentation>${escapeXml(value.annotation)}</xs:documentation></xs:annotation>`;
   return (
     `\n${indent}<${tag}>` +
-    `\n${indent}  <xs:restriction base="${base}">${body}` +
+    `\n${indent}  <xs:restriction base="${base}">${annotation}${body}` +
     `\n${indent}  </xs:restriction>` +
     `\n${indent}</${tag}>`
   );

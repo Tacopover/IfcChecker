@@ -443,8 +443,17 @@ function parseRestriction(
     });
   }
 
-  const patternNode = nodesNamed(restrictionChildren, "pattern")[0];
-  if (patternNode) return patternRestriction(String(attributesOf(patternNode)["@_value"] ?? ""));
+  // Several `<xs:pattern>` in one restriction step are a **disjunction**, not an intersection —
+  // XSD 1.0 §4.3.4, and the suite's own `regex_patterns_work_in_OR` cases. Reading only the first
+  // was a rule that under-matched and reported a clean verdict. Joined rather than tested one by
+  // one because a disjunction of anchored patterns is one anchored pattern: `|` binds loosest
+  // inside the group `compilePattern` wraps them in.
+  const patternNodes = nodesNamed(restrictionChildren, "pattern");
+  if (patternNodes.length > 0) {
+    return patternRestriction(
+      patternNodes.map((node) => String(attributesOf(node)["@_value"] ?? "")).join("|")
+    );
+  }
 
   const bounds = readBounds(restrictionChildren);
   if (bounds) {

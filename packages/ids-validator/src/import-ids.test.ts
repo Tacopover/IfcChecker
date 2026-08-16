@@ -386,21 +386,40 @@ describe("idsXmlToDrafts values", () => {
       )
     );
 
-    expect(condition.propertySet).toEqual({ kind: "pattern", source: "Foo_\\d+" });
+    expect(condition.propertySet).toEqual({ kind: "pattern", sources: ["Foo_\\d+"] });
     expect(condition.name).toEqual({ kind: "enum", values: ["A", "B"] });
+  });
+
+  it("reads a name that carries the author's annotation, on the parameter it documents", () => {
+    const condition = onlyCondition(
+      withRequirements(
+        `<attribute><name><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why</xs:documentation></xs:annotation><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`
+      )
+    );
+
+    // `Na.*` reads back as the affix it was written as, and the annotation rides on that reading
+    // rather than only on a raw pattern — the field is on every value that reaches a restriction.
+    expect(condition.name).toEqual({
+      kind: "affix",
+      operator: "startsWith",
+      literal: "Na",
+      annotation: "Why",
+    });
+    // A restriction is one parameter's, so the facet's other value states none rather than sharing it.
+    expect(condition.value).toBeNull();
   });
 
   it("keeps a facet whose name carries something the builder cannot show", () => {
     const rule = onlyRule(
       idsXmlToDrafts(
         withRequirements(
-          `<attribute><name><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why</xs:documentation></xs:annotation><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`
+          `<attribute><name><xs:restriction base="xs:string"><xs:whiteSpace value="collapse" /><xs:pattern value="Na.*" /></xs:restriction></name></attribute>`
         )
       )
     );
 
     expect(rule.conditions).toEqual([]);
-    expect(rule.imported?.passThrough[0].reason).toMatch(/xs:annotation/);
+    expect(rule.imported?.passThrough[0].reason).toMatch(/xs:whiteSpace/);
   });
 
   it("reads a simpleValue and an enumeration into the value they state", () => {
@@ -422,15 +441,57 @@ describe("idsXmlToDrafts values", () => {
     [".*-01", { kind: "affix", operator: "endsWith", literal: "-01" }],
     // Not something escapeRegExp would ever produce, so reading it as startsWith("W-") would
     // re-export the author's `W\-.*` as `W-.*` — the same matches, rewritten behind their back.
-    ["W\\-.*", { kind: "pattern", source: "W\\-.*" }],
-    ["W-\\d+", { kind: "pattern", source: "W-\\d+" }],
-    [".*[AB].*", { kind: "pattern", source: ".*[AB].*" }],
+    ["W\\-.*", { kind: "pattern", sources: ["W\\-.*"] }],
+    ["W-\\d+", { kind: "pattern", sources: ["W-\\d+"] }],
+    [".*[AB].*", { kind: "pattern", sources: [".*[AB].*"] }],
   ])("stores the pattern %s as %o", (pattern, value) => {
     expect(
       attributeValue(
         `<value><xs:restriction base="xs:string"><xs:pattern value="${pattern}" /></xs:restriction></value>`
       ).value
     ).toEqual(value);
+  });
+
+  // XSD reads several <xs:pattern> in one restriction step as a disjunction. Both were kept
+  // verbatim before, on the reading that two of anything is an intersection a ValueDraft cannot
+  // state — which is true of two families and not of two patterns.
+  it("reads several patterns as the list they are, in the order the file wrote them", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:string">
+           <xs:pattern value="[a-z]{2}[0-9]{2}" /><xs:pattern value="[A-Z]{2}[0-9]{2}" />
+         </xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "pattern", sources: ["[a-z]{2}[0-9]{2}", "[A-Z]{2}[0-9]{2}"] });
+  });
+
+  // An enumeration lists values of whatever type its base names, and the suite writes one over
+  // `xs:double`. The base reaches the compiled restriction no more than a range's does —
+  // `matchesLiteral` compares "42" and 42 correctly — so it is carried for the export alone.
+  it("keeps the base an enumeration was written with, and states none for the string one", () => {
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:double"><xs:enumeration value="42" /><xs:enumeration value="43" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "enum", values: ["42", "43"], base: "xs:double" });
+
+    expect(
+      attributeValue(
+        `<value><xs:restriction base="xs:string"><xs:enumeration value="A" /></xs:restriction></value>`
+      ).value
+    ).toEqual({ kind: "enum", values: ["A"] });
+  });
+
+  // No operator states a disjunction, so the row shows it rather than mislabelling it — the same
+  // honest `null` a numeric range and a length already get.
+  it("gives several patterns no friendly reading", () => {
+    const value = attributeValue(
+      `<value><xs:restriction base="xs:string">
+         <xs:pattern value="A.*" /><xs:pattern value="B.*" />
+       </xs:restriction></value>`
+    ).value;
+
+    expect(friendlyReadingOf(value)).toBeNull();
   });
 
   // What the row shows is derived from the value, so the two have to agree on a real file.
@@ -596,7 +657,7 @@ describe("idsXmlToDrafts classification", () => {
     ).toMatchObject({
       kind: "classification",
       system: { kind: "simple", value: "NL/SfB" },
-      value: { kind: "pattern", source: "21\\.\\d+" },
+      value: { kind: "pattern", sources: ["21\\.\\d+"] },
     });
   });
 
@@ -785,9 +846,12 @@ describe("idsXmlToDrafts pass-through", () => {
       `<property cardinality="mandatory"><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>B</simpleValue></baseName></property>`,
       "property",
     ],
+    // XSD lets every restriction facet carry an annotation of its own, and three corpus
+    // enumerations do. A `ValueDraft`'s enum is a list of strings with nowhere to hold prose per
+    // member, so the whole facet is kept rather than the documentation read past and dropped.
     [
-      "an author's annotation, which the builder has nowhere to show",
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
+      "an annotation on one enumerated value rather than on the restriction",
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:enumeration value="30"><xs:annotation><xs:documentation>Thirty minutes</xs:documentation></xs:annotation></xs:enumeration></xs:restriction></value></attribute>`,
       "attribute",
     ],
     // ids.xsd gives uri to classification, property and material alone, so one on an attribute is
@@ -828,20 +892,40 @@ describe("idsXmlToDrafts pass-through", () => {
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minInclusive value="abc" /></xs:restriction></value></attribute>`,
       /Gives <xs:minInclusive> the value "abc", which is not a number\./,
     ],
+    // The three shapes an annotation can take that a plain string does not reproduce. Reading one
+    // anyway would hand the author back a file with their markup flattened or their `xml:lang` gone.
     [
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
-      /xs:annotation/,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation><b>Why.</b></xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
+      /<xs:annotation> holding markup/,
     ],
     [
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:enumeration value="42" /></xs:restriction></value></attribute>`,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:documentation xml:lang="nl">Waarom.</xs:documentation></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
+      /<xs:annotation> carrying an attribute/,
+    ],
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:annotation><xs:appinfo>tool</xs:appinfo></xs:annotation><xs:pattern value="D.*" /></xs:restriction></value></attribute>`,
+      /not one <xs:documentation>/,
+    ],
+    // `ids.xsd` fixes it as the restriction's first child, so one standing after a facet is a
+    // document the schema does not describe — and moving it would correct someone else's file.
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="D.*" /><xs:annotation><xs:documentation>Why.</xs:documentation></xs:annotation></xs:restriction></value></attribute>`,
+      /not the first thing in the restriction/,
+    ],
+    // A pattern is matched against a string and a length counts characters, so a numeric base on
+    // either is a document the exporter would retype. An enumeration lists values of whatever type
+    // the base names, which is why it is read rather than kept.
+    [
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:pattern value="4.*" /></xs:restriction></value></attribute>`,
       /base="xs:double"/,
     ],
     [
-      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:string"><xs:pattern value="[a-z]{2}" /><xs:pattern value="[A-Z]{2}" /></xs:restriction></value></attribute>`,
-      /Combines several restrictions/,
+      `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minLength value="2" /></xs:restriction></value></attribute>`,
+      /base="xs:double"/,
     ],
     // XSD intersects a range with an enumeration; a ValueDraft states one of the two, so importing
-    // it would export a rule that checks less than the file asks for.
+    // it would export a rule that checks less than the file asks for. Several patterns are the one
+    // multiplicity that is *not* an intersection, and they are read.
     [
       `<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base="xs:double"><xs:minInclusive value="0" /><xs:enumeration value="1" /></xs:restriction></value></attribute>`,
       /Combines several restrictions/,

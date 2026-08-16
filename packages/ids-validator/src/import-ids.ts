@@ -13,6 +13,7 @@ import type {
   MaterialFacetDraft,
   PartOfFacetDraft,
   PassThrough,
+  RestrictionValueDraft,
   RuleDraft,
   SimpleCardinality,
   ValueDraft,
@@ -854,9 +855,9 @@ const LENGTH_FACETS = [
 ] as const;
 
 /**
- * The XSD facets a `ValueDraft` can carry. Unlike the validator, this list excludes `annotation`:
- * the validator can ignore prose, but an import that dropped an author's documentation and handed
- * the file back without it would be destroying their work.
+ * The XSD facets a `ValueDraft` can carry. `annotation` is prose rather than a facet, and it is read
+ * separately: `ids.xsd` fixes it as the restriction's **first** child, so it is taken off the front
+ * before the constraints beside it are counted.
  */
 const RESTRICTION_FACETS_READ = [
   "pattern",
@@ -873,13 +874,44 @@ const RESTRICTION_FACETS_READ = [
  * `xs:double` base, and the rest two `xs:pattern` children. Each of those is a different piece of
  * work, and the message is what tells the user which one their file is waiting on.
  *
- * Both halves of that sentence are gone — ranges and lengths are read now.
+ * Both halves of that sentence are gone — ranges and lengths are read now, and so is an annotation
+ * standing where the schema puts one.
  */
 function refuseRestrictionFacet(tag: string): FacetRefusal {
   if (tag === "annotation") {
-    return refused("Documents its value with an <xs:annotation>, which the builder cannot show.");
+    return refused("Documents its value with an <xs:annotation> that is not the first thing in the restriction.");
   }
   return refused(`Restricts its value with <xs:${tag}>, which the builder cannot show.`);
+}
+
+/**
+ * The prose an `<xs:annotation>` holds, or the reason it cannot be carried as a string.
+ *
+ * `<xs:annotation>` has a content model of its own — `(appinfo | documentation)*`, an `id`, and
+ * `source` and `xml:lang` on each `<xs:documentation>`, whose content is mixed and may hold markup.
+ * A `ValueDraft` carries one plain string, so one is claimed only where writing it back reproduces
+ * the source exactly. That is the rule `affixReadingOf` and the non-string base check already
+ * follow: read what the exporter can reproduce, keep the rest verbatim.
+ *
+ * `""` is a real answer, not an absence — a document stating an empty `<xs:documentation>` gets an
+ * empty one back.
+ */
+function readAnnotation(node: OrderedNode): { text: string } | FacetRefusal {
+  const cannot = (what: string): FacetRefusal =>
+    refused(`Documents its value with an <xs:annotation> ${what}, which the builder cannot show.`);
+
+  if (Object.keys(attributesOf(node)).length > 0) return cannot("carrying an attribute");
+
+  const children = elementsOf(childrenOf(node));
+  if (children.length !== 1 || tagOf(children[0]) !== "documentation") {
+    return cannot("that is not one <xs:documentation>");
+  }
+
+  const [documentation] = children;
+  if (Object.keys(attributesOf(documentation)).length > 0) return cannot("carrying an attribute");
+  if (elementsOf(childrenOf(documentation)).length > 0) return cannot("holding markup");
+
+  return { text: textOf(childrenOf(documentation)) };
 }
 
 /**
@@ -909,11 +941,36 @@ function readValueDraft(
     return refused(`States its value as <${tagOf(only)}>, which the builder cannot show.`);
   }
 
+  // The annotation comes off the front first, because `ids.xsd` fixes it as the restriction's first
+  // child. One standing anywhere else is a document the schema does not describe, and writing it
+  // back where the schema puts it would be correcting someone else's file rather than reproducing it.
+  const all = elementsOf(childrenOf(only));
+  const annotated = tagOf(all[0]) === "annotation";
+  const children = annotated ? all.slice(1) : all;
+
+  let annotation: string | undefined;
+  if (annotated) {
+    const read = readAnnotation(all[0]);
+    if ("refused" in read) return read;
+    annotation = read.text;
+  }
+
   // What the restriction is made of, before what it is based on: a numeric range legitimately
   // carries a numeric base, so checking the base first would report the range as a bad base.
-  const children = elementsOf(childrenOf(only));
   const outside = children.find((child) => !RESTRICTION_FACETS_READ.includes(tagOf(child) ?? ""));
   if (outside) return refuseRestrictionFacet(tagOf(outside) ?? "");
+
+  // A facet with children of its own is prose one level further down — XSD lets every one of them
+  // carry an `<xs:annotation>`, and three corpus enumerations do. A `ValueDraft`'s enum is a list of
+  // strings with nowhere to hold prose per member, and reading past it silently is what this reader
+  // did before: `<xs:enumeration value="30">` was read for its attribute alone and its documentation
+  // dropped. That cost nothing only because the one specification carrying it was refused whole.
+  const nested = children.find((child) => elementsOf(childrenOf(child)).length > 0);
+  if (nested) {
+    return refused(
+      `Documents its <xs:${tagOf(nested)}> with an <xs:annotation> of its own, which the builder cannot show.`
+    );
+  }
 
   const base = attributeOrNull(only, "base");
   const patterns = children.filter((child) => tagOf(child) === "pattern");
@@ -926,33 +983,54 @@ function readValueDraft(
   );
 
   // XSD would intersect two families, and a `ValueDraft` states one thing. Dropping either half
-  // would export a rule that checks less than the file asks for.
+  // would export a rule that checks less than the file asks for. Several patterns are **not** two
+  // families: XSD reads them as a disjunction, and the draft holds the list.
   const families = [patterns.length, enumerations.length, bounds.length, lengths.length].filter(
     (count) => count > 0
   );
-  if (families.length !== 1 || patterns.length > 1) {
+  if (families.length !== 1) {
     return refused("Combines several restrictions on one value, which the builder cannot show.");
   }
 
+  /** The read value with the restriction's own prose on it, since every kind here can hold it. */
+  const carrying = (
+    read: { value: RestrictionValueDraft } | FacetRefusal
+  ): { value: ValueDraft } | FacetRefusal => {
+    if ("refused" in read || annotation === undefined) return read;
+    return { value: { ...read.value, annotation } };
+  };
+
   // A range keeps whatever base the author wrote, right down to a capitalised `xs:Decimal`.
-  if (bounds.length > 0) return readBoundsDraft(base ?? "xs:double", bounds);
+  if (bounds.length > 0) return carrying(readBoundsDraft(base ?? "xs:double", bounds));
 
-  // A pattern, an enumeration and a length are all string constructs, so anything left here is
-  // based on a type we would retype on the way back out.
-  if (base !== null && base.slice(base.indexOf(":") + 1) !== "string") {
-    return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
-  }
+  // A pattern and a length are string constructs — IDS says a pattern is matched against a string,
+  // and a length counts characters — so a numeric base on either is a document we would retype on
+  // the way back out. An enumeration is not: it lists values of whatever type the base names, and
+  // the suite writes one over `xs:double`.
+  const nonString = base !== null && base.slice(base.indexOf(":") + 1) !== "string";
 
-  if (patterns.length === 1) {
-    return { value: patternValueDraft(attributeOrNull(patterns[0], "value") ?? "") };
+  if (patterns.length > 0) {
+    if (nonString) {
+      return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
+    }
+    return carrying({
+      value: patternValueDraft(patterns.map((node) => attributeOrNull(node, "value") ?? "")),
+    });
   }
-  if (lengths.length > 0) return readLengthDraft(lengths);
-  return {
+  if (lengths.length > 0) {
+    if (nonString) {
+      return refused(`Restricts its value with base="${base}", which the builder cannot reproduce.`);
+    }
+    return carrying(readLengthDraft(lengths));
+  }
+  return carrying({
     value: {
       kind: "enum",
       values: enumerations.map((child) => attributeOrNull(child, "value") ?? ""),
+      // Absent for the string base every authored rule writes, so an old file imports as it did.
+      ...(nonString ? { base: base as string } : {}),
     },
-  };
+  });
 }
 
 /**
@@ -972,7 +1050,7 @@ function readValueDraft(
 function readBoundsDraft(
   base: string,
   boundNodes: OrderedNode[]
-): { value: ValueDraft } | FacetRefusal {
+): { value: RestrictionValueDraft } | FacetRefusal {
   const edges: { min: BoundDraft | null; max: BoundDraft | null } = { min: null, max: null };
 
   for (const node of boundNodes) {
@@ -999,7 +1077,7 @@ function readBoundsDraft(
  * no readable edge compiles to a restriction that admits everything, so importing one would turn a
  * malformed file into a rule that passes every element. Keeping it verbatim says so instead.
  */
-function readLengthDraft(lengthNodes: OrderedNode[]): { value: ValueDraft } | FacetRefusal {
+function readLengthDraft(lengthNodes: OrderedNode[]): { value: RestrictionValueDraft } | FacetRefusal {
   const edges: LengthDraft = { exact: null, min: null, max: null };
 
   for (const node of lengthNodes) {

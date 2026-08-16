@@ -9,6 +9,7 @@ import type {
 import {
   affixReadingOf,
   applicabilityEntityNamesOf,
+  carryAnnotation,
   compileDraft,
   compileValue,
   escapeRegExp,
@@ -245,12 +246,12 @@ describe("the friendly operators are a reading of the value, not the storage", (
 
 describe("patternValueDraft", () => {
   it("reads a pattern an affix operator would have written back as that operator", () => {
-    expect(patternValueDraft(".*A\\.B.*")).toEqual({
+    expect(patternValueDraft([".*A\\.B.*"])).toEqual({
       kind: "affix",
       operator: "contains",
       literal: "A.B",
     });
-    expect(patternValueDraft("\\(dev\\).*")).toEqual({
+    expect(patternValueDraft(["\\(dev\\).*"])).toEqual({
       kind: "affix",
       operator: "startsWith",
       literal: "(dev)",
@@ -259,18 +260,75 @@ describe("patternValueDraft", () => {
 
   // Claiming a source the affix form would not rebuild exactly would edit the author's regex.
   it("keeps anything else as the author's own pattern", () => {
-    expect(patternValueDraft("W-\\d+")).toEqual({ kind: "pattern", source: "W-\\d+" });
-    expect(patternValueDraft(".*[A-Z].*")).toEqual({ kind: "pattern", source: ".*[A-Z].*" });
+    expect(patternValueDraft(["W-\\d+"])).toEqual({ kind: "pattern", sources: ["W-\\d+"] });
+    expect(patternValueDraft([".*[A-Z].*"])).toEqual({ kind: "pattern", sources: [".*[A-Z].*"] });
     expect(affixReadingOf(".*")).toBeNull();
+  });
+
+  // Several sources are a disjunction, which no affix states — ".*A.*" alone is "contains A", and
+  // the same source beside another is not. Claiming one would drop the other on the way back out.
+  it("never claims an affix reading for several patterns at once", () => {
+    expect(patternValueDraft([".*A\\.B.*", "W-\\d+"])).toEqual({
+      kind: "pattern",
+      sources: [".*A\\.B.*", "W-\\d+"],
+    });
+  });
+
+  // A disjunction of anchored patterns is one anchored pattern, which is what lets the compiled
+  // restriction stay a single regex and the evaluator stay untouched.
+  it("compiles several sources into the disjunction XSD reads them as", () => {
+    const compiled = compileValue({ kind: "pattern", sources: ["[a-z]{2}[0-9]{2}", "[A-Z]{2}[0-9]{2}"] });
+    if (compiled?.kind !== "pattern") throw new Error("expected a pattern restriction");
+
+    expect(compiled.regex.test("XY99")).toBe(true);
+    expect(compiled.regex.test("xy99")).toBe(true);
+    expect(compiled.regex.test("Xy99")).toBe(false);
   });
 
   it("rebuilds every affix pattern it claims character for character", () => {
     for (const source of [".*A\\.B.*", "\\(dev\\).*", ".*-01", ".*x.*"]) {
-      const draft = patternValueDraft(source) as Extract<ValueDraft, { kind: "affix" }>;
+      const draft = patternValueDraft([source]) as Extract<ValueDraft, { kind: "affix" }>;
       const compiled = compileValue(draft);
       if (compiled?.kind !== "pattern") throw new Error("expected a pattern restriction");
       expect(compiled.source).toBe(source);
     }
+  });
+});
+
+describe("carryAnnotation", () => {
+  const documented: ValueDraft = { kind: "pattern", sources: ["D.*"], annotation: "Why this exists" };
+
+  it("moves the prose onto whatever restriction replaces the one it documented", () => {
+    expect(carryAnnotation(documented, { kind: "enum", values: ["A"] })).toEqual({
+      kind: "enum",
+      values: ["A"],
+      annotation: "Why this exists",
+    });
+  });
+
+  // A <simpleValue> has no <xs:restriction> to hold an annotation, so this is the one edit that
+  // loses it — stated here rather than discovered from an exported file missing a sentence.
+  it("drops it where the new value has no restriction to hold one", () => {
+    expect(carryAnnotation(documented, { kind: "simple", value: "D-01" })).toEqual({
+      kind: "simple",
+      value: "D-01",
+    });
+  });
+
+  it("leaves a value alone when there was no prose to carry", () => {
+    const plain: ValueDraft = { kind: "pattern", sources: ["D.*"] };
+    expect(carryAnnotation(plain, { kind: "enum", values: ["A"] })).toEqual({
+      kind: "enum",
+      values: ["A"],
+    });
+    expect(carryAnnotation(null, documented)).toEqual(documented);
+    expect(carryAnnotation(documented, null)).toBeNull();
+  });
+
+  // Prose is not a constraint, so it must not reach the engine. `compileValue` drops it with
+  // everything else that records how the file was written.
+  it("states nothing the validator checks", () => {
+    expect(compileValue(documented)).toEqual(compileValue({ kind: "pattern", sources: ["D.*"] }));
   });
 });
 

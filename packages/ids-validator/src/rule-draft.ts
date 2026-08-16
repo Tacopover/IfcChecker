@@ -79,13 +79,50 @@ export type AffixOperator = "contains" | "startsWith" | "endsWith";
  * 4 `xs:integer`, and 6 with a capitalised spelling `xs:Decimal` or `xs:Integer` that no XSD type
  * has. Assuming `xs:double` would hand 8 authors back a file they did not write.
  */
-export type ValueDraft =
-  | { kind: "simple"; value: string }
-  | { kind: "enum"; values: string[] }
-  | { kind: "pattern"; source: string }
+export type ValueDraft = { kind: "simple"; value: string } | RestrictionValueDraft;
+
+/**
+ * Every value that reaches a file as an `<xs:restriction>`, which is all of them but `simple`.
+ *
+ * Named because the annotation belongs to exactly this set. `ids.xsd` puts an `<xs:annotation>`
+ * inside the restriction, and a `<simpleValue>` has no restriction to put one in — so a field on
+ * all six variants would let a draft hold prose the exporter has nowhere to write.
+ */
+export type RestrictionValueDraft = (
+  /**
+   * The values the parameter may hold, and the type they are written as.
+   *
+   * `base` is absent for everything the builder authors, which is `xs:string`. A file may state a
+   * numeric one — the suite's `typecast_checking_may_also_occur_within_enumeration_restrictions`
+   * writes `xs:double` — and it reaches the compiled restriction no more than a range's base does:
+   * `matchesLiteral` already compares `"42"` and `42` correctly. It is carried for the export.
+   */
+  | { kind: "enum"; values: string[]; base?: string }
+  /**
+   * The regexes the value may match — a **list**, because XSD 1.0 §4.3.4 reads several
+   * `<xs:pattern>` in one restriction step as a disjunction, and joining them into one source
+   * would hand the author back a regex they did not write. `compileValue` joins; the exporter
+   * writes one `<xs:pattern>` per entry. Authored rules always state exactly one.
+   */
+  | { kind: "pattern"; sources: string[] }
   | { kind: "affix"; operator: AffixOperator; literal: string }
   | { kind: "bounds"; base: string; min: BoundDraft | null; max: BoundDraft | null }
-  | ({ kind: "length" } & LengthDraft);
+  | ({ kind: "length" } & LengthDraft)
+) & {
+  /**
+   * The author's prose about the restriction, as the one `<xs:documentation>` it holds.
+   *
+   * On the value rather than beside it because `ids.xsd` types **nine** parameters across the six
+   * facet kinds as an `idsValue`, four of the kinds carrying two — so a field beside the value
+   * would be ten fields, where one on the value reaches all of them through `idsValueXml`,
+   * `readValueDraft` and `FacetValueEditor`.
+   *
+   * It constrains nothing, so `compileValue` drops it the way it drops every other record of how
+   * the file was written. `""` and absent are different: a document stating an empty
+   * `<xs:documentation>` gets an empty one back.
+   */
+  annotation?: string;
+};
 
 /**
  * What every facet in `<requirements>` carries. `instructions` is the only field `ids.xsd` gives
@@ -410,10 +447,15 @@ export function affixReadingOf(
   return null;
 }
 
-/** A pattern read from a file, as the operator it was written as where that is what it says. */
-export function patternValueDraft(source: string): ValueDraft {
-  const affix = affixReadingOf(source);
-  return affix ? { kind: "affix", ...affix } : { kind: "pattern", source };
+/**
+ * The patterns read from a file, as the operator they were written as where that is what they say.
+ *
+ * Only one source can be an affix: "contains X" is a single regex, and a facet stating two of them
+ * says something no operator does. Several stay a pattern list, which the row shows and keeps.
+ */
+export function patternValueDraft(sources: string[]): RestrictionValueDraft {
+  const affix = sources.length === 1 ? affixReadingOf(sources[0]) : null;
+  return affix ? { kind: "affix", ...affix } : { kind: "pattern", sources: [...sources] };
 }
 
 /**
@@ -452,8 +494,10 @@ export function compileValue(value: ValueDraft | null): ParsedRestriction | null
       return { kind: "exact", value: value.value };
     case "enum":
       return { kind: "enum", values: [...value.values] };
+    // Joined the way `parseRestriction` joins them, so the two readers compile one file the same
+    // way: several `<xs:pattern>` are a disjunction, and a disjunction of anchored patterns is one.
     case "pattern":
-      return patternRestriction(value.source);
+      return patternRestriction(value.sources.join("|"));
     case "affix":
       return patternRestriction(affixPatternSource(value.operator, value.literal));
     case "bounds": {
@@ -488,8 +532,9 @@ export interface FriendlyReading {
  * carrying two of them. Cardinality is a separate control and a separate question.
  *
  * `null` in is a facet stating no value, which reads as `exists`. `null` out is not a fault — it is
- * the honest answer for the two value shapes the operators cannot express, a numeric range and a
- * length. The row shows those rather than mislabelling them.
+ * the honest answer for the value shapes the operators cannot express: a numeric range, a length,
+ * and a list of patterns, which no single "match pattern" box states. The row shows those rather
+ * than mislabelling them.
  */
 export function friendlyReadingOf(value: ValueDraft | null): FriendlyReading | null {
   const none = { text: "", values: [] };
@@ -503,12 +548,36 @@ export function friendlyReadingOf(value: ValueDraft | null): FriendlyReading | n
       return { operator: "oneOf", text: "", values: [...value.values] };
     case "affix":
       return { operator: value.operator, text: value.literal, values: [] };
+    // One pattern is `matches`; several are a disjunction the box cannot hold, and joining them
+    // into the box would let a keystroke rewrite them as one regex the author never wrote.
     case "pattern":
-      return { operator: "matches", text: value.source, values: [] };
+      return value.sources.length === 1
+        ? { operator: "matches", text: value.sources[0], values: [] }
+        : null;
     case "bounds":
     case "length":
       return null;
   }
+}
+
+/**
+ * `to`, keeping whatever prose `from` carried — the annotation follows the value it documents.
+ *
+ * The one cost of storing the annotation on the value rather than beside it. `valueDraftForOperator`
+ * and the row's retargeting both build a **fresh** value, so without this an author changing the
+ * operator, the field or the property set would destroy a sentence their edit was not about.
+ *
+ * `simple` is where it stops, and it has to: a `<simpleValue>` has no `<xs:restriction>` to hold an
+ * annotation, so switching to "be exactly" writes a file with nowhere to put the prose. The row is
+ * what makes that visible — the note is beside the control that dropped it.
+ */
+export function carryAnnotation(
+  from: ValueDraft | null,
+  to: ValueDraft | null
+): ValueDraft | null {
+  if (from === null || from.kind === "simple" || from.annotation === undefined) return to;
+  if (to === null || to.kind === "simple") return to;
+  return { ...to, annotation: from.annotation };
 }
 
 /** The value an operator states, given whatever text and ticked values the row is holding. */
@@ -525,7 +594,7 @@ export function valueDraftForOperator(
     case "oneOf":
       return { kind: "enum", values: [...values] };
     case "matches":
-      return { kind: "pattern", source: text };
+      return { kind: "pattern", sources: [text] };
     default:
       return { kind: "affix", operator, literal: text };
   }

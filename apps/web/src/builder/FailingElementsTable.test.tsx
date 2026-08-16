@@ -123,7 +123,7 @@ describe("readConditionValue", () => {
     const attribute: ConditionDraft = { ...CONDITIONS[0], kind: "attribute", propertySet: null };
 
     expect(
-      readConditionValue(element(), { ...attribute, name: { kind: "pattern", source: ".*Name.*" } })
+      readConditionValue(element(), { ...attribute, name: { kind: "pattern", sources: [".*Name.*"] } })
     ).toEqual({ kind: "notOneSlot" });
   });
 });

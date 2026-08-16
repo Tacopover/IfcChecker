@@ -174,6 +174,45 @@ describe("import / export round-trip", () => {
     expect(comparable(parseIdsXml(reexport(source)))).toEqual(comparable(parseIdsXml(source)));
   });
 
+  // XSD reads several <xs:pattern> as a disjunction, and the draft holds the list so the exporter
+  // can write one element per source. Joining them would hand the author back a regex they did not
+  // write — which is the whole reason the draft does not store the compiled form.
+  it("reproduces two patterns on one value as two elements, in the order they were written", () => {
+    const source = [
+      `<?xml version="1.0" encoding="UTF-8"?>`,
+      `<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema">`,
+      `  <info><title>T</title></info>`,
+      `  <specifications>`,
+      `    <specification name="Regex patterns work in OR" ifcVersion="IFC4">`,
+      `      <applicability minOccurs="1" maxOccurs="unbounded">`,
+      `        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>`,
+      `      </applicability>`,
+      `      <requirements>`,
+      `        <attribute>`,
+      `          <name><simpleValue>Name</simpleValue></name>`,
+      `          <value>`,
+      `            <xs:restriction base="xs:string">`,
+      `              <xs:pattern value="[a-z]{2}[0-9]{2}" />`,
+      `              <xs:pattern value="[A-Z]{2}[0-9]{2}" />`,
+      `            </xs:restriction>`,
+      `          </value>`,
+      `        </attribute>`,
+      `      </requirements>`,
+      `    </specification>`,
+      `  </specifications>`,
+      `</ids>`,
+    ].join("\n");
+
+    // Read as a rule now rather than kept verbatim, which is what makes the reproduction a claim
+    // about the exporter rather than about the pass-through machinery.
+    const { rules } = idsXmlToDrafts(source);
+    expect(rules[0].imported?.passThrough).toEqual([]);
+
+    expect(structure(reexport(source))).toEqual(structure(source));
+    expect(idsSchemaViolations(reexport(source))).toEqual([]);
+    expect(comparable(parseIdsXml(reexport(source)))).toEqual(comparable(parseIdsXml(source)));
+  });
+
   it("still exports a rule the builder authored from scratch as plain IFC4", () => {
     const xml = buildIdsXml([
       { id: "r1", name: "Authored", entityTypes: ["IfcWall"], conditions: [] },
