@@ -378,10 +378,17 @@ function readApplicability(
     const children = childrenOf(node);
     const read = readEntityNames(descend(children, "name"));
     if (read === null) {
+      // Two different documents reached this one message, and only one of them is about patterns.
+      // 8 of the 12 corpus specifications refused here have **no `<name>` child at all** — they
+      // spell it `<n>`, the markdown mangling two applicability attributes already carry — so
+      // saying "gives its types as a pattern" described a fault the file does not have.
       reasons.push({
         section: "applicability",
         construct: "entity/name",
-        description: "Gives its entity types as a pattern rather than plain names.",
+        description:
+          findChild(children, "name") === null
+            ? "Its <entity> states no <name>, which ids.xsd requires."
+            : "Gives its entity types as a pattern rather than plain names.",
       });
       continue;
     }

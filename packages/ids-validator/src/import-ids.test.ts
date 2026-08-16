@@ -90,6 +90,25 @@ describe("idsXmlToDrafts applicability", () => {
     expect(result.refused[0].reasons.map((reason) => reason.construct)).toContain(construct);
   });
 
+  // Two different documents reached one message. 8 of the 12 corpus specifications refused for
+  // `entity/name` have no `<name>` at all — they spell it `<n>`, from markdown mangling — so
+  // "gives its types as a pattern" described a fault those files do not have.
+  it("tells a pattern-valued entity name apart from an <entity> with no name", () => {
+    const pattern = idsXmlToDrafts(
+      document(`<specification name="S" ifcVersion="IFC4"><applicability>
+        <entity><name><xs:restriction base="xs:string"><xs:pattern value="IFC.*" /></xs:restriction></name></entity>
+      </applicability></specification>`)
+    );
+    expect(pattern.refused[0].reasons[0].description).toMatch(/as a pattern/);
+
+    const mangled = idsXmlToDrafts(
+      document(`<specification name="S" ifcVersion="IFC4"><applicability>
+        <entity><n><simpleValue>IFCWALL</simpleValue></n></entity>
+      </applicability></specification>`)
+    );
+    expect(mangled.refused[0].reasons[0].description).toMatch(/states no <name>/);
+  });
+
   it("reads an applicability property beside the entity names", () => {
     const rule = onlyRule(
       idsXmlToDrafts(

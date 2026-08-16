@@ -588,10 +588,16 @@ function readApplicability(
     const children = childrenOf(node, "entity");
     const names = readEntityNames(descend(children, "name"));
     if (names === null) {
+      // The same two documents the importer had to tell apart: a `<name>` given as a pattern, and
+      // an `<entity>` with no `<name>` at all — 8 of the 12 corpus specifications refused here
+      // spell it `<n>`, so one message described a fault the file does not have.
       unsupported.push({
         section: "applicability",
         construct: "entity/name",
-        description: "Gives its entity types as a pattern rather than plain names.",
+        description:
+          children.some((child) => tagOf(child) === "name")
+            ? "Gives its entity types as a pattern rather than plain names."
+            : "Its <entity> states no <name>, which ids.xsd requires.",
       });
       continue;
     }
