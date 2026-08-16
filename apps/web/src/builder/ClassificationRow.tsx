@@ -4,7 +4,7 @@ import { plainNameOf } from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
 import type { ObservedValue } from "./ValuePicker.js";
 import { FacetValueEditor } from "./FacetValueEditor.js";
-import { FacetRowFrame, errorIdOf } from "./FacetRowFrame.js";
+import { FacetRowFrame, errorIdOf, rowNoun, type FacetSide } from "./FacetRowFrame.js";
 import { CARDINALITIES } from "./ConditionRow.js";
 import { conditionProblem } from "./completeness.js";
 
@@ -45,8 +45,9 @@ function codeOptions(source: FieldsForResult, system: string | null): ObservedVa
 export interface ClassificationRowProps {
   facet: ClassificationFacetDraft;
   source: FieldsForResult;
-  hits: number;
-  matched: number;
+  side?: FacetSide;
+  hits?: number;
+  matched?: number;
   onChange: (next: ClassificationFacetDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -63,12 +64,14 @@ export interface ClassificationRowProps {
 export function ClassificationRow({
   facet,
   source,
+  side = "requirements",
   hits,
   matched,
   onChange,
   onDuplicate,
   onDelete,
 }: ClassificationRowProps) {
+  const selects = side === "applicability";
   const system = plainNameOf(facet.system);
   const systems = useMemo(() => systemOptions(source), [source]);
   const codes = useMemo(() => codeOptions(source, system), [source, system]);
@@ -79,33 +82,41 @@ export function ClassificationRow({
   return (
     <FacetRowFrame
       id={facet.id}
+      side={side}
       prohibited={facet.cardinality === "prohibited"}
       hits={hits}
       matched={matched}
       instructions={facet.instructions}
       uri={facet.uri}
       error={error}
+      what={rowNoun(side, "classification")}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
     >
       <span className="tok">Classification</span>
 
-      <select
-        aria-label="Cardinality"
-        title="Whether the element has to be classified at all"
-        value={facet.cardinality}
-        onChange={(event) =>
-          onChange({ ...facet, cardinality: event.target.value as ConditionalCardinality })
-        }
-      >
-        {CARDINALITIES.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.label}
-          </option>
-        ))}
-      </select>
+      {selects ? (
+        <span className="glue">selects only those classified in a system that must</span>
+      ) : (
+        <>
+          <select
+            aria-label="Cardinality"
+            title="Whether the element has to be classified at all"
+            value={facet.cardinality}
+            onChange={(event) =>
+              onChange({ ...facet, cardinality: event.target.value as ConditionalCardinality })
+            }
+          >
+            {CARDINALITIES.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
 
-      <span className="glue">be classified in a system that must</span>
+          <span className="glue">be classified in a system that must</span>
+        </>
+      )}
       <FacetValueEditor
         id={facet.id}
         label="System"

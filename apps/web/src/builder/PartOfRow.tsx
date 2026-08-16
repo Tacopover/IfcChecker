@@ -4,7 +4,7 @@ import { PART_OF_RELATIONS, plainNameOf } from "@ifc-qa/ids-validator";
 import type { FieldsForResult, PartOfSummary } from "./introspect.js";
 import type { ObservedValue } from "./ValuePicker.js";
 import { FacetValueEditor } from "./FacetValueEditor.js";
-import { FacetRowFrame, errorIdOf } from "./FacetRowFrame.js";
+import { FacetRowFrame, errorIdOf, rowNoun, type FacetSide } from "./FacetRowFrame.js";
 import { conditionProblem } from "./completeness.js";
 
 /**
@@ -90,8 +90,9 @@ function rank(merged: Map<string, number>): ObservedValue[] {
 export interface PartOfRowProps {
   facet: PartOfFacetDraft;
   source: FieldsForResult;
-  hits: number;
-  matched: number;
+  side?: FacetSide;
+  hits?: number;
+  matched?: number;
   onChange: (next: PartOfFacetDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -111,12 +112,14 @@ export interface PartOfRowProps {
 export function PartOfRow({
   facet,
   source,
+  side = "requirements",
   hits,
   matched,
   onChange,
   onDuplicate,
   onDelete,
 }: PartOfRowProps) {
+  const selects = side === "applicability";
   const ifcType = plainNameOf(facet.entityName);
   const classes = useMemo(() => classOptions(source, facet.relation), [source, facet.relation]);
   const predefinedTypes = useMemo(
@@ -130,32 +133,40 @@ export function PartOfRow({
   return (
     <FacetRowFrame
       id={facet.id}
+      side={side}
       prohibited={facet.cardinality === "prohibited"}
       hits={hits}
       matched={matched}
       instructions={facet.instructions}
       error={error}
+      what={rowNoun(side, "partOf")}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
     >
       <span className="tok">Part of</span>
 
-      <select
-        aria-label="Cardinality"
-        title="Whether the element has to be part of a whole at all"
-        value={facet.cardinality}
-        onChange={(event) =>
-          onChange({ ...facet, cardinality: event.target.value as SimpleCardinality })
-        }
-      >
-        {SIMPLE_CARDINALITIES.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.label}
-          </option>
-        ))}
-      </select>
+      {selects ? (
+        <span className="glue">selects only those</span>
+      ) : (
+        <>
+          <select
+            aria-label="Cardinality"
+            title="Whether the element has to be part of a whole at all"
+            value={facet.cardinality}
+            onChange={(event) =>
+              onChange({ ...facet, cardinality: event.target.value as SimpleCardinality })
+            }
+          >
+            {SIMPLE_CARDINALITIES.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
 
-      <span className="glue">be</span>
+          <span className="glue">be</span>
+        </>
+      )}
       <select
         aria-label="Relationship"
         title="Which IFC relationship makes the element a part of the whole"

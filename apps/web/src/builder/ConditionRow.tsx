@@ -4,7 +4,7 @@ import { friendlyReadingOf, plainName, plainNameOf, valueDraftForOperator } from
 import type { FieldsForResult } from "./introspect.js";
 import type { ObservedValue } from "./ValuePicker.js";
 import { FacetValueEditor, OPERATORS } from "./FacetValueEditor.js";
-import { FacetRowFrame, errorIdOf } from "./FacetRowFrame.js";
+import { FacetRowFrame, errorIdOf, rowNoun, type FacetSide } from "./FacetRowFrame.js";
 import { conditionProblem } from "./completeness.js";
 import { nextDraftId } from "./draftIds.js";
 
@@ -155,22 +155,33 @@ function optionsWith(list: string[], current: string | null) {
 export interface ConditionRowProps {
   condition: ConditionDraft;
   source: FieldsForResult;
-  hits: number;
-  matched: number;
+  side?: FacetSide;
+  hits?: number;
+  matched?: number;
   onChange: (next: ConditionDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }
 
+/**
+ * A property or an attribute, on either side of the specification.
+ *
+ * These are the two most frequent applicability facets in the corpus — 41,300 and 41,294 — and the
+ * row serving them is the same one, because the two sides differ in four things and share every
+ * control: the property-set select, the field select, the stored-as picker, the value editor and
+ * the phrases each degrades to when a name is a restriction rather than a plain name.
+ */
 export function ConditionRow({
   condition,
   source,
+  side = "requirements",
   hits,
   matched,
   onChange,
   onDuplicate,
   onDelete,
 }: ConditionRowProps) {
+  const selects = side === "applicability";
   const observed = useMemo(() => observedValuesFor(source, condition), [source, condition]);
   const dataTypeOptions = useMemo(() => dataTypeOptionsFor(source, condition), [source, condition]);
   const error = conditionProblem(condition);
@@ -257,12 +268,14 @@ export function ConditionRow({
   return (
     <FacetRowFrame
       id={condition.id}
+      side={side}
       prohibited={condition.cardinality === "prohibited"}
       hits={hits}
       matched={matched}
       instructions={condition.instructions}
       uri={uri}
       error={error}
+      what={rowNoun(side, condition.kind)}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
     >
@@ -343,20 +356,24 @@ export function ConditionRow({
         </select>
       )}
 
-      <select
-        aria-label="Cardinality"
-        title="Whether the field has to be there at all"
-        value={condition.cardinality}
-        onChange={(event) =>
-          onChange({ ...condition, cardinality: event.target.value as ConditionalCardinality })
-        }
-      >
-        {CARDINALITIES.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.label}
-          </option>
-        ))}
-      </select>
+      {selects ? (
+        <span className="glue">selects only those where it must</span>
+      ) : (
+        <select
+          aria-label="Cardinality"
+          title="Whether the field has to be there at all"
+          value={condition.cardinality}
+          onChange={(event) =>
+            onChange({ ...condition, cardinality: event.target.value as ConditionalCardinality })
+          }
+        >
+          {CARDINALITIES.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      )}
 
       <FacetValueEditor
         id={condition.id}

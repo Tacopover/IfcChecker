@@ -1,15 +1,16 @@
 import type { ConditionalCardinality, MaterialFacetDraft } from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
 import { FacetValueEditor } from "./FacetValueEditor.js";
-import { FacetRowFrame, errorIdOf } from "./FacetRowFrame.js";
+import { FacetRowFrame, errorIdOf, rowNoun, type FacetSide } from "./FacetRowFrame.js";
 import { CARDINALITIES } from "./ConditionRow.js";
 import { conditionProblem } from "./completeness.js";
 
 export interface MaterialRowProps {
   facet: MaterialFacetDraft;
   source: FieldsForResult;
-  hits: number;
-  matched: number;
+  side?: FacetSide;
+  hits?: number;
+  matched?: number;
   onChange: (next: MaterialFacetDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -29,6 +30,7 @@ export interface MaterialRowProps {
 export function MaterialRow({
   facet,
   source,
+  side = "requirements",
   hits,
   matched,
   onChange,
@@ -36,37 +38,46 @@ export function MaterialRow({
   onDelete,
 }: MaterialRowProps) {
   const error = conditionProblem(facet);
+  const selects = side === "applicability";
 
   return (
     <FacetRowFrame
       id={facet.id}
+      side={side}
       prohibited={facet.cardinality === "prohibited"}
       hits={hits}
       matched={matched}
       instructions={facet.instructions}
       uri={facet.uri}
       error={error}
+      what={rowNoun(side, "material")}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
     >
       <span className="tok">Material</span>
 
-      <select
-        aria-label="Cardinality"
-        title="Whether the element has to be made of anything at all"
-        value={facet.cardinality}
-        onChange={(event) =>
-          onChange({ ...facet, cardinality: event.target.value as ConditionalCardinality })
-        }
-      >
-        {CARDINALITIES.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.label}
-          </option>
-        ))}
-      </select>
+      {selects ? (
+        <span className="glue">selects only those made of a material that must</span>
+      ) : (
+        <>
+          <select
+            aria-label="Cardinality"
+            title="Whether the element has to be made of anything at all"
+            value={facet.cardinality}
+            onChange={(event) =>
+              onChange({ ...facet, cardinality: event.target.value as ConditionalCardinality })
+            }
+          >
+            {CARDINALITIES.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
 
-      <span className="glue">be made of a material that must</span>
+          <span className="glue">be made of a material that must</span>
+        </>
+      )}
       <FacetValueEditor
         id={facet.id}
         label="Material"

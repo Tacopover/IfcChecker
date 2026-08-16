@@ -108,3 +108,37 @@ the draft model into the engine.
 
 Stopping between any two leaves the tool strictly better than it was, because a kind that has no row
 yet keeps the read-only one it has today.
+
+## The second decision: one row per kind, with a `side` parameter
+
+Written before step 7, and it is the question the brief asked outright — an applicability facet row
+and a requirement facet row of the same kind differ only in which attributes they may state, so is
+that one component with a side parameter or two components?
+
+**One component per kind, taking a `side`,** the way `facetXml` and `readFacetShell` already do.
+
+The two sides differ in exactly four things, and `ids.xsd` supplies all four:
+
+| | requirements | applicability |
+| --- | --- | --- |
+| `cardinality` | a select, alphabet per kind | **not writable at all** |
+| `instructions`, `uri` | shown when the author wrote them | **not writable at all** |
+| a per-facet score | how many of the applicable elements pass | none — it narrows the count instead |
+| the sentence's lead | "must be classified in…" | "selects only those classified in…" |
+
+Everything else is the same control: the property-set select, the field select, the stored-as
+picker, both value editors, the model's observed values behind each, the completeness error, and
+the degradation to a read-only phrase when a name is a restriction rather than a plain name.
+
+**What two components would cost.** `ConditionRow` is 400 lines and serves two of the five
+applicability kinds. A second copy of it would be a second place for the pattern-valued-name
+phrases, the retargeting rules and the stored-as picker to diverge, in exchange for removing one
+conditional per row. The three small rows would each double for the same reason. The `side`
+parameter is one prop threaded to one conditional in each of five files.
+
+**What the `side` parameter costs.** The frame has to withhold the score and the note, which means
+`hits` and `matched` become optional and one component decides what a row without them looks like.
+That is the price, and it is paid once.
+
+`ApplicabilityFacetRow` and `UnshownFacetRow` both disappear at the end of this: every kind on both
+sides has controls, so a read-only fallback matches nothing.

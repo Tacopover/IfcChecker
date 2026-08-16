@@ -285,17 +285,27 @@ describe("RuleBuilderPage importing an IDS file", () => {
   });
 
   // An applicability facet decides which elements the rule reaches, so the type chips alone are
-  // not the whole story. It is read-only, like the four requirement kinds with no controls yet.
-  it("shows what else the rule selects by, beside its type chips", async () => {
+  // not the whole story — and it is now editable, with the three attributes `ids.xsd` withholds on
+  // that side absent from the row rather than merely left alone.
+  it("edits what else the rule selects by, beside its type chips", async () => {
     const user = userEvent.setup();
-    renderBuilder([{ fileName: "tower.ifc" }]);
+    const { container } = renderBuilder([{ fileName: "tower.ifc" }]);
 
     await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
     await user.click(screen.getByRole("button", { name: "Expand Doors are named" }));
 
-    expect(
-      screen.getByText(/only those whose IsExternal in Pset_DoorCommon is TRUE/)
-    ).toBeInTheDocument();
+    const row = within(container.querySelector<HTMLElement>(".applicability-facet")!);
+    expect(row.getByLabelText("Property set")).toHaveValue("Pset_DoorCommon");
+    expect(row.getByLabelText("Field name")).toHaveValue("IsExternal");
+    expect(row.getByLabelText("Value")).toHaveValue("TRUE");
+
+    // `applicabilityType` references the base facet types; it is `requirementsType` that adds
+    // cardinality. A select here would let the builder write a document the schema does not describe.
+    expect(row.queryByLabelText("Cardinality")).toBeNull();
+
+    await user.clear(row.getByLabelText("Value"));
+    await user.type(row.getByLabelText("Value"), "FALSE");
+    expect(row.getByLabelText("Value")).toHaveValue("FALSE");
   });
 
   it("says permanently, on the rule itself, what it kept but cannot show", async () => {

@@ -1,17 +1,12 @@
 import { useMemo } from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import type { FacetDraft, RuleDraft } from "@ifc-qa/ids-validator";
-import { isConditionFacet } from "@ifc-qa/ids-validator";
+import type { ApplicabilityFacetDraft, FacetDraft, RuleDraft } from "@ifc-qa/ids-validator";
 import type { ModelIntrospection } from "./introspect.js";
 import { evaluateRuleDraft } from "./evaluateDraft.js";
-import { ConditionRow, defaultConditionFor } from "./ConditionRow.js";
+import { defaultConditionFor } from "./ConditionRow.js";
 import { ruleProblems } from "./completeness.js";
 import { FailingElementsTable } from "./FailingElementsTable.js";
-import { ClassificationRow } from "./ClassificationRow.js";
-import { EntityRow } from "./EntityRow.js";
-import { MaterialRow } from "./MaterialRow.js";
-import { PartOfRow } from "./PartOfRow.js";
-import { ApplicabilityFacetRow } from "./ApplicabilityFacetRow.js";
+import { ApplicabilityRow, RequirementRow } from "./FacetRow.js";
 import { nextDraftId } from "./draftIds.js";
 
 export interface RuleCardProps {
@@ -86,6 +81,31 @@ export function RuleCard({
 
   function deleteCondition(id: string) {
     updateConditions(rule.conditions.filter((entry) => entry.id !== id));
+  }
+
+  // The same three, on the other side of the rule. Kept apart rather than parameterised: the two
+  // lists live in different fields of the draft, and an applicability facet is a narrower type.
+  function updateApplicabilityFacets(facets: ApplicabilityFacetDraft[]) {
+    onChange({ ...rule, applicabilityFacets: facets });
+  }
+
+  function replaceApplicabilityFacet(id: string, next: ApplicabilityFacetDraft) {
+    updateApplicabilityFacets(
+      (rule.applicabilityFacets ?? []).map((entry) => (entry.id === id ? next : entry))
+    );
+  }
+
+  function duplicateApplicabilityFacet(index: number, facet: ApplicabilityFacetDraft) {
+    const facets = rule.applicabilityFacets ?? [];
+    updateApplicabilityFacets([
+      ...facets.slice(0, index + 1),
+      { ...facet, id: nextDraftId("a") },
+      ...facets.slice(index + 1),
+    ]);
+  }
+
+  function deleteApplicabilityFacet(id: string) {
+    updateApplicabilityFacets((rule.applicabilityFacets ?? []).filter((entry) => entry.id !== id));
   }
 
   // Qualified whenever requirements were kept but not shown, so "all pass" never reads as a verdict
@@ -223,18 +243,14 @@ export function RuleCard({
                 </optgroup>
               </select>
             </div>
-            {(rule.applicabilityFacets ?? []).map((facet) => (
-              <ApplicabilityFacetRow
+            {(rule.applicabilityFacets ?? []).map((facet, index) => (
+              <ApplicabilityRow
                 key={facet.id}
                 facet={facet}
-                onDelete={() =>
-                  onChange({
-                    ...rule,
-                    applicabilityFacets: (rule.applicabilityFacets ?? []).filter(
-                      (entry) => entry.id !== facet.id
-                    ),
-                  })
-                }
+                source={source}
+                onChange={(next) => replaceApplicabilityFacet(facet.id, next)}
+                onDuplicate={() => duplicateApplicabilityFacet(index, facet)}
+                onDelete={() => deleteApplicabilityFacet(facet.id)}
               />
             ))}
             {problems.applicability && <p className="rule-error">{problems.applicability}</p>}
@@ -247,79 +263,18 @@ export function RuleCard({
                 {problems.conditions} Click a field in the left panel, or add one.
               </p>
             ) : (
-              rule.conditions.map((condition, index) =>
-                isConditionFacet(condition) ? (
-                  <ConditionRow
-                    key={condition.id}
-                    condition={condition}
-                    source={source}
-                    hits={perCondition[index] ?? 0}
-                    matched={matched}
-                    onChange={(next) =>
-                      updateConditions(
-                        rule.conditions.map((entry) => (entry.id === condition.id ? next : entry))
-                      )
-                    }
-                    onDuplicate={() =>
-                      updateConditions([
-                        ...rule.conditions.slice(0, index + 1),
-                        { ...condition, id: nextDraftId("c") },
-                        ...rule.conditions.slice(index + 1),
-                      ])
-                    }
-                    onDelete={() =>
-                      updateConditions(rule.conditions.filter((entry) => entry.id !== condition.id))
-                    }
-                  />
-                ) : condition.kind === "classification" ? (
-                  <ClassificationRow
-                    key={condition.id}
-                    facet={condition}
-                    source={source}
-                    hits={perCondition[index] ?? 0}
-                    matched={matched}
-                    onChange={(next) => replaceCondition(condition.id, next)}
-                    onDuplicate={() => duplicateCondition(index, condition)}
-                    onDelete={() => deleteCondition(condition.id)}
-                  />
-                ) : condition.kind === "material" ? (
-                  <MaterialRow
-                    key={condition.id}
-                    facet={condition}
-                    source={source}
-                    hits={perCondition[index] ?? 0}
-                    matched={matched}
-                    onChange={(next) => replaceCondition(condition.id, next)}
-                    onDuplicate={() => duplicateCondition(index, condition)}
-                    onDelete={() => deleteCondition(condition.id)}
-                  />
-                ) : condition.kind === "partOf" ? (
-                  <PartOfRow
-                    key={condition.id}
-                    facet={condition}
-                    source={source}
-                    hits={perCondition[index] ?? 0}
-                    matched={matched}
-                    onChange={(next) => replaceCondition(condition.id, next)}
-                    onDuplicate={() => duplicateCondition(index, condition)}
-                    onDelete={() => deleteCondition(condition.id)}
-                  />
-                ) : (
-                  // The last arm rather than a case of its own: with the entity row landed, every
-                  // kind `ids.xsd` allows in <requirements> has controls, so there is nothing left
-                  // for a read-only fallback to catch.
-                  <EntityRow
-                    key={condition.id}
-                    facet={condition}
-                    source={source}
-                    hits={perCondition[index] ?? 0}
-                    matched={matched}
-                    onChange={(next) => replaceCondition(condition.id, next)}
-                    onDuplicate={() => duplicateCondition(index, condition)}
-                    onDelete={() => deleteCondition(condition.id)}
-                  />
-                )
-              )
+              rule.conditions.map((condition, index) => (
+                <RequirementRow
+                  key={condition.id}
+                  facet={condition}
+                  source={source}
+                  hits={perCondition[index] ?? 0}
+                  matched={matched}
+                  onChange={(next) => replaceCondition(condition.id, next)}
+                  onDuplicate={() => duplicateCondition(index, condition)}
+                  onDelete={() => deleteCondition(condition.id)}
+                />
+              ))
             )}
             <button
               type="button"

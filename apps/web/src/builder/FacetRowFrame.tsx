@@ -1,18 +1,39 @@
 import type { ReactNode } from "react";
 
+/**
+ * Which half of the specification a row stands in.
+ *
+ * The same distinction `facetXml` and `readFacetShell` take, and for the same reason: `ids.xsd`
+ * gives an applicability facet no `cardinality`, no `instructions` and no `uri`, because
+ * `applicabilityType` references the base facet types while `requirementsType` is what extends each
+ * of them with those attributes.
+ */
+export type FacetSide = "requirements" | "applicability";
+
 export interface FacetRowFrameProps {
   /** The facet's id, so the error message has one the value controls can point at. */
   id: string;
+  side?: FacetSide;
   /** Drawn differently, because a prohibited row states the opposite of the ones around it. */
   prohibited: boolean;
-  /** How many of the elements the rule applies to satisfy this facet. */
-  hits: number;
-  matched: number;
+  /**
+   * How many of the elements the rule applies to satisfy this facet.
+   *
+   * Absent on the applicability side, where a facet has no score of its own: it narrows the count
+   * beside the rule rather than being passed or failed by the elements it selects.
+   */
+  hits?: number;
+  matched?: number;
   /** The author's prose, and where the requirement is defined outside the file. */
   instructions?: string | null;
   uri?: string | null;
   /** Why the facet cannot be exported, or `null` when it can. */
   error: string | null;
+  /**
+   * What the duplicate and delete affordances call this row. Several rows sit in one rule, so the
+   * noun is what tells them apart to anyone reading the labels rather than the sentence.
+   */
+  what?: string;
   onDuplicate: () => void;
   onDelete: () => void;
   /** The sentence itself — the kind, the cardinality and the value editors. */
@@ -33,31 +54,38 @@ export interface FacetRowFrameProps {
  */
 export function FacetRowFrame({
   id,
+  side = "requirements",
   prohibited,
   hits,
   matched,
   instructions,
   uri,
   error,
+  what = "condition",
   onDuplicate,
   onDelete,
   children,
 }: FacetRowFrameProps) {
+  const selects = side === "applicability";
   const scoreClass = matched === 0 ? "empty" : hits === matched ? "all-pass" : "has-fail";
 
   return (
-    <div className={prohibited ? "cond prohibited" : "cond"}>
+    <div className={`cond${prohibited ? " prohibited" : ""}${selects ? " applicability-facet" : ""}`}>
       {children}
 
-      <span className={`cond-score score ${scoreClass}`}>
-        <span className="score-text num">
-          {hits}/{matched}
-        </span>
+      <span className={selects ? "cond-score" : `cond-score score ${scoreClass}`}>
+        {/* No score on the applicability side: the facet narrows the count beside the rule rather
+            than being passed or failed, so a fraction here would be a claim about the wrong thing. */}
+        {!selects && (
+          <span className="score-text num">
+            {hits}/{matched}
+          </span>
+        )}
         <button
           type="button"
           className="iconbtn"
-          title="Duplicate condition"
-          aria-label="Duplicate condition"
+          title={`Duplicate ${what}`}
+          aria-label={`Duplicate ${what}`}
           onClick={onDuplicate}
         >
           ⧉
@@ -65,15 +93,16 @@ export function FacetRowFrame({
         <button
           type="button"
           className="iconbtn danger"
-          title="Remove condition"
-          aria-label="Remove condition"
+          title={`Remove ${what}`}
+          aria-label={`Remove ${what}`}
           onClick={onDelete}
         >
           ✕
         </button>
       </span>
 
-      {(instructions || uri) && (
+      {/* An applicability facet may carry neither, so there is never a note to show on that side. */}
+      {!selects && (instructions || uri) && (
         <span className="cond-note">
           {instructions}
           {/* Shown as text, never as a link: the address comes from a file someone else wrote. */}
@@ -93,4 +122,15 @@ export function FacetRowFrame({
 /** Where a row's error message lives, so its value controls can point at the same id. */
 export function errorIdOf(id: string): string {
   return `cond-error-${id}`;
+}
+
+/**
+ * What the duplicate and delete affordances call this row.
+ *
+ * On the applicability side the kind is the only thing telling two rows apart, and "remove
+ * condition" would be wrong twice over — the facet is not a condition, and removing it changes
+ * which elements the rule reaches rather than what they must satisfy.
+ */
+export function rowNoun(side: FacetSide, kind: string): string {
+  return side === "applicability" ? `the ${kind} this rule selects by` : "condition";
 }
