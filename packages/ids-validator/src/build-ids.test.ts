@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIdsXml } from "./build-ids.js";
+import { buildIdsXml, infoProblems } from "./build-ids.js";
 import { EVERY_FACET } from "./every-facet.fixture.js";
 import { idsSchemaViolations } from "./ids-schema-shape.js";
 import { parseIdsXml } from "./parse-ids.js";
@@ -144,6 +144,46 @@ describe("buildIdsXml", () => {
     expect(xml).toContain("<title>Tower-A-MEP</title>");
     expect(xml).toContain("<date>2026-07-24</date>");
     expect(xml.match(/<specification /g)).toHaveLength(2);
+  });
+
+  // `ids.xsd` fixes the order of the eight children, so they are written at their index rather than
+  // in the order the caller happens to state them.
+  it("writes every info child the schema names, in the order the schema fixes", () => {
+    // A rule, because `<specifications>` requires at least one and the check below is a full one.
+    const xml = buildIdsXml(DRAFTS, {
+      milestone: "Design",
+      title: "Tower-A",
+      author: "taco@mepover.com",
+      copyright: "MEPover",
+      purpose: "Handover",
+      version: "1.2",
+      description: "What the model must carry",
+      date: "2026-08-16",
+    });
+
+    const tags = [...xml.matchAll(/<(\w+)>[^<]*<\/\1>/g)].map((match) => match[1]);
+    expect(tags.slice(0, 8)).toEqual([
+      "title",
+      "copyright",
+      "version",
+      "description",
+      "author",
+      "date",
+      "purpose",
+      "milestone",
+    ]);
+    expect(idsSchemaViolations(xml)).toEqual([]);
+  });
+
+  // `minOccurs="0"` on seven of them, so a cleared box writes no element rather than an empty one.
+  // `<title>` is the exception the schema makes, and one corpus file states an empty one.
+  it("omits an empty optional child and still writes an empty title", () => {
+    const xml = buildIdsXml([], { title: "", copyright: "", author: null, version: "1.0" });
+
+    expect(xml).toContain("<title></title>");
+    expect(xml).not.toContain("<copyright>");
+    expect(xml).not.toContain("<author>");
+    expect(xml).toContain("<version>1.0</version>");
   });
 
   it("defaults the title and dates the document as today", () => {
@@ -369,6 +409,36 @@ describe("buildIdsXml", () => {
 
   it("emits a well-formed document for an empty rule set", () => {
     expect(parseIdsXml(buildIdsXml([]))).toEqual([]);
+  });
+});
+
+// `ids.xsd` narrows two of the eight beyond `xs:string`, and neither can be fixed up for the
+// author. The exporter writes what it is given, so this is what stops a half-typed address from
+// becoming a document no conforming checker reads.
+describe("infoProblems", () => {
+  it("accepts a complete, well-formed info block", () => {
+    expect(
+      infoProblems({ title: "Tower-A", author: "taco@mepover.com", date: "2026-08-16" })
+    ).toEqual([]);
+  });
+
+  it("names an author that is not an email address, which the schema patterns", () => {
+    expect(infoProblems({ author: "Taco" })).toEqual([expect.stringMatching(/Author/)]);
+    expect(infoProblems({ author: "taco@mepover" })).toEqual([expect.stringMatching(/Author/)]);
+    // As loose as the pattern in the file, deliberately: tightening it would reject a document
+    // `ids.xsd` accepts.
+    expect(infoProblems({ author: "a b@c.d" })).toEqual([]);
+  });
+
+  it("names a date that is not an xs:date, and accepts the offset form the corpus writes", () => {
+    expect(infoProblems({ date: "16-08-2026" })).toEqual([expect.stringMatching(/Date/)]);
+    expect(infoProblems({ date: "2022-11-16+01:00" })).toEqual([]);
+  });
+
+  it("names an empty title, which the schema requires on every document", () => {
+    expect(infoProblems({ title: "  " })).toEqual([expect.stringMatching(/Title/)]);
+    // Absent is not empty: `buildIdsXml` supplies its own default for a document being authored.
+    expect(infoProblems({})).toEqual([]);
   });
 });
 

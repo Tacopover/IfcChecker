@@ -337,6 +337,54 @@ describe("RuleBuilderPage importing an IDS file", () => {
     expect(xml).toContain(`<xs:pattern value="IFCWALL.*"`);
   });
 
+  // It survived a round trip before this and could not be touched. A document authored here stated
+  // a title and nothing else, and one imported could not have its author corrected.
+  it("edits the document's own metadata, and writes the edit back out", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+    await user.click(screen.getByRole("button", { name: /About this document/ }));
+
+    expect(screen.getByLabelText("Author")).toHaveValue("bim@client.example");
+
+    await user.clear(screen.getByLabelText("Author"));
+    await user.type(screen.getByLabelText("Author"), "taco@mepover.com");
+    await user.type(screen.getByLabelText("Milestone"), "Design");
+
+    const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
+    expect(xml).toContain("<author>taco@mepover.com</author>");
+    expect(xml).toContain("<milestone>Design</milestone>");
+  });
+
+  // `ids.xsd` patterns <author> as an email address, so a half-typed one exports a document no
+  // conforming checker reads. Saying so up front beats the file being rejected later.
+  it("says which metadata fields the schema will not accept", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+    await user.click(screen.getByRole("button", { name: /About this document/ }));
+
+    await user.clear(screen.getByLabelText("Author"));
+    await user.type(screen.getByLabelText("Author"), "Taco");
+    await user.type(screen.getByLabelText("Date"), "16-08-2026");
+
+    expect(screen.getByText(/Author — IDS requires an email address/)).toBeInTheDocument();
+    expect(screen.getByText(/Date — IDS requires YYYY-MM-DD/)).toBeInTheDocument();
+  });
+
+  // An empty box writes no element, which is what `minOccurs="0"` is for — a cleared field must not
+  // leave a <copyright></copyright> nobody typed.
+  it("writes no element for a field left empty", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+
+    expect(screen.getByLabelText("IDS XML preview").textContent).not.toContain("<milestone>");
+  });
+
   it("confirms before replacing work already on the page, and stops if the user declines", async () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);

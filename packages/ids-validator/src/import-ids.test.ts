@@ -912,11 +912,22 @@ describe("idsXmlToDrafts document metadata", () => {
     expect(storeys?.imported?.requirementsAttributes).toBeNull();
   });
 
-  it("reads the title and keeps the other info children verbatim", () => {
-    const { title, extraInfo } = idsXmlToDrafts(MIXED);
+  // Read as text now rather than kept as XML, because the metadata panel puts each one in its own
+  // box. Only a child `ids.xsd` does not name still comes through verbatim, and none exists in it.
+  it("reads every info child the schema names, and keeps any it does not verbatim", () => {
+    const { title, info, extraInfo } = idsXmlToDrafts(MIXED);
 
     expect(title).toBe("Mixed fidelity");
-    expect(extraInfo).toEqual(["<version>1.1</version>", "<author>taco@mepover.com</author>"]);
+    expect(info).toEqual({
+      copyright: null,
+      version: "1.1",
+      description: null,
+      author: "taco@mepover.com",
+      date: "2026-08-06",
+      purpose: null,
+      milestone: null,
+    });
+    expect(extraInfo).toEqual([]);
   });
 
   it("returns nothing for a document with no specifications", () => {

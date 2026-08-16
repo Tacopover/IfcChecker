@@ -34,8 +34,27 @@ export interface IdsImportResult {
   refused: RefusedSpecification[];
   /** `<info><title>`, or `null` when the document has none. */
   title: string | null;
-  /** `<info>` children other than title and date, verbatim. */
+  /**
+   * The rest of `<info>`, each field `null` where the document states none.
+   *
+   * Read as text rather than kept as XML, because the panel that shows them has to put each one in
+   * its own box. `ids.xsd` types all eight as simple content, so nothing is lost — and the two it
+   * constrains further, `<author>` and `<date>`, are carried exactly as written so a document that
+   * was already invalid comes back out as it went in rather than being corrected.
+   */
+  info: ImportedDocumentInfo;
+  /** `<info>` children the schema does not name, verbatim. */
   extraInfo: string[];
+}
+
+export interface ImportedDocumentInfo {
+  copyright: string | null;
+  version: string | null;
+  description: string | null;
+  author: string | null;
+  date: string | null;
+  purpose: string | null;
+  milestone: string | null;
 }
 
 /**
@@ -153,10 +172,21 @@ function draftId(prefix: string): string {
 export function idsXmlToDrafts(idsXml: string): IdsImportResult {
   const root = descend(importParser.parse(idsXml) as OrderedNode[], "ids");
 
-  const info = descend(root, "info");
-  const title = readInfoText(info, "title");
-  const extraInfo = elementsOf(info)
-    .filter((node) => tagOf(node) !== "title" && tagOf(node) !== "date")
+  const infoNodes = descend(root, "info");
+  const title = readInfoText(infoNodes, "title");
+  const info: ImportedDocumentInfo = {
+    copyright: readInfoText(infoNodes, "copyright"),
+    version: readInfoText(infoNodes, "version"),
+    description: readInfoText(infoNodes, "description"),
+    author: readInfoText(infoNodes, "author"),
+    date: readInfoText(infoNodes, "date"),
+    purpose: readInfoText(infoNodes, "purpose"),
+    milestone: readInfoText(infoNodes, "milestone"),
+  };
+  // Whatever `ids.xsd` does not name stays XML, because there is no box on the panel for it and
+  // the document should still come back out carrying it.
+  const extraInfo = elementsOf(infoNodes)
+    .filter((node) => !INFO_TAGS.has(tagOf(node) ?? ""))
     .map(serialize);
 
   const rules: RuleDraft[] = [];
@@ -167,8 +197,20 @@ export function idsXmlToDrafts(idsXml: string): IdsImportResult {
     readSpecification(node, rules, refused);
   }
 
-  return { rules, refused, title, extraInfo };
+  return { rules, refused, title, info, extraInfo };
 }
+
+/** The eight children `ids.xsd` names inside `<info>`, all of which the panel shows. */
+const INFO_TAGS = new Set([
+  "title",
+  "copyright",
+  "version",
+  "description",
+  "author",
+  "date",
+  "purpose",
+  "milestone",
+]);
 
 function readInfoText(info: OrderedNode[], tag: string): string | null {
   const node = findChild(info, tag);

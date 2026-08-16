@@ -2394,3 +2394,72 @@ col.col-message {
     transition: none;
   }
 }
+
+/* The document's own metadata — collapsed by default, because it is filled in once. */
+.docinfo {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.docinfo .disclose-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.docinfo .disclose-row .micro {
+  flex: 1;
+}
+
+.docinfo.open .disclose {
+  transform: rotate(90deg);
+}
+
+.docinfo .badge {
+  flex: none;
+  color: var(--muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.docinfo-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.6rem;
+  padding: 0 0.6rem 0.6rem;
+  border-top: 1px dashed var(--border);
+}
+
+.docinfo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.docinfo-field textarea {
+  font: inherit;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+
+.docinfo-hint {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.docinfo-body .rule-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-left: 1rem;
+}

@@ -1,5 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { buildIdsXml, type RefusedSpecification, type RuleDraft } from "@ifc-qa/ids-validator";
+import {
+  buildIdsXml,
+  type IdsDocumentInfo,
+  type RefusedSpecification,
+  type RuleDraft,
+} from "@ifc-qa/ids-validator";
 import { exportBlockers } from "./completeness.js";
 
 // Tag names, then attribute="value" pairs — enough to read the structure at a glance without
@@ -45,6 +50,8 @@ function downloadName(title: string): string {
 
 export interface IdsXmlPreviewProps {
   rules: RuleDraft[];
+  /** Everything `<info>` carries. The panel edits it; the export writes what it holds. */
+  info?: IdsDocumentInfo;
   title: string;
   /** Imported specifications the builder cannot edit, written back untouched. */
   refused?: RefusedSpecification[];
@@ -55,8 +62,11 @@ export interface IdsXmlPreviewProps {
 const NO_REFUSED: RefusedSpecification[] = [];
 const NO_EXTRA_INFO: string[] = [];
 
+const NO_INFO: IdsDocumentInfo = {};
+
 export function IdsXmlPreview({
   rules,
+  info = NO_INFO,
   title,
   refused = NO_REFUSED,
   extraInfo = NO_EXTRA_INFO,
@@ -65,11 +75,14 @@ export function IdsXmlPreview({
   const xml = useMemo(
     () =>
       buildIdsXml(rules, {
+        ...info,
+        // The panel leaves it empty until the user types one; the model's file name stands in, the
+        // way it did before the panel existed.
         title,
         extraInfo,
         untouched: refused.map((specification) => specification.passThrough),
       }),
-    [rules, title, refused, extraInfo]
+    [rules, info, title, refused, extraInfo]
   );
   const blockers = useMemo(() => exportBlockers(rules, refused.length), [rules, refused]);
 
