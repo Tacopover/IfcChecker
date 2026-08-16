@@ -1,6 +1,12 @@
 import { useMemo } from "react";
 import type { ConditionDraft, ConditionalCardinality, ValueDraft } from "@ifc-qa/ids-validator";
-import { friendlyReadingOf, plainName, plainNameOf, valueDraftForOperator } from "@ifc-qa/ids-validator";
+import {
+  carryAnnotation,
+  friendlyReadingOf,
+  plainName,
+  plainNameOf,
+  valueDraftForOperator,
+} from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
 import type { ObservedValue } from "./ValuePicker.js";
 import { FacetValueEditor, OPERATORS } from "./FacetValueEditor.js";
@@ -179,7 +185,13 @@ export function ConditionRow({
 
   /** The same operator and text, with the ticked values dropped — a new field has its own. */
   function retargetedValue() {
-    return reading ? valueDraftForOperator(reading.operator, reading.text, []) : condition.value;
+    if (!reading) return condition.value;
+    // The author's prose describes the restriction, and retargeting keeps the restriction. Pointing
+    // the row at another field is not a reason to delete the sentence explaining what it must say.
+    return carryAnnotation(
+      condition.value,
+      valueDraftForOperator(reading.operator, reading.text, [])
+    );
   }
 
   /** The fields both kinds share, so switching between them carries the rest of the row across. */

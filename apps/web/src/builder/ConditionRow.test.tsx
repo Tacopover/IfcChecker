@@ -436,3 +436,44 @@ describe("the stored-as picker", () => {
     );
   });
 });
+
+/**
+ * `<xs:annotation>` sits inside the `<xs:restriction>` under one parameter, so it belongs beside
+ * that parameter's control rather than in the row's own note where `instructions` lives. Shown and
+ * not edited, for the reason `instructions` is: it constrains nothing, and it is the author's
+ * sentence about why the restriction is written the way it is.
+ */
+describe("ConditionRow — an author's annotation", () => {
+  const ANNOTATED: PropertyFacetDraft = {
+    ...CONDITION,
+    value: { kind: "pattern", source: "[0-9]\\.[0-9]", annotation: "A number, a dot, a number." },
+  };
+
+  it("shows the prose beside the value it documents", () => {
+    render(<Harness initial={ANNOTATED} />);
+
+    expect(screen.getByText("A number, a dot, a number.")).toBeInTheDocument();
+  });
+
+  it("keeps it when an edit rebuilds the value around it", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={ANNOTATED} />);
+
+    await user.selectOptions(screen.getByLabelText("Operator"), "contains");
+    expect(screen.getByText("A number, a dot, a number.")).toBeInTheDocument();
+
+    // Retargeting the row at another field keeps the restriction, so it keeps the sentence too.
+    await user.selectOptions(screen.getByLabelText("Field name"), "Status");
+    expect(screen.getByText("A number, a dot, a number.")).toBeInTheDocument();
+  });
+
+  // The one edit that loses it, and it has to: a <simpleValue> has no <xs:restriction> to hold an
+  // annotation, so keeping the prose would mean exporting a document that cannot carry it.
+  it("drops it for a value that has no restriction to hold one", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={ANNOTATED} />);
+
+    await user.selectOptions(screen.getByLabelText("Operator"), "equals");
+    expect(screen.queryByText("A number, a dot, a number.")).toBeNull();
+  });
+});

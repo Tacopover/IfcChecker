@@ -1,5 +1,5 @@
 import type { ConditionOperator, ValueDraft } from "@ifc-qa/ids-validator";
-import { friendlyReadingOf, valueDraftForOperator } from "@ifc-qa/ids-validator";
+import { carryAnnotation, friendlyReadingOf, valueDraftForOperator } from "@ifc-qa/ids-validator";
 import { ValuePicker, type ObservedValue } from "./ValuePicker.js";
 import { OPERATORS_NEEDING_TEXT } from "./completeness.js";
 
@@ -66,14 +66,24 @@ export function FacetValueEditor({
   invalid,
 }: FacetValueEditorProps) {
   const reading = friendlyReadingOf(value);
+  // The author's own prose about this parameter, from inside its <xs:restriction>. Shown rather
+  // than edited, the way a facet's `instructions` is — it constrains nothing, and it is the one
+  // sentence saying why the restriction beside it is written the way it is.
+  const annotation =
+    value !== null && value.kind !== "simple" && value.annotation !== undefined ? (
+      <span className="cond-annotation">{value.annotation}</span>
+    ) : null;
 
   if (reading === null) {
     return (
-      <span className="cond-unshown">
-        {value?.kind === "length"
-          ? "A limit on how many characters the value holds. Not editable here yet."
-          : "A numeric range. Not editable here yet."}
-      </span>
+      <>
+        <span className="cond-unshown">
+          {value?.kind === "length"
+            ? "A limit on how many characters the value holds. Not editable here yet."
+            : "A numeric range. Not editable here yet."}
+        </span>
+        {annotation}
+      </>
     );
   }
 
@@ -81,7 +91,10 @@ export function FacetValueEditor({
   const listId = `values-${id}-${label}`;
 
   function change(operator: ConditionOperator, text: string, values: string[]) {
-    onChange(valueDraftForOperator(operator, text, values));
+    // The prose follows the value it documents. Choosing "be exactly" is the one edit that drops
+    // it, because a <simpleValue> has no restriction to hold one, and the note going with it is
+    // what tells the author that.
+    onChange(carryAnnotation(value, valueDraftForOperator(operator, text, values)));
   }
 
   return (
@@ -126,6 +139,8 @@ export function FacetValueEditor({
           onChange={(values) => change("oneOf", reading.text, values)}
         />
       )}
+
+      {annotation}
     </>
   );
 }

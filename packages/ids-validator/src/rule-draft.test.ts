@@ -9,6 +9,7 @@ import type {
 import {
   affixReadingOf,
   applicabilityEntityNamesOf,
+  carryAnnotation,
   compileDraft,
   compileValue,
   escapeRegExp,
@@ -271,6 +272,43 @@ describe("patternValueDraft", () => {
       if (compiled?.kind !== "pattern") throw new Error("expected a pattern restriction");
       expect(compiled.source).toBe(source);
     }
+  });
+});
+
+describe("carryAnnotation", () => {
+  const documented: ValueDraft = { kind: "pattern", source: "D.*", annotation: "Why this exists" };
+
+  it("moves the prose onto whatever restriction replaces the one it documented", () => {
+    expect(carryAnnotation(documented, { kind: "enum", values: ["A"] })).toEqual({
+      kind: "enum",
+      values: ["A"],
+      annotation: "Why this exists",
+    });
+  });
+
+  // A <simpleValue> has no <xs:restriction> to hold an annotation, so this is the one edit that
+  // loses it — stated here rather than discovered from an exported file missing a sentence.
+  it("drops it where the new value has no restriction to hold one", () => {
+    expect(carryAnnotation(documented, { kind: "simple", value: "D-01" })).toEqual({
+      kind: "simple",
+      value: "D-01",
+    });
+  });
+
+  it("leaves a value alone when there was no prose to carry", () => {
+    const plain: ValueDraft = { kind: "pattern", source: "D.*" };
+    expect(carryAnnotation(plain, { kind: "enum", values: ["A"] })).toEqual({
+      kind: "enum",
+      values: ["A"],
+    });
+    expect(carryAnnotation(null, documented)).toEqual(documented);
+    expect(carryAnnotation(documented, null)).toBeNull();
+  });
+
+  // Prose is not a constraint, so it must not reach the engine. `compileValue` drops it with
+  // everything else that records how the file was written.
+  it("states nothing the validator checks", () => {
+    expect(compileValue(documented)).toEqual(compileValue({ kind: "pattern", source: "D.*" }));
   });
 });
 

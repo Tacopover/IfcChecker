@@ -534,6 +534,26 @@ export function friendlyReadingOf(value: ValueDraft | null): FriendlyReading | n
   }
 }
 
+/**
+ * `to`, keeping whatever prose `from` carried — the annotation follows the value it documents.
+ *
+ * The one cost of storing the annotation on the value rather than beside it. `valueDraftForOperator`
+ * and the row's retargeting both build a **fresh** value, so without this an author changing the
+ * operator, the field or the property set would destroy a sentence their edit was not about.
+ *
+ * `simple` is where it stops, and it has to: a `<simpleValue>` has no `<xs:restriction>` to hold an
+ * annotation, so switching to "be exactly" writes a file with nowhere to put the prose. The row is
+ * what makes that visible — the note is beside the control that dropped it.
+ */
+export function carryAnnotation(
+  from: ValueDraft | null,
+  to: ValueDraft | null
+): ValueDraft | null {
+  if (from === null || from.kind === "simple" || from.annotation === undefined) return to;
+  if (to === null || to.kind === "simple") return to;
+  return { ...to, annotation: from.annotation };
+}
+
 /** The value an operator states, given whatever text and ticked values the row is holding. */
 export function valueDraftForOperator(
   operator: ConditionOperator,
