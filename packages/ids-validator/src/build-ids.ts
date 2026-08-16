@@ -253,19 +253,33 @@ function interleave(
  * several types are one facet whose name is an enumeration — emitting one `<entity>` per type
  * produces a document no conforming checker will read.
  */
-function entityApplicabilityXml(names: string[], asEnumeration: boolean): string[] {
+function entityApplicabilityXml(
+  names: string[],
+  asEnumeration: boolean,
+  predefinedType: ValueDraft | null
+): string[] {
   if (names.length === 0) return [];
-  if (names.length === 1 && !asEnumeration) {
+  // `<name>` is mandatory and `<predefinedType>` follows it, so the one-line form only survives
+  // while there is no second child to write.
+  if (names.length === 1 && !asEnumeration && predefinedType === null) {
     return [`        <entity><name><simpleValue>${escapeXml(names[0])}</simpleValue></name></entity>`];
   }
 
+  const nameXml =
+    names.length === 1 && !asEnumeration
+      ? [`          <name><simpleValue>${escapeXml(names[0])}</simpleValue></name>`]
+      : [
+          `          <name>`,
+          `            <xs:restriction base="xs:string">`,
+          ...names.map((name) => `              <xs:enumeration value="${escapeXml(name)}" />`),
+          `            </xs:restriction>`,
+          `          </name>`,
+        ];
+
   return [
     `        <entity>`,
-    `          <name>`,
-    `            <xs:restriction base="xs:string">`,
-    ...names.map((name) => `              <xs:enumeration value="${escapeXml(name)}" />`),
-    `            </xs:restriction>`,
-    `          </name>`,
+    ...nameXml,
+    ...idsValueXml("predefinedType", predefinedType, "          ").split("\n").filter(Boolean),
     `        </entity>`,
   ];
 }
@@ -274,7 +288,8 @@ function specificationXml(rule: RuleDraft): string {
   const source = rule.imported;
   const entities = entityApplicabilityXml(
     applicabilityEntityNamesOf(rule),
-    source?.entityNamesAsEnumeration ?? false
+    source?.entityNamesAsEnumeration ?? false,
+    rule.entityPredefinedType ?? null
   );
   // In the order the draft holds them, which is the order the source wrote them. `ids.xsd` fixes
   // the order of the kinds, so a file that reaches here in a different one was already invalid on

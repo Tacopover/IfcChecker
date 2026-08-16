@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildIdsXml } from "./build-ids.js";
 import { EVERY_FACET } from "./every-facet.fixture.js";
+import { idsSchemaViolations } from "./ids-schema-shape.js";
 import { parseIdsXml } from "./parse-ids.js";
 import type { ParsedRequirementFacet, ParsedRestriction, ParsedSpecification } from "./parse-ids.js";
 
@@ -317,6 +318,53 @@ describe("buildIdsXml", () => {
     expect(applicability.match(/<entity>/g)).toHaveLength(1);
     expect(applicability).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
     expect(applicability).toContain('<xs:enumeration value="IFCDUCTFITTING" />');
+  });
+
+  // The one-line form has to give way, because `<name>` is mandatory and `<predefinedType>` follows
+  // it — the two cannot share a line and stay in the order `ids.xsd` fixes.
+  it("writes an entity predefinedType beside the one name it narrows", () => {
+    const xml = buildIdsXml([
+      {
+        id: "r",
+        name: "Sanitary terminals",
+        entityTypes: ["IfcSanitaryTerminal"],
+        entityPredefinedType: { kind: "simple", value: "BATH" },
+        conditions: [],
+      },
+    ]);
+
+    expect(xml).toContain("<name><simpleValue>IFCSANITARYTERMINAL</simpleValue></name>");
+    expect(xml).toContain("<predefinedType><simpleValue>BATH</simpleValue></predefinedType>");
+    expect(parseIdsXml(xml)[0].applicability.entityPredefinedType).toEqual({
+      kind: "exact",
+      value: "BATH",
+    });
+    expect(idsSchemaViolations(xml)).toEqual([]);
+  });
+
+  // No `<entity>` is written for a rule naming no type, so there is nowhere for this to go and
+  // carrying it would export a document that says less than the draft holds.
+  it("drops it with the names it narrows when the rule states no type", () => {
+    const xml = buildIdsXml([
+      {
+        id: "r",
+        name: "Anything with a code",
+        entityTypes: [],
+        entityPredefinedType: { kind: "simple", value: "BATH" },
+        applicabilityFacets: [
+          {
+            id: "a1",
+            kind: "material",
+            value: { kind: "simple", value: "Concrete" },
+            cardinality: "required",
+          },
+        ],
+        conditions: [],
+      },
+    ]);
+
+    expect(xml).not.toContain("<predefinedType>");
+    expect(parseIdsXml(xml)[0].applicability.entityPredefinedType).toBeNull();
   });
 
   it("emits a well-formed document for an empty rule set", () => {

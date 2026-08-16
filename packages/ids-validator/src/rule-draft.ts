@@ -292,6 +292,15 @@ export interface RuleDraft {
   name: string;
   entityTypes: string[];
   /**
+   * The predefined type the applicability's `<entity>` narrows those classes to.
+   *
+   * Beside `entityTypes` rather than in `applicabilityFacets`, because it belongs to the one facet
+   * the builder enumerates rather than tests — it narrows the type chips, it does not stand beside
+   * them. `ids.xsd` makes `<name>` mandatory inside an `<entity>`, so a rule stating this and no
+   * type is a document that cannot be written, and `ruleProblems` says so.
+   */
+  entityPredefinedType?: ValueDraft | null;
+  /**
    * What else the rule's applicability states, beyond the classes it selects.
    *
    * Absent is the common case and means the entity list is the whole of the selection. Present, the
@@ -581,7 +590,9 @@ function applicabilityOf(rule: RuleDraft): ParsedApplicability {
   const entityNames = applicabilityEntityNamesOf(rule);
   return {
     entityNames: entityNames.length === 0 ? null : entityNames,
-    entityPredefinedType: null,
+    // Dropped with the names it narrows: `<name>` is mandatory inside an `<entity>`, so a rule with
+    // no type writes no `<entity>` and there is nowhere for this to go.
+    entityPredefinedType: entityNames.length === 0 ? null : compileValue(rule.entityPredefinedType ?? null),
     facets: (rule.applicabilityFacets ?? []).map((facet) => compileFacet(facet)),
   };
 }

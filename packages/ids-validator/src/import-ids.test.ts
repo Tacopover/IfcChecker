@@ -77,11 +77,6 @@ describe("idsXmlToDrafts applicability", () => {
       `<entity><name><xs:restriction base="xs:string"><xs:pattern value="IFC.*" /></xs:restriction></name></entity>`,
       "entity/name",
     ],
-    [
-      "a predefined type narrowing the entity",
-      `<entity><name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>SOLIDWALL</simpleValue></predefinedType></entity>`,
-      "entity/predefinedType",
-    ],
     ["an applicability that selects nothing", ``, "applicability"],
   ])("refuses a specification whose applicability uses %s", (_label, applicability, construct) => {
     const result = idsXmlToDrafts(
@@ -128,6 +123,46 @@ describe("idsXmlToDrafts applicability", () => {
         instructions: null,
       },
     ]);
+  });
+
+  // Beside `entityTypes` rather than in `applicabilityFacets`: it narrows the one facet the builder
+  // enumerates rather than standing beside it. 6 corpus specifications write one, in the two shapes
+  // below, and no conformance case writes any.
+  it("reads a predefined type narrowing the entity, in both shapes the corpus writes", () => {
+    const exact = onlyRule(
+      idsXmlToDrafts(
+        document(`<specification name="S" ifcVersion="IFC4"><applicability>
+          <entity><name><simpleValue>IFCWINDOW</simpleValue></name>
+            <predefinedType><simpleValue>WINDOW</simpleValue></predefinedType></entity>
+        </applicability></specification>`)
+      )
+    );
+    expect(exact.entityTypes).toEqual(["IFCWINDOW"]);
+    expect(exact.entityPredefinedType).toEqual({ kind: "simple", value: "WINDOW" });
+
+    const enumerated = onlyRule(
+      idsXmlToDrafts(
+        document(`<specification name="S" ifcVersion="IFC4"><applicability>
+          <entity><name><simpleValue>IFCDOOR</simpleValue></name>
+            <predefinedType><xs:restriction base="xs:string">
+              <xs:enumeration value="DOOR" /><xs:enumeration value="TRAPDOOR" />
+            </xs:restriction></predefinedType></entity>
+        </applicability></specification>`)
+      )
+    );
+    expect(enumerated.entityPredefinedType).toEqual({ kind: "enum", values: ["DOOR", "TRAPDOOR"] });
+  });
+
+  it("leaves it absent on the rule that states none, so an old file imports as it always did", () => {
+    const rule = onlyRule(
+      idsXmlToDrafts(
+        document(`<specification name="S" ifcVersion="IFC4"><applicability>
+          <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+        </applicability></specification>`)
+      )
+    );
+
+    expect(rule.entityPredefinedType).toBeUndefined();
   });
 
   it("reads an applicability attribute, restriction-valued and all", () => {

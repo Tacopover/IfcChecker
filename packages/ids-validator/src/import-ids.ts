@@ -185,10 +185,8 @@ function readSpecification(
   const applicabilityNode = findChild(children, "applicability");
 
   const reasons: UnsupportedConstruct[] = [];
-  const { entityTypes, asEnumeration, applicabilityFacets } = readApplicability(
-    applicabilityNode,
-    reasons
-  );
+  const { entityTypes, entityPredefinedType, asEnumeration, applicabilityFacets } =
+    readApplicability(applicabilityNode, reasons);
 
   // A rule may name no type and still select something, because `ids.xsd` makes `<entity>`
   // minOccurs="0" — "every element carrying this property" is a whole applicability on its own.
@@ -240,6 +238,7 @@ function readSpecification(
     entityTypes,
     // Absent rather than empty for the rule that states none, so a file whose applicability is an
     // entity list alone produces exactly the draft it always did.
+    ...(entityPredefinedType !== null ? { entityPredefinedType } : {}),
     ...(applicabilityFacets.length > 0 ? { applicabilityFacets } : {}),
     conditions,
     imported,
@@ -286,11 +285,19 @@ function readEntityNames(
 function readApplicability(
   applicabilityNode: OrderedNode | null,
   reasons: UnsupportedConstruct[]
-): { entityTypes: string[]; asEnumeration: boolean; applicabilityFacets: ApplicabilityFacetDraft[] } {
+): {
+  entityTypes: string[];
+  entityPredefinedType: ValueDraft | null;
+  asEnumeration: boolean;
+  applicabilityFacets: ApplicabilityFacetDraft[];
+} {
   const entityTypes: string[] = [];
   const applicabilityFacets: ApplicabilityFacetDraft[] = [];
+  let entityPredefinedType: ValueDraft | null = null;
   let asEnumeration = false;
-  if (!applicabilityNode) return { entityTypes, asEnumeration, applicabilityFacets };
+  if (!applicabilityNode) {
+    return { entityTypes, entityPredefinedType, asEnumeration, applicabilityFacets };
+  }
 
   for (const node of elementsOf(childrenOf(applicabilityNode))) {
     const tag = tagOf(node);
@@ -322,17 +329,39 @@ function readApplicability(
     entityTypes.push(...read.names);
     asEnumeration = read.asEnumeration;
 
-    for (const child of elementsOf(children)) {
-      if (tagOf(child) === "name") continue;
+    const predefined = readValueDraft(children, "predefinedType");
+    if ("refused" in predefined) {
       reasons.push({
         section: "applicability",
-        construct: `entity/${tagOf(child)}`,
-        description: `Narrows <${read.names.join(", ")}> by <${tagOf(child)}>, which the builder cannot show.`,
+        construct: "entity/predefinedType",
+        description: predefined.refused,
+      });
+    } else if (predefined.value !== null) {
+      // `ids.xsd` allows one `<entity>` here, so there is no second predefined type to combine
+      // with the first — and two would be an intersection where two name lists are a union.
+      if (entityPredefinedType !== null) {
+        reasons.push({
+          section: "applicability",
+          construct: "entity/predefinedType",
+          description: "States a predefined type on more than one <entity>, which the schema does not allow.",
+        });
+      } else {
+        entityPredefinedType = predefined.value;
+      }
+    }
+
+    for (const child of elementsOf(children)) {
+      const tagName = tagOf(child);
+      if (tagName === "name" || tagName === "predefinedType") continue;
+      reasons.push({
+        section: "applicability",
+        construct: `entity/${tagName}`,
+        description: `Narrows <${read.names.join(", ")}> by <${tagName}>, which the builder cannot show.`,
       });
     }
   }
 
-  return { entityTypes, asEnumeration, applicabilityFacets };
+  return { entityTypes, entityPredefinedType, asEnumeration, applicabilityFacets };
 }
 
 /**
