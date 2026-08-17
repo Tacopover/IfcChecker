@@ -3,7 +3,9 @@ import {
   IFC_SCHEMA,
   ancestorsOf,
   canonicalIfcType,
+  collapsibleEntityGroupsFor,
   descendantsOf,
+  expandedTypeNamesFor,
   isKnownIfcType,
   isLegacyIfcType,
   isSubtypeOf,
@@ -168,5 +170,52 @@ describe("isSubtypeOf", () => {
   it("is false for unknown types unless the names are equal", () => {
     expect(isSubtypeOf("IfcMadeUpThing", "IfcElement")).toBe(false);
     expect(isSubtypeOf("IfcWall", "IfcMadeUpThing")).toBe(false);
+  });
+});
+
+describe("collapsibleEntityGroupsFor", () => {
+  it("collapses a full expansion back into its one ancestor", () => {
+    expect(collapsibleEntityGroupsFor(expandedTypeNamesFor("IfcWall"))).toEqual([
+      { name: "IfcWall", types: ["IfcWall", "IfcWallElementedCase", "IfcWallStandardCase"] },
+    ]);
+  });
+
+  it("collapses two disjoint full expansions into two groups, largest first", () => {
+    const groups = collapsibleEntityGroupsFor([
+      ...expandedTypeNamesFor("IfcWall"),
+      ...expandedTypeNamesFor("IfcDoor"),
+    ]);
+    expect(groups.map((g) => g.name)).toEqual(["IfcWall", "IfcDoor"]);
+  });
+
+  // A set one member short of a known group is not that group — no partial credit.
+  it("stays loose when a member of the full expansion is missing", () => {
+    expect(collapsibleEntityGroupsFor(["IfcWall", "IfcWallStandardCase"])).toEqual([]);
+  });
+
+  it("does not collapse a single type, or a set too small to name a group", () => {
+    expect(collapsibleEntityGroupsFor(["IfcSanitaryTerminal"])).toEqual([]);
+  });
+
+  // IfcBuildingElement's full expansion also exactly explains its IfcWall and IfcDoor subsets, but
+  // the broader name already accounts for every member, so nothing is left to fragment out.
+  it("prefers the broadest ancestor over its own subgroups when both fully match", () => {
+    const groups = collapsibleEntityGroupsFor(expandedTypeNamesFor("IfcBuildingElement"));
+    expect(groups).toHaveLength(1);
+    expect(groups[0].name).toBe("IfcBuildingElement");
+    expect(groups[0].types).toHaveLength(expandedTypeNamesFor("IfcBuildingElement").length);
+  });
+
+  it("leaves a type outside any fully-matched group loose", () => {
+    const groups = collapsibleEntityGroupsFor([...expandedTypeNamesFor("IfcWall"), "IfcSanitaryTerminal"]);
+    expect(groups).toEqual([
+      { name: "IfcWall", types: ["IfcWall", "IfcWallElementedCase", "IfcWallStandardCase"] },
+    ]);
+  });
+
+  it("matches regardless of the case entityTypes happens to hold", () => {
+    expect(collapsibleEntityGroupsFor(["IFCWALL", "IFCWALLELEMENTEDCASE", "IFCWALLSTANDARDCASE"])).toEqual([
+      { name: "IfcWall", types: ["IfcWall", "IfcWallElementedCase", "IfcWallStandardCase"] },
+    ]);
   });
 });

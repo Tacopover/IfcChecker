@@ -1,7 +1,13 @@
 import { useMemo, useState } from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ApplicabilityFacetDraft, FacetDraft, RuleDraft } from "@ifc-qa/ids-validator";
-import { descendantsOf, expandedTypeNamesFor, isAbstractIfcType, plainName } from "@ifc-qa/ids-validator";
+import {
+  collapsibleEntityGroupsFor,
+  descendantsOf,
+  expandedTypeNamesFor,
+  isAbstractIfcType,
+  plainName,
+} from "@ifc-qa/ids-validator";
 import type { ModelIntrospection } from "./introspect.js";
 import { evaluateRuleDraft } from "./evaluateDraft.js";
 import {
@@ -84,6 +90,14 @@ export function RuleCard({
   const groupByName = new Map(introspection.groups.map((group) => [group.name, group]));
   const countByType = new Map(introspection.entityTypes.map((entry) => [entry.name, entry.count]));
   const usedTypes = new Set(rule.entityTypes);
+
+  // Schema-scoped, unlike `groupByName` above: a literal chip run that exactly matches a known
+  // ancestor's full expansion collapses into one summary chip, regardless of which file is open.
+  const collapsedGroups = useMemo(
+    () => collapsibleEntityGroupsFor(rule.entityTypes),
+    [rule.entityTypes]
+  );
+  const collapsedUpper = new Set(collapsedGroups.flatMap((group) => group.types.map((t) => t.toUpperCase())));
 
   function updateConditions(conditions: FacetDraft[]) {
     onChange({ ...rule, conditions });
@@ -206,70 +220,101 @@ export function RuleCard({
           <div className="clause">
             <span className="micro">Applies to</span>
             <div className="chips">
-              {rule.entityTypes.map((entityType) => {
-                const group = groupByName.get(entityType);
-                const abstract = isAbstractIfcType(entityType);
-                // Schema-wide, unlike `group`: a name can have subtypes the table knows about
-                // even when this file holds none of them, or only one, so `group` never formed.
-                const subtypes = descendantsOf(entityType).filter((name) => !isAbstractIfcType(name));
-                const title = [
-                  abstract ? `${entityType} is abstract — no element can carry it directly` : entityType,
-                  group ? `covers ${group.types.join(", ")} in this file` : null,
-                ]
-                  .filter((line): line is string => line !== null)
-                  .join(" · ");
+              {collapsedGroups.map((group) => {
+                const count = group.types.reduce((n, t) => n + (countByType.get(t) ?? 0), 0);
                 return (
                   <span
-                    key={entityType}
-                    className={`chip${group ? " group" : ""}${abstract ? " abstract" : ""}`}
-                    title={title}
+                    key={`collapsed:${group.name}`}
+                    className="chip group"
+                    title={`covers ${group.types.join(", ")}`}
                   >
-                    {entityType}
+                    {group.name}
                     <span className="chip-count num">
-                      {group
-                        ? `${group.types.length} types · ${group.count}`
-                        : (countByType.get(entityType) ?? 0)}
+                      {group.types.length} types · {count}
                     </span>
-                    {/* IDS matches an entity name exactly and inherits nothing, so this name alone
-                        selects only itself — one click writes its subtypes into the list instead,
-                        the same way the builder already does silently for an authored pick. */}
-                    {subtypes.length > 0 && (
-                      <button
-                        type="button"
-                        className="expand"
-                        title={`Expand to ${entityType} and its ${subtypes.length} subtype${subtypes.length === 1 ? "" : "s"}`}
-                        aria-label={`Expand ${entityType} to its subtypes`}
-                        onClick={() =>
-                          onChange({
-                            ...rule,
-                            entityTypes: [
-                              ...new Set([
-                                ...rule.entityTypes.filter((name) => name !== entityType),
-                                ...expandedTypeNamesFor(entityType),
-                              ]),
-                            ],
-                          })
-                        }
-                      >
-                        ⊃{subtypes.length}
-                      </button>
-                    )}
                     <button
                       type="button"
                       className="x"
-                      aria-label={`Remove ${entityType}`}
-                      onClick={() =>
+                      aria-label={`Remove ${group.name}`}
+                      onClick={() => {
+                        const upper = new Set(group.types.map((t) => t.toUpperCase()));
                         onChange({
                           ...rule,
-                          entityTypes: rule.entityTypes.filter((name) => name !== entityType),
-                        })
-                      }
+                          entityTypes: rule.entityTypes.filter((name) => !upper.has(name.trim().toUpperCase())),
+                        });
+                      }}
                     >
                       ✕
                     </button>
                   </span>
                 );
               })}
+              {rule.entityTypes
+                .filter((entityType) => !collapsedUpper.has(entityType.trim().toUpperCase()))
+                .map((entityType) => {
+                  const group = groupByName.get(entityType);
+                  const abstract = isAbstractIfcType(entityType);
+                  // Schema-wide, unlike `group`: a name can have subtypes the table knows about
+                  // even when this file holds none of them, or only one, so `group` never formed.
+                  const subtypes = descendantsOf(entityType).filter((name) => !isAbstractIfcType(name));
+                  const title = [
+                    abstract ? `${entityType} is abstract — no element can carry it directly` : entityType,
+                    group ? `covers ${group.types.join(", ")} in this file` : null,
+                  ]
+                    .filter((line): line is string => line !== null)
+                    .join(" · ");
+                  return (
+                    <span
+                      key={entityType}
+                      className={`chip${group ? " group" : ""}${abstract ? " abstract" : ""}`}
+                      title={title}
+                    >
+                      {entityType}
+                      <span className="chip-count num">
+                        {group
+                          ? `${group.types.length} types · ${group.count}`
+                          : (countByType.get(entityType) ?? 0)}
+                      </span>
+                      {/* IDS matches an entity name exactly and inherits nothing, so this name alone
+                          selects only itself — one click writes its subtypes into the list instead,
+                          the same way the builder already does silently for an authored pick. */}
+                      {subtypes.length > 0 && (
+                        <button
+                          type="button"
+                          className="expand"
+                          title={`Expand to ${entityType} and its ${subtypes.length} subtype${subtypes.length === 1 ? "" : "s"}`}
+                          aria-label={`Expand ${entityType} to its subtypes`}
+                          onClick={() =>
+                            onChange({
+                              ...rule,
+                              entityTypes: [
+                                ...new Set([
+                                  ...rule.entityTypes.filter((name) => name !== entityType),
+                                  ...expandedTypeNamesFor(entityType),
+                                ]),
+                              ],
+                            })
+                          }
+                        >
+                          ⊃{subtypes.length}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="x"
+                        aria-label={`Remove ${entityType}`}
+                        onClick={() =>
+                          onChange({
+                            ...rule,
+                            entityTypes: rule.entityTypes.filter((name) => name !== entityType),
+                          })
+                        }
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  );
+                })}
               <select
                 className="linkbtn"
                 aria-label="Add entity type or group"

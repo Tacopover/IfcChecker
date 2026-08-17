@@ -89,6 +89,65 @@ export function expandedTypeNamesFor(t: string): string[] {
   return ABSTRACT.has(canonical) ? descendants : [canonical, ...descendants];
 }
 
+/** One ancestor a chip row can collapse a run of loose chips into, display-time only. */
+export interface CollapsedEntityGroup {
+  name: string;
+  types: string[];
+}
+
+/**
+ * How to fold `entityTypes` back into ancestor summaries for display, without touching the list
+ * itself. `entityTypes` is the literal, final list a rule checks (`applicabilityEntityNamesOf`) —
+ * expanding `IfcElement` into its 137 concrete chips is honest but unreadable as a loose row, so
+ * this looks for a subset that exactly matches a known ancestor's full expansion and reports it as
+ * one group instead. Schema-scoped, unlike `introspect.ts`'s file-scoped `groups`: it only asks
+ * what the schema says `entityTypes` already holds, not what the currently open file contains, so
+ * the same rule collapses the same way regardless of which model happens to be loaded.
+ *
+ * Only an ancestor of a name already present is considered, which keeps this bounded for a render
+ * loop. A candidate counts only on an exact match — every name it predicts has to already be in
+ * `entityTypes` — so a set that is one member short of a known group stays loose rather than
+ * claiming a count it cannot back up. Two ancestors predicting the identical subset keep only the
+ * deeper one, the tie-break `introspect.ts`'s `bestForCoverage` already uses: the broader name adds
+ * nothing once the narrower one already explains the same members. Overlapping candidates that
+ * predict different subsets are resolved greedily, largest first, so a big supertype collapses
+ * whole rather than fragmenting into its smaller subgroups.
+ */
+export function collapsibleEntityGroupsFor(entityTypes: string[]): CollapsedEntityGroup[] {
+  const present = new Set(entityTypes.map((t) => (canonicalIfcType(t) ?? t).trim().toUpperCase()));
+  if (present.size < 2) return [];
+
+  const candidateNames = new Set<string>();
+  for (const t of entityTypes) {
+    for (const ancestor of ancestorsOf(t)) candidateNames.add(ancestor);
+  }
+
+  const byKey = new Map<string, { name: string; predicted: string[]; depth: number }>();
+  for (const name of candidateNames) {
+    const predicted = expandedTypeNamesFor(name);
+    if (predicted.length < 2) continue;
+    const upper = predicted.map((p) => p.toUpperCase());
+    if (!upper.every((p) => present.has(p))) continue;
+
+    const key = [...upper].sort().join("|");
+    const depth = ancestorsOf(name).length;
+    const previous = byKey.get(key);
+    if (!previous || depth > previous.depth) byKey.set(key, { name, predicted, depth });
+  }
+
+  const used = new Set<string>();
+  const chosen: CollapsedEntityGroup[] = [];
+  const candidates = [...byKey.values()].sort((a, b) => b.predicted.length - a.predicted.length);
+  for (const candidate of candidates) {
+    const upper = candidate.predicted.map((p) => p.toUpperCase());
+    if (upper.some((p) => used.has(p))) continue;
+    for (const p of upper) used.add(p);
+    chosen.push({ name: candidate.name, types: candidate.predicted });
+  }
+
+  return chosen.sort((a, b) => b.types.length - a.types.length || a.name.localeCompare(b.name));
+}
+
 export function isSubtypeOf(t: string, candidate: string): boolean {
   const type = canonicalIfcType(t);
   const target = canonicalIfcType(candidate);

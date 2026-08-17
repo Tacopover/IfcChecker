@@ -96,8 +96,11 @@ describe("RuleCard", () => {
   });
 
   // `entityTypes` is the literal, final list from the moment a person adds a type — picking a
-  // group from the dropdown expands it immediately, so no chip ever names the group itself.
-  it("expands a group picked from the dropdown into loose chips, not a group chip", async () => {
+  // group from the dropdown writes its full concrete expansion into the rule immediately. The
+  // chip row then folds that exact set back into one summary chip for display, which happens to
+  // carry the same name and count the old literal-group chip did — but it is a live, schema-scoped
+  // read of what `entityTypes` already holds, not a name preserved unexpanded.
+  it("expands a group picked from the dropdown, and the chip row re-collapses it into one summary", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
@@ -106,9 +109,12 @@ describe("RuleCard", () => {
       "IfcBuildingElement"
     );
 
-    expect(screen.queryByText("IfcBuildingElement")).not.toBeInTheDocument();
-    expect(screen.getByTitle("IfcDoor")).not.toHaveClass("group");
-    expect(screen.getByTitle("IfcWall")).not.toHaveClass("group");
+    const chip = screen.getByText("IfcBuildingElement").closest(".chip");
+    expect(chip).toHaveClass("group");
+    expect(chip?.getAttribute("title")).toContain("IfcDoor");
+    expect(within(chip as HTMLElement).getByText("31 types · 5")).toBeInTheDocument();
+    expect(screen.queryByText("IfcWall")).not.toBeInTheDocument();
+    expect(screen.queryByText("IfcDoor")).not.toBeInTheDocument();
   });
 
   // The file-scoped `group` styling has one live path left: an imported rule whose author wrote a
@@ -287,6 +293,8 @@ describe("RuleCard", () => {
 
   // IDS matches an entity name exactly and inherits nothing, so a concrete pick with subtypes
   // still selects only itself until expanded — the chip offers the expansion rather than hiding it.
+  // The expanded set exactly matches IfcWall's full schema expansion, so the row folds it right
+  // back into one summary chip rather than three loose ones.
   it("offers to expand a concrete entity type that has subtypes, keeping the type itself", async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -294,10 +302,11 @@ describe("RuleCard", () => {
     expect(screen.getByText("IfcWall").closest(".chip")).not.toHaveClass("abstract");
     await user.click(screen.getByRole("button", { name: "Expand IfcWall to its subtypes" }));
 
-    const chips = screen.getAllByText(/^Ifc/, { selector: ".chip" });
-    expect(chips.map((chip) => chip.textContent?.split(/\d/)[0].trim())).toEqual(
-      expect.arrayContaining(["IfcWall", "IfcWallStandardCase", "IfcWallElementedCase"])
-    );
+    const chip = screen.getByText("IfcWall").closest(".chip");
+    expect(chip).toHaveClass("group");
+    expect(chip?.getAttribute("title")).toContain("IfcWallStandardCase");
+    expect(chip?.getAttribute("title")).toContain("IfcWallElementedCase");
+    expect(within(chip as HTMLElement).getByText("3 types · 3")).toBeInTheDocument();
   });
 
   it("marks an abstract entity type in italics, and expands it by dropping itself", async () => {
@@ -308,8 +317,13 @@ describe("RuleCard", () => {
 
     await user.click(screen.getByRole("button", { name: "Expand IfcElement to its subtypes" }));
 
-    expect(screen.queryByText("IfcElement")).not.toBeInTheDocument();
-    expect(screen.getByText("IfcWall")).toBeInTheDocument();
+    // The abstract name is gone as an unexpanded literal chip. Its full concrete expansion
+    // collapses right back into a chip with the same name — an honest summary of what the rule
+    // now actually checks, not the abstract name left as-is.
+    const chip = screen.getByText("IfcElement").closest(".chip");
+    expect(chip).toHaveClass("group");
+    expect(chip).not.toHaveClass("abstract");
+    expect(chip?.getAttribute("title")).toContain("IfcWall");
   });
 
   it("offers no expansion for an entity type the schema gives no subtypes", () => {

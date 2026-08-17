@@ -181,7 +181,9 @@ describe("RuleBuilderPage", () => {
 
     expect(screen.getByLabelText("Field name")).toHaveValue("FireRating");
     expect(screen.getByLabelText("Property set")).toHaveValue("Pset_WallCommon");
-    expect(screen.getByTitle("IfcWall")).toBeInTheDocument();
+    // IfcWall's full schema expansion collapses back into one summary chip for display.
+    expect(document.querySelector(".chips .chip")).toHaveClass("group");
+    expect(document.querySelector(".chips .chip")).toHaveTextContent("IfcWall");
     // 3 walls match, 2 of them carry a fire rating.
     expect(document.querySelector(".rule-head .score-text")).toHaveTextContent("2/3");
   });
