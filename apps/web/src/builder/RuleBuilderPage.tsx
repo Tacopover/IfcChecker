@@ -6,7 +6,7 @@ import type {
   RefusedSpecification,
   RuleDraft,
 } from "@ifc-qa/ids-validator";
-import { plainName } from "@ifc-qa/ids-validator";
+import { expandedTypeNamesFor, plainName } from "@ifc-qa/ids-validator";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
 import { ModelTree } from "./ModelTree.js";
@@ -238,7 +238,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
       const rule: RuleDraft = {
         id: nextDraftId("r"),
         name: `${selectionName} rule`,
-        entityTypes: [selectionName],
+        entityTypes: expandedTypeNamesFor(selectionName),
         conditions: [condition],
       };
       setRules([rule]);
@@ -251,9 +251,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
         rule.id === target.id
           ? {
               ...rule,
-              entityTypes: rule.entityTypes.includes(selectionName)
-                ? rule.entityTypes
-                : [...rule.entityTypes, selectionName],
+              entityTypes: [...new Set([...rule.entityTypes, ...expandedTypeNamesFor(selectionName)])],
               conditions: [...rule.conditions, condition],
             }
           : rule
@@ -263,7 +261,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   }
 
   function handleAddRule() {
-    const entityTypes = selectionName ? [selectionName] : [];
+    const entityTypes = selectionName ? expandedTypeNamesFor(selectionName) : [];
     const rule: RuleDraft = {
       id: nextDraftId("r"),
       name: "New rule",

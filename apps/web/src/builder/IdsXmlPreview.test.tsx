@@ -35,12 +35,9 @@ describe("IdsXmlPreview", () => {
     const [specification] = parseIdsXml(xml);
 
     expect(specification.name).toBe("Walls declare a fire rating");
-    // The builder writes the concrete classes the pick stands for: IDS inherits nothing.
-    expect(specification.applicability.entityNames).toEqual([
-      "IFCWALL",
-      "IFCWALLELEMENTEDCASE",
-      "IFCWALLSTANDARDCASE",
-    ]);
+    // `entityTypes` is the literal, final list by export time — expanding a supertype pick into its
+    // concrete subtypes is a builder UI action, done once when the type is added, not here.
+    expect(specification.applicability.entityNames).toEqual(["IFCWALL"]);
     expect(specification.requirements[0]).toMatchObject({
       kind: "property",
       propertySet: { kind: "exact", value: "Pset_WallCommon" },

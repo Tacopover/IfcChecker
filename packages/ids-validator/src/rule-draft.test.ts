@@ -333,23 +333,15 @@ describe("carryAnnotation", () => {
 });
 
 describe("applicabilityEntityNamesOf", () => {
-  it("expands an abstract type into its concrete subtypes and drops the abstract name", () => {
-    const names = applicabilityEntityNamesOf(rule({ entityTypes: ["IfcElement"] }));
-
-    expect(names).not.toContain("IFCELEMENT");
-    expect(names).not.toContain("IFCBUILTELEMENT"); // abstract in IFC4X3, absent from IFC4
-    expect(names).not.toContain("IFCBUILDINGELEMENT"); // abstract
-    expect(names).toContain("IFCWALL");
-    expect(names).toContain("IFCDOOR");
-    expect(names).toContain("IFCSANITARYTERMINAL");
+  // `entityTypes` is the literal, final list for every rule, authored or imported alike — nothing
+  // gets expanded here. A "add a type" or "expand" UI action is what writes a concrete list into
+  // `entityTypes` before this function ever sees it.
+  it("leaves an abstract type's name exactly as given", () => {
+    expect(applicabilityEntityNamesOf(rule({ entityTypes: ["IfcElement"] }))).toEqual(["IFCELEMENT"]);
   });
 
-  it("keeps a concrete type and adds the concrete types below it", () => {
-    expect(applicabilityEntityNamesOf(rule({ entityTypes: ["IfcWall"] }))).toEqual([
-      "IFCWALL",
-      "IFCWALLELEMENTEDCASE",
-      "IFCWALLSTANDARDCASE",
-    ]);
+  it("leaves a supertype's name exactly as given, without its subtypes", () => {
+    expect(applicabilityEntityNamesOf(rule({ entityTypes: ["IfcWall"] }))).toEqual(["IFCWALL"]);
   });
 
   it("leaves a concrete leaf type alone", () => {
@@ -358,9 +350,9 @@ describe("applicabilityEntityNamesOf", () => {
     ]);
   });
 
-  it("does not repeat a type reachable from two selections", () => {
-    const names = applicabilityEntityNamesOf(rule({ entityTypes: ["IfcWall", "IfcWallStandardCase"] }));
-    expect(names.filter((name) => name === "IFCWALLSTANDARDCASE")).toHaveLength(1);
+  it("does not repeat a name reached under two different cases", () => {
+    const names = applicabilityEntityNamesOf(rule({ entityTypes: ["IfcWall", "ifcwall"] }));
+    expect(names).toEqual(["IFCWALL"]);
   });
 
   // Rewriting the author's own entity list is the thing the import work exists not to do. A file

@@ -276,7 +276,10 @@ export function RuleCard({
                 value=""
                 onChange={(event) => {
                   if (!event.target.value) return;
-                  onChange({ ...rule, entityTypes: [...rule.entityTypes, event.target.value] });
+                  onChange({
+                    ...rule,
+                    entityTypes: [...new Set([...rule.entityTypes, ...expandedTypeNamesFor(event.target.value)])],
+                  });
                 }}
               >
                 <option value="">+ type…</option>

@@ -95,7 +95,9 @@ describe("RuleCard", () => {
     expect(container.querySelector(".rule-foot .score-text")).toHaveTextContent("1 of 3 fail");
   });
 
-  it("distinguishes a group chip from a concrete type chip", async () => {
+  // `entityTypes` is the literal, final list from the moment a person adds a type — picking a
+  // group from the dropdown expands it immediately, so no chip ever names the group itself.
+  it("expands a group picked from the dropdown into loose chips, not a group chip", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
@@ -104,10 +106,20 @@ describe("RuleCard", () => {
       "IfcBuildingElement"
     );
 
+    expect(screen.queryByText("IfcBuildingElement")).not.toBeInTheDocument();
+    expect(screen.getByTitle("IfcDoor")).not.toHaveClass("group");
+    expect(screen.getByTitle("IfcWall")).not.toHaveClass("group");
+  });
+
+  // The file-scoped `group` styling has one live path left: an imported rule whose author wrote a
+  // supertype name literally. The importer never rewrites it, so the chip can still show what that
+  // literal name covers in the currently loaded file.
+  it("still styles a group chip for a literal supertype name in an untouched rule", () => {
+    render(<Harness initial={{ ...RULE, entityTypes: ["IfcWall", "IfcBuildingElement"] }} />);
+
     const group = screen.getByTitle(/covers IfcWall, IfcDoor/);
     expect(group).toHaveClass("group");
     expect(within(group).getByText("2 types · 5")).toBeInTheDocument();
-    expect(screen.getByTitle("IfcWall")).not.toHaveClass("group");
   });
 
   it("re-scores when the applicability widens to a group's subtypes", async () => {

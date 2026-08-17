@@ -168,15 +168,17 @@ describe("evaluateRuleDraft — applicability", () => {
     element("IFCSITE"),
   ];
 
-  it("matches subtypes of a group applicability", () => {
+  it("matches a supertype's name literally, not its subtypes", () => {
     const evaluation = evaluateRuleDraft(
       rule({ entityTypes: ["IfcElement"], conditions: [condition({ operator: "exists" })] }),
       model
     );
 
-    // IfcSpace and IfcSite are spatial, not IfcElement.
-    expect(evaluation.matched).toBe(3);
-    expect(evaluation.passed).toBe(3);
+    // IDS matches an entity name exactly — nothing in `model` is literally IFCELEMENT, abstract or
+    // not, so a rule naming it unexpanded selects nothing. The builder writes the expanded, concrete
+    // list into `entityTypes` at the moment a person adds a type, not here.
+    expect(evaluation.matched).toBe(0);
+    expect(evaluation.passed).toBe(0);
   });
 
   it("keeps a concrete type applicability to that type alone", () => {

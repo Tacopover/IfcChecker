@@ -134,10 +134,11 @@ export function matchesApplicabilityPredefinedType(
  * user who checks a model here and then with any other conforming checker must get the same
  * applicable count.
  *
- * A supertype the user picked in the builder reaches the file as the concrete classes it stands
- * for (`applicabilityEntityNamesOf`), so nothing authored here loses elements. An imported file
- * naming an abstract class now selects nothing — and fails on applicability cardinality, which is
- * a loud result rather than a quiet one.
+ * A supertype the user picked in the builder is expanded into the concrete classes it stands for
+ * before it ever reaches `rule.entityTypes` — `applicabilityEntityNamesOf` states that list
+ * literally, for an authored rule and an imported one alike. A file naming an abstract class
+ * (untouched, or literally authored) selects nothing — and fails on applicability cardinality,
+ * which is a loud result rather than a quiet one.
  *
  * `null` is an applicability with no `<entity>` element, which admits every class — the facets
  * beside it are then the whole of the selection.

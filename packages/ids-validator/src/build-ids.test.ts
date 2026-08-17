@@ -287,16 +287,15 @@ describe("buildIdsXml", () => {
     expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
   });
 
-  // IDS matches an entity name exactly, so a supertype the user picked has to reach the file as
-  // the concrete classes it stands for. IfcElement is abstract: left as written it selects nothing.
-  it("expands an authored entity type into its concrete subtypes", () => {
+  // `entityTypes` is the literal, final list by the time it reaches the exporter — expansion is a
+  // builder UI action, not a compile step. IfcElement is abstract and selects nothing left as
+  // written, but the exporter states the document exactly as the rule holds it either way.
+  it("writes an authored entity type exactly as the rule holds it, with no expansion", () => {
     const xml = buildIdsXml(DRAFTS);
 
-    expect(xml).not.toContain("<simpleValue>IFCELEMENT</simpleValue>");
-    expect(xml).not.toContain('<xs:enumeration value="IFCELEMENT" />');
-    expect(xml).toContain('<xs:enumeration value="IFCWALL" />');
-    expect(xml).toContain('<xs:enumeration value="IFCDOOR" />');
-    // A concrete supertype names itself as well as everything below it.
+    expect(xml).toContain("<simpleValue>IFCELEMENT</simpleValue>");
+    expect(xml).not.toContain('<xs:enumeration value="IFCWALL" />');
+    expect(xml).not.toContain('<xs:enumeration value="IFCDOOR" />');
     expect(xml).toContain('<xs:enumeration value="IFCDUCTSEGMENT" />');
   });
 

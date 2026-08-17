@@ -8,7 +8,6 @@ import type {
   ParsedSpecification,
 } from "./parse-ids.js";
 import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
-import { concreteTypeNamesFor } from "./ifc-type-hierarchy.js";
 
 /**
  * The readings of a condition's **value**, and nothing else.
@@ -386,21 +385,15 @@ export const BUILDER_PROPERTY_DATA_TYPE: string | null = null;
 /**
  * The entity names a rule's applicability facet states.
  *
- * IDS matches an entity name exactly and inherits nothing, so a rule the builder authors is
- * expanded: the user picks `IfcElement` from the explorer rail and the file names all 137 concrete
- * classes below it. Without that, an abstract pick selects nothing and a supertype pick quietly
- * checks less than the tree it was chosen from shows.
- *
- * Expansion is for authored rules only. An imported rule keeps the author's own list, because
- * rewriting someone else's document is the thing the import work exists not to do — and because a
- * file that names an abstract class is honestly reported as selecting nothing, which is what any
+ * `rule.entityTypes` is always the literal, final list — for an authored rule and an imported one
+ * alike. IDS matches an entity name exactly and inherits nothing, so an abstract or supertype name
+ * left unexpanded selects less than a tree picker might suggest; the builder's "add a type" and
+ * "expand" actions are what write a concrete list into `entityTypes`, not this function. A file
+ * that still names an abstract class is honestly reported as selecting nothing, which is what any
  * other conforming checker does with it.
  */
 export function applicabilityEntityNamesOf(rule: RuleDraft): string[] {
-  const names = rule.imported
-    ? rule.entityTypes.map((entityType) => entityType.trim().toUpperCase())
-    : rule.entityTypes.flatMap(concreteTypeNamesFor);
-  return [...new Set(names)];
+  return [...new Set(rule.entityTypes.map((entityType) => entityType.trim().toUpperCase()))];
 }
 
 export function escapeRegExp(text: string): string {
