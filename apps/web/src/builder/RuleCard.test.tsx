@@ -273,6 +273,39 @@ describe("RuleCard", () => {
     );
   });
 
+  // IDS matches an entity name exactly and inherits nothing, so a concrete pick with subtypes
+  // still selects only itself until expanded — the chip offers the expansion rather than hiding it.
+  it("offers to expand a concrete entity type that has subtypes, keeping the type itself", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    expect(screen.getByText("IfcWall").closest(".chip")).not.toHaveClass("abstract");
+    await user.click(screen.getByRole("button", { name: "Expand IfcWall to its subtypes" }));
+
+    const chips = screen.getAllByText(/^Ifc/, { selector: ".chip" });
+    expect(chips.map((chip) => chip.textContent?.split(/\d/)[0].trim())).toEqual(
+      expect.arrayContaining(["IfcWall", "IfcWallStandardCase", "IfcWallElementedCase"])
+    );
+  });
+
+  it("marks an abstract entity type in italics, and expands it by dropping itself", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...RULE, entityTypes: ["IfcElement"] }} />);
+
+    expect(screen.getByText("IfcElement").closest(".chip")).toHaveClass("abstract");
+
+    await user.click(screen.getByRole("button", { name: "Expand IfcElement to its subtypes" }));
+
+    expect(screen.queryByText("IfcElement")).not.toBeInTheDocument();
+    expect(screen.getByText("IfcWall")).toBeInTheDocument();
+  });
+
+  it("offers no expansion for an entity type the schema gives no subtypes", () => {
+    render(<Harness initial={{ ...RULE, entityTypes: ["IfcSensor"] }} />);
+
+    expect(screen.queryByRole("button", { name: /Expand IfcSensor/ })).not.toBeInTheDocument();
+  });
+
   it("flags a rule stripped of its last entity type — IDS has no applicability to write", async () => {
     const user = userEvent.setup();
     const { container } = render(<Harness />);

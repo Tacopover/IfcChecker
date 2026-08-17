@@ -76,6 +76,19 @@ export function concreteTypeNamesFor(t: string): string[] {
   return names.map((name) => name.toUpperCase());
 }
 
+/**
+ * The chip list a one-click "expand" replaces `t` with — `t` itself when something can carry it
+ * directly, plus every concrete entity below it. The same set `concreteTypeNamesFor` compiles a
+ * rule down to, kept in the tree's own mixed-case spelling rather than forced upper-case, because
+ * this feeds an editable chip list a user reads, not the exported document.
+ */
+export function expandedTypeNamesFor(t: string): string[] {
+  const canonical = canonicalIfcType(t);
+  if (!canonical) return [t];
+  const descendants = (DESCENDANTS.get(canonical) ?? []).filter((name) => !ABSTRACT.has(name));
+  return ABSTRACT.has(canonical) ? descendants : [canonical, ...descendants];
+}
+
 export function isSubtypeOf(t: string, candidate: string): boolean {
   const type = canonicalIfcType(t);
   const target = canonicalIfcType(candidate);

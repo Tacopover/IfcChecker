@@ -971,7 +971,14 @@ caption {
   border-color: color-mix(in srgb, var(--group) 30%, transparent);
 }
 
-.chip .x {
+/* Abstract: this name can never appear on an element by itself, EXPRESS forbids it. Italic marks
+   the chip as "a name to expand", not "a class to check". */
+.chip.abstract {
+  font-style: italic;
+}
+
+.chip .x,
+.chip .expand {
   border: 0;
   background: none;
   cursor: pointer;
@@ -981,7 +988,13 @@ caption {
   line-height: 1;
 }
 
-.chip .x:hover:not(:disabled) {
+.chip .expand {
+  font-style: normal;
+  font-size: 10px;
+}
+
+.chip .x:hover:not(:disabled),
+.chip .expand:hover:not(:disabled) {
   background: none;
   opacity: 1;
 }
