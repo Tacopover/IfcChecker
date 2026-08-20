@@ -28,8 +28,10 @@ afterEach(() => {
 });
 
 describe("IdsXmlPreview", () => {
-  it("previews XML that parses back into the rule the user built", () => {
+  it("previews XML that parses back into the rule the user built", async () => {
+    const user = userEvent.setup();
     render(<IdsXmlPreview rules={RULES} title="Tower-A.ifc" />);
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
 
     const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
     const [specification] = parseIdsXml(xml);
@@ -46,15 +48,17 @@ describe("IdsXmlPreview", () => {
     });
   });
 
-  it("hides and shows the preview", async () => {
+  it("starts collapsed, and shows and hides the preview", async () => {
     const user = userEvent.setup();
     render(<IdsXmlPreview rules={RULES} title="Tower-A.ifc" />);
 
-    await user.click(screen.getByRole("button", { name: "Hide IDS XML" }));
     expect(screen.queryByLabelText("IDS XML preview")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
     expect(screen.getByLabelText("IDS XML preview")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Hide IDS XML" }));
+    expect(screen.queryByLabelText("IDS XML preview")).not.toBeInTheDocument();
   });
 
   it("downloads the same XML as a .ids file named after the model", async () => {
@@ -97,9 +101,11 @@ describe("IdsXmlPreview", () => {
     expect(createObjectURL).not.toHaveBeenCalled();
   });
 
-  it("still previews the XML, under a warning that names what is wrong", () => {
+  it("still previews the XML, under a warning that names what is wrong", async () => {
+    const user = userEvent.setup();
     const incomplete: RuleDraft[] = [{ ...RULES[0], entityTypes: [] }];
     render(<IdsXmlPreview rules={incomplete} title="Tower-A.ifc" />);
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
 
     expect(screen.getByLabelText("IDS XML preview")).toBeInTheDocument();
     const warning = screen.getByRole("status");

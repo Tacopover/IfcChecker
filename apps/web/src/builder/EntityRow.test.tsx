@@ -33,14 +33,23 @@ const FACET: EntityFacetDraft = {
   predefinedType: null,
 };
 
-function Harness({ initial = FACET }: { initial?: EntityFacetDraft }) {
+function Harness({
+  initial = FACET,
+  touched = true,
+}: {
+  initial?: EntityFacetDraft;
+  touched?: boolean;
+}) {
   const [facet, setFacet] = useState(initial);
+  const [isTouched, setIsTouched] = useState(touched);
   return (
     <EntityRow
       facet={facet}
       source={SOURCE}
       hits={4}
       matched={10}
+      touched={isTouched}
+      onTouch={() => setIsTouched(true)}
       onChange={setFacet}
       onDuplicate={() => {}}
       onDelete={() => {}}
@@ -136,5 +145,19 @@ describe("EntityRow", () => {
     render(<Harness initial={{ ...FACET, instructions: "Only walls, not their types." }} />);
 
     expect(screen.getByText("Only walls, not their types.")).toBeInTheDocument();
+  });
+});
+
+describe("EntityRow — touched gating", () => {
+  it("shows no error for an empty enumeration until the row is touched", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...FACET, name: { kind: "enum", values: [] } }} touched={false} />);
+
+    expect(screen.queryByText(/Tick at least one value/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Predefined type operator"));
+    await user.tab();
+
+    expect(screen.getByText(/Tick at least one value/)).toBeInTheDocument();
   });
 });

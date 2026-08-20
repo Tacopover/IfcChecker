@@ -71,7 +71,10 @@ export function IdsXmlPreview({
   refused = NO_REFUSED,
   extraInfo = NO_EXTRA_INFO,
 }: IdsXmlPreviewProps) {
-  const [visible, setVisible] = useState(true);
+  // Collapsed by default: a full syntax-highlighted document sitting under a ruleset that may not
+  // exist yet was the audit's highest-severity finding (Finding 1) — the first thing a reviewer
+  // saw was raw XML, before they'd written a single rule.
+  const [visible, setVisible] = useState(false);
   const xml = useMemo(
     () =>
       buildIdsXml(rules, {

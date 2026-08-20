@@ -59,6 +59,8 @@ function renderApplicability(facet: ApplicabilityFacetDraft) {
     <ApplicabilityRow
       facet={facet}
       source={SOURCE}
+      touched
+      onTouch={() => {}}
       onChange={() => {}}
       onDuplicate={() => {}}
       onDelete={() => {}}
@@ -73,6 +75,8 @@ function renderRequirement(facet: FacetDraft) {
       source={SOURCE}
       hits={4}
       matched={10}
+      touched
+      onTouch={() => {}}
       onChange={() => {}}
       onDuplicate={() => {}}
       onDelete={() => {}}

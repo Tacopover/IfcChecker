@@ -39,6 +39,8 @@ export interface RuleCardProps {
   isActive: boolean;
   isOpen: boolean;
   showFailures: boolean;
+  /** Whether this rule was just produced by the creation wizard — shows a transient badge. */
+  isNew?: boolean;
   onChange: (next: RuleDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -54,6 +56,7 @@ export function RuleCard({
   isActive,
   isOpen,
   showFailures,
+  isNew = false,
   onChange,
   onDuplicate,
   onDelete,
@@ -82,6 +85,14 @@ export function RuleCard({
   // Local, because it is presentation only: which panels are open is not part of the draft, and
   // the page already tracks which rules are open.
   const [infoOpen, setInfoOpen] = useState(false);
+  // Which facets the user has interacted with, so a freshly-added one doesn't show a completeness
+  // error before they've touched it (see `FacetRowFrameProps.onTouch`). Keyed by facet id rather
+  // than boolean-per-row so a duplicate or a newly-added facet — with its own fresh id — always
+  // starts untouched, with no special-case reset needed.
+  const [touchedFacetIds, setTouchedFacetIds] = useState<ReadonlySet<string>>(new Set());
+  function touch(id: string) {
+    setTouchedFacetIds((previous) => new Set(previous).add(id));
+  }
   const predefinedType = rule.entityPredefinedType ?? null;
   const predefinedTypes = useMemo(() => predefinedTypeOptions(source, null), [source]);
 
@@ -182,6 +193,7 @@ export function RuleCard({
           value={rule.name}
           onChange={(event) => onChange({ ...rule, name: event.target.value })}
         />
+        {isNew && <span className="badge new">Just added</span>}
         {preserved.length > 0 && (
           <span className="badge kept" title={preserved.map((entry) => entry.construct).join(", ")}>
             {preserved.length} kept
@@ -386,6 +398,8 @@ export function RuleCard({
                 key={facet.id}
                 facet={facet}
                 source={source}
+                touched={touchedFacetIds.has(facet.id)}
+                onTouch={() => touch(facet.id)}
                 onChange={(next) => replaceApplicabilityFacet(facet.id, next)}
                 onDuplicate={() => duplicateApplicabilityFacet(index, facet)}
                 onDelete={() => deleteApplicabilityFacet(facet.id)}
@@ -440,6 +454,8 @@ export function RuleCard({
                   source={source}
                   hits={perCondition[index] ?? 0}
                   matched={matched}
+                  touched={touchedFacetIds.has(condition.id)}
+                  onTouch={() => touch(condition.id)}
                   onChange={(next) => replaceCondition(condition.id, next)}
                   onDuplicate={() => duplicateCondition(index, condition)}
                   onDelete={() => deleteCondition(condition.id)}

@@ -11,6 +11,8 @@ export interface MaterialRowProps {
   side?: FacetSide;
   hits?: number;
   matched?: number;
+  touched: boolean;
+  onTouch: () => void;
   onChange: (next: MaterialFacetDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -33,11 +35,13 @@ export function MaterialRow({
   side = "requirements",
   hits,
   matched,
+  touched,
+  onTouch,
   onChange,
   onDuplicate,
   onDelete,
 }: MaterialRowProps) {
-  const error = conditionProblem(facet);
+  const error = touched ? conditionProblem(facet) : null;
   const selects = side === "applicability";
 
   return (
@@ -53,6 +57,7 @@ export function MaterialRow({
       what={rowNoun(side, "material")}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
+      onTouch={onTouch}
     >
       <span className="tok">Material</span>
 

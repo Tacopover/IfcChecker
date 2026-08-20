@@ -96,6 +96,22 @@ function renderBuilder(models: SeedModel[] = [], onGoToFiles?: () => void) {
   };
 }
 
+/**
+ * Walks the wizard to produce one default-named rule over the fixture's "IfcBuildingElement"
+ * group (Wall + Door, 5 elements — the only top-level pick this fixture's tree offers, since both
+ * types are grouped under it). Skips narrowing and adds no checks, matching what the old blank
+ * "+ New rule" button used to produce, for tests that just need a rule on the page rather than
+ * being about wizard behavior itself.
+ */
+async function createRuleViaWizard(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Start" }));
+  await user.click(screen.getByRole("checkbox", { name: /IfcBuildingElement/ }));
+  await user.click(screen.getByRole("button", { name: /Next: Narrow it down/ }));
+  await user.click(screen.getByRole("button", { name: /Skip — check all 5/ }));
+  await user.click(screen.getByRole("button", { name: "Next: Review →" }));
+  await user.click(screen.getByRole("button", { name: "Save rule ✓" }));
+}
+
 describe("RuleBuilderPage", () => {
   it("sends the user to the validate page when nothing has been parsed yet", async () => {
     const onGoToFiles = vi.fn();
@@ -200,25 +216,42 @@ describe("RuleBuilderPage", () => {
     expect(document.querySelectorAll(".card.pset .psname")).toHaveLength(2);
   });
 
-  it("starts a rule from the New rule button and exports it as IDS XML", async () => {
+  it("starts a rule from the creation wizard and exports it as IDS XML", async () => {
     const user = userEvent.setup();
     renderBuilder([{ fileName: "tower.ifc" }]);
     await screen.findByRole("tree");
 
-    await user.click(screen.getByRole("button", { name: "+ New rule" }));
+    await createRuleViaWizard(user);
 
     expect(screen.getByLabelText("Rule name")).toHaveValue("New rule");
+    expect(screen.getByText("Just added")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
     expect(screen.getByLabelText("IDS XML preview")).toHaveTextContent(
       /<specification name="New rule"/
     );
     expect(screen.getByLabelText("IDS XML preview")).toHaveTextContent(/IFCWALL/);
   });
 
+  it("leaves the rule list untouched when the wizard is cancelled", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    expect(screen.getByRole("heading", { name: "What does this rule apply to?" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByLabelText("Rule name")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+  });
+
   it("duplicates a whole rule", async () => {
     const user = userEvent.setup();
     renderBuilder([{ fileName: "tower.ifc" }]);
     await screen.findByRole("tree");
-    await user.click(screen.getByRole("button", { name: "+ New rule" }));
+    await createRuleViaWizard(user);
 
     await user.click(screen.getByRole("button", { name: "Duplicate rule New rule" }));
 
@@ -330,6 +363,7 @@ describe("RuleBuilderPage importing an IDS file", () => {
     renderBuilder([{ fileName: "tower.ifc" }]);
 
     await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
     const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
 
     expect(xml).toContain("<title>Client standard</title>");
@@ -354,6 +388,7 @@ describe("RuleBuilderPage importing an IDS file", () => {
     await user.type(screen.getByLabelText("Author"), "taco@mepover.com");
     await user.type(screen.getByLabelText("Milestone"), "Design");
 
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
     const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
     expect(xml).toContain("<author>taco@mepover.com</author>");
     expect(xml).toContain("<milestone>Design</milestone>");
@@ -383,6 +418,7 @@ describe("RuleBuilderPage importing an IDS file", () => {
     renderBuilder([{ fileName: "tower.ifc" }]);
 
     await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile());
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
 
     expect(screen.getByLabelText("IDS XML preview").textContent).not.toContain("<milestone>");
   });
@@ -391,8 +427,9 @@ describe("RuleBuilderPage importing an IDS file", () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
 
-    await user.click(await screen.findByRole("button", { name: "+ New rule" }));
+    await createRuleViaWizard(user);
     await user.upload(screen.getByLabelText("Import an IDS file"), idsFile());
 
     expect(confirm).toHaveBeenCalledWith(

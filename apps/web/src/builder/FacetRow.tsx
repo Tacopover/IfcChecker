@@ -9,6 +9,8 @@ import { EntityRow } from "./EntityRow.js";
 interface RowProps<T> {
   facet: T;
   source: FieldsForResult;
+  touched: boolean;
+  onTouch: () => void;
   onChange: (next: T) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -30,11 +32,13 @@ export function RequirementRow({
   source,
   hits,
   matched,
+  touched,
+  onTouch,
   onChange,
   onDuplicate,
   onDelete,
 }: RowProps<FacetDraft> & { hits: number; matched: number }) {
-  const shared = { source, hits, matched, onChange, onDuplicate, onDelete };
+  const shared = { source, hits, matched, touched, onTouch, onChange, onDuplicate, onDelete };
 
   switch (facet.kind) {
     case "attribute":
@@ -61,11 +65,21 @@ export function RequirementRow({
 export function ApplicabilityRow({
   facet,
   source,
+  touched,
+  onTouch,
   onChange,
   onDuplicate,
   onDelete,
 }: RowProps<ApplicabilityFacetDraft>) {
-  const shared = { source, side: "applicability" as const, onChange, onDuplicate, onDelete };
+  const shared = {
+    source,
+    side: "applicability" as const,
+    touched,
+    onTouch,
+    onChange,
+    onDuplicate,
+    onDelete,
+  };
 
   switch (facet.kind) {
     case "attribute":

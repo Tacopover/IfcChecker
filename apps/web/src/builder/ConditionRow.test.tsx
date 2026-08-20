@@ -77,20 +77,28 @@ const CONDITION: PropertyFacetDraft = {
 
 function Harness({
   initial = CONDITION,
+  // Every existing test below renders a row that already states the value under test — not one
+  // freshly added — so it starts touched, the same state a real row reaches the moment its facet's
+  // error becomes relevant. The dedicated "touched gating" tests below pass `touched={false}`.
+  touched = true,
   onDuplicate = () => {},
   onDelete = () => {},
 }: {
   initial?: ConditionDraft;
+  touched?: boolean;
   onDuplicate?: () => void;
   onDelete?: () => void;
 }) {
   const [condition, setCondition] = useState(initial);
+  const [isTouched, setIsTouched] = useState(touched);
   return (
     <ConditionRow
       condition={condition}
       source={SOURCE}
       hits={7}
       matched={10}
+      touched={isTouched}
+      onTouch={() => setIsTouched(true)}
       onChange={setCondition}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
@@ -506,5 +514,26 @@ describe("ConditionRow — several patterns on one value", () => {
     await user.selectOptions(screen.getByLabelText("Field name"), "Status");
     expect(screen.getByLabelText("Field name")).toHaveValue("Status");
     expect(screen.getByText(/Any of 2 patterns/)).toBeInTheDocument();
+  });
+});
+
+// A facet is added with whatever default value `defaultFacetFor` gives it, which is often
+// incomplete on purpose (completeness.ts:10-22) — showing the resulting error immediately reads as
+// the tool nagging before the user has done anything (UX audit Finding 2). The row keeps computing
+// the same completeness problem; it just doesn't render it until the user has touched the row.
+describe("ConditionRow — touched gating", () => {
+  it("shows no error for an invalid facet until the row is touched", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...CONDITION, ...stating("contains") }} touched={false} />);
+
+    const input = screen.getByLabelText("Value");
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByText(/Enter a value/)).not.toBeInTheDocument();
+
+    await user.click(input);
+    await user.tab();
+
+    expect(screen.getByText(/Enter a value/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Value")).toHaveAttribute("aria-invalid", "true");
   });
 });

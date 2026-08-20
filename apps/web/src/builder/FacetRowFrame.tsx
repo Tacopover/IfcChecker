@@ -36,6 +36,12 @@ export interface FacetRowFrameProps {
   what?: string;
   onDuplicate: () => void;
   onDelete: () => void;
+  /**
+   * Called when focus leaves the row. `error` already reflects whichever gate the caller applies
+   * (see `RuleCard`'s `touchedFacetIds`) — this is only how the row tells the caller "the user has
+   * now interacted with this one," so a freshly-added facet's error stays hidden until they do.
+   */
+  onTouch: () => void;
   /** The sentence itself — the kind, the cardinality and the value editors. */
   children: ReactNode;
 }
@@ -64,13 +70,17 @@ export function FacetRowFrame({
   what = "condition",
   onDuplicate,
   onDelete,
+  onTouch,
   children,
 }: FacetRowFrameProps) {
   const selects = side === "applicability";
   const scoreClass = matched === 0 ? "empty" : hits === matched ? "all-pass" : "has-fail";
 
   return (
-    <div className={`cond${prohibited ? " prohibited" : ""}${selects ? " applicability-facet" : ""}`}>
+    <div
+      className={`cond${prohibited ? " prohibited" : ""}${selects ? " applicability-facet" : ""}`}
+      onBlur={onTouch}
+    >
       {children}
 
       <span className={selects ? "cond-score" : `cond-score score ${scoreClass}`}>

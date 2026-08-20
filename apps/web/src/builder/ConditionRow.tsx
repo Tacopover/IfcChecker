@@ -139,6 +139,9 @@ export interface ConditionRowProps {
   side?: FacetSide;
   hits?: number;
   matched?: number;
+  /** Whether this row's completeness error may be shown yet — see `FacetRowFrameProps.onTouch`. */
+  touched: boolean;
+  onTouch: () => void;
   onChange: (next: ConditionDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -158,6 +161,8 @@ export function ConditionRow({
   side = "requirements",
   hits,
   matched,
+  touched,
+  onTouch,
   onChange,
   onDuplicate,
   onDelete,
@@ -165,7 +170,10 @@ export function ConditionRow({
   const selects = side === "applicability";
   const observed = useMemo(() => observedValuesFor(source, condition), [source, condition]);
   const dataTypeOptions = useMemo(() => dataTypeOptionsFor(source, condition), [source, condition]);
-  const error = conditionProblem(condition);
+  // Not shown the instant a facet is added — only once the user leaves the row or the wizard tries
+  // to advance, both of which mark it touched. `conditionProblem` itself is unaffected; it still
+  // decides whether the facet can export, which `exportBlockers` reads regardless of `touched`.
+  const error = touched ? conditionProblem(condition) : null;
   // Read here as well as inside the editor, because retargeting the row to another field keeps the
   // operator and the text and drops only the ticked values — a new field has its own.
   const reading = friendlyReadingOf(condition.value);
@@ -265,6 +273,7 @@ export function ConditionRow({
       what={rowNoun(side, condition.kind)}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
+      onTouch={onTouch}
     >
       <select
         aria-label="Condition kind"

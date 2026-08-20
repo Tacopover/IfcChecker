@@ -36,14 +36,23 @@ const FACET: ClassificationFacetDraft = {
   cardinality: "required",
 };
 
-function Harness({ initial = FACET }: { initial?: ClassificationFacetDraft }) {
+function Harness({
+  initial = FACET,
+  touched = true,
+}: {
+  initial?: ClassificationFacetDraft;
+  touched?: boolean;
+}) {
   const [facet, setFacet] = useState(initial);
+  const [isTouched, setIsTouched] = useState(touched);
   return (
     <ClassificationRow
       facet={facet}
       source={SOURCE}
       hits={4}
       matched={10}
+      touched={isTouched}
+      onTouch={() => setIsTouched(true)}
       onChange={setFacet}
       onDuplicate={() => {}}
       onDelete={() => {}}
@@ -136,6 +145,20 @@ describe("ClassificationRow", () => {
     render(<Harness />);
 
     await user.selectOptions(screen.getByLabelText("Code operator"), "oneOf");
+
+    expect(screen.getByText(/Tick at least one value/)).toBeInTheDocument();
+  });
+});
+
+describe("ClassificationRow — touched gating", () => {
+  it("shows no error for an empty enumeration until the row is touched", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...FACET, value: { kind: "enum", values: [] } }} touched={false} />);
+
+    expect(screen.queryByText(/Tick at least one value/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("System"));
+    await user.tab();
 
     expect(screen.getByText(/Tick at least one value/)).toBeInTheDocument();
   });

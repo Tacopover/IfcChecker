@@ -48,6 +48,8 @@ export interface ClassificationRowProps {
   side?: FacetSide;
   hits?: number;
   matched?: number;
+  touched: boolean;
+  onTouch: () => void;
   onChange: (next: ClassificationFacetDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -67,6 +69,8 @@ export function ClassificationRow({
   side = "requirements",
   hits,
   matched,
+  touched,
+  onTouch,
   onChange,
   onDuplicate,
   onDelete,
@@ -76,7 +80,7 @@ export function ClassificationRow({
   const systems = useMemo(() => systemOptions(source), [source]);
   const codes = useMemo(() => codeOptions(source, system), [source, system]);
 
-  const error = conditionProblem(facet);
+  const error = touched ? conditionProblem(facet) : null;
   const errorId = errorIdOf(facet.id);
 
   return (
@@ -92,6 +96,7 @@ export function ClassificationRow({
       what={rowNoun(side, "classification")}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
+      onTouch={onTouch}
     >
       <span className="tok">Classification</span>
 

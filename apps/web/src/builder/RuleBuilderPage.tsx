@@ -11,10 +11,10 @@ import { useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
 import { ModelTree } from "./ModelTree.js";
 import { RuleCard } from "./RuleCard.js";
+import { RuleWizard } from "./RuleWizard.js";
 import { RefusedSpecificationCard } from "./RefusedSpecificationCard.js";
 import { IdsXmlPreview } from "./IdsXmlPreview.js";
 import { DocumentInfoPanel } from "./DocumentInfoPanel.js";
-import { defaultConditionFor } from "./defaultFacets.js";
 import { nextDraftId } from "./draftIds.js";
 import { importIdsText } from "./importIds.js";
 
@@ -138,6 +138,10 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
   const [openRuleIds, setOpenRuleIds] = useState<ReadonlySet<string>>(new Set());
   const [failureRuleIds, setFailureRuleIds] = useState<ReadonlySet<string>>(new Set());
+  const [wizardOpen, setWizardOpen] = useState(false);
+  // Cosmetic only: which rule (if any) the wizard just produced, so its card can show a transient
+  // "Just added" badge. Cleared by whichever of the other rule-adding actions happens next.
+  const [justAddedRuleId, setJustAddedRuleId] = useState<string | null>(null);
 
   // Everything an imported document carries that is not a rule. Held beside the rules rather than
   // inside them because it belongs to the file as a whole, and re-export has to hand all of it back.
@@ -218,6 +222,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     name: string;
   }) {
     if (!selectionName) return;
+    setJustAddedRuleId(null);
     const common = {
       id: nextDraftId("c"),
       name: plainName(field.name),
@@ -260,16 +265,15 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     openRule(target.id);
   }
 
-  function handleAddRule() {
-    const entityTypes = selectionName ? expandedTypeNamesFor(selectionName) : [];
-    const rule: RuleDraft = {
-      id: nextDraftId("r"),
-      name: "New rule",
-      entityTypes,
-      conditions: selectionSource ? [defaultConditionFor(selectionSource)] : [],
-    };
+  /**
+   * The wizard's own draft never touches `rules` until this fires — Cancel just unmounts it. The
+   * new rule is deliberately left collapsed rather than opened: the wizard already walked the user
+   * through configuring it, so reopening it into the dense card would be redundant.
+   */
+  function handleWizardFinish(rule: RuleDraft) {
     setRules([...rules, rule]);
-    openRule(rule.id);
+    setJustAddedRuleId(rule.id);
+    setWizardOpen(false);
   }
 
   function handleDuplicateRule(rule: RuleDraft) {
@@ -327,6 +331,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     setActiveRuleId(null);
     setOpenRuleIds(new Set());
     setFailureRuleIds(new Set());
+    setJustAddedRuleId(null);
   }
 
   /** Rules and refused specifications in the order the imported document put them. */
@@ -356,6 +361,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
           isActive={rule.id === activeRuleId}
           isOpen={openRuleIds.has(rule.id)}
           showFailures={failureRuleIds.has(rule.id)}
+          isNew={rule.id === justAddedRuleId}
           onChange={(next) =>
             setRules((previous) => previous.map((entry) => (entry.id === rule.id ? next : entry)))
           }
@@ -486,44 +492,68 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
           </aside>
 
           <main className="stack">
-            <div className="stack-head">
-              <h2>Rules</h2>
-              <span className="micro">
-                {rules.length} {rules.length === 1 ? "rule" : "rules"}
-                {refused.length > 0
-                  ? ` · ${refused.length} kept but not editable`
-                  : " · one specification each"}
-              </span>
-            </div>
+            {wizardOpen ? (
+              <RuleWizard
+                introspection={introspection}
+                elements={model.elements}
+                fileName={model.fileName}
+                onFinish={handleWizardFinish}
+                onCancel={() => setWizardOpen(false)}
+              />
+            ) : (
+              <>
+                <div className="stack-head">
+                  <h2>Rules</h2>
+                  <span className="micro">
+                    {rules.length} {rules.length === 1 ? "rule" : "rules"}
+                    {refused.length > 0
+                      ? ` · ${refused.length} kept but not editable`
+                      : " · one specification each"}
+                  </span>
+                </div>
 
-            <DocumentInfoPanel
-              info={documentInfo}
-              titlePlaceholder={model.fileName}
-              open={infoOpen}
-              onToggle={() => setInfoOpen((wasOpen) => !wasOpen)}
-              onChange={setDocumentInfo}
-            />
+                <DocumentInfoPanel
+                  info={documentInfo}
+                  titlePlaceholder={model.fileName}
+                  open={infoOpen}
+                  onToggle={() => setInfoOpen((wasOpen) => !wasOpen)}
+                  onChange={setDocumentInfo}
+                />
 
-            {rules.length === 0 && refused.length === 0 && (
-              <p className="hint">
-                No rules yet — click a field on the left, start an empty one below, or import an
-                existing .ids file.
-              </p>
+                {rules.length === 0 && refused.length === 0 && (
+                  <p className="hint">
+                    No rules yet — click a field on the left, start one below, or import an
+                    existing .ids file.
+                  </p>
+                )}
+
+                {specificationCards()}
+
+                <div className="addtile">
+                  <span className="plus" aria-hidden="true">
+                    +
+                  </span>
+                  <div>
+                    <div className="t">Create a new rule</div>
+                    <div className="d">
+                      Answer a few questions about what to check — we'll pull types, fields and
+                      real values straight from {model.fileName} as you go.
+                    </div>
+                  </div>
+                  <button type="button" className="go" onClick={() => setWizardOpen(true)}>
+                    Start
+                  </button>
+                </div>
+
+                <IdsXmlPreview
+                  rules={rules}
+                  info={documentInfo}
+                  title={documentInfo.title || model.fileName}
+                  refused={refused}
+                  extraInfo={extraInfo}
+                />
+              </>
             )}
-
-            {specificationCards()}
-
-            <button type="button" className="addrule" onClick={handleAddRule}>
-              + New rule
-            </button>
-
-            <IdsXmlPreview
-              rules={rules}
-              info={documentInfo}
-              title={documentInfo.title || model.fileName}
-              refused={refused}
-              extraInfo={extraInfo}
-            />
           </main>
         </div>
       )}

@@ -93,6 +93,8 @@ export interface PartOfRowProps {
   side?: FacetSide;
   hits?: number;
   matched?: number;
+  touched: boolean;
+  onTouch: () => void;
   onChange: (next: PartOfFacetDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -115,6 +117,8 @@ export function PartOfRow({
   side = "requirements",
   hits,
   matched,
+  touched,
+  onTouch,
   onChange,
   onDuplicate,
   onDelete,
@@ -127,7 +131,7 @@ export function PartOfRow({
     [source, facet.relation, ifcType]
   );
 
-  const error = conditionProblem(facet);
+  const error = touched ? conditionProblem(facet) : null;
   const errorId = errorIdOf(facet.id);
 
   return (
@@ -142,6 +146,7 @@ export function PartOfRow({
       what={rowNoun(side, "partOf")}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
+      onTouch={onTouch}
     >
       <span className="tok">Part of</span>
 

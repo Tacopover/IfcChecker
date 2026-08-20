@@ -45,14 +45,23 @@ const FACET: PartOfFacetDraft = {
   cardinality: "required",
 };
 
-function Harness({ initial = FACET }: { initial?: PartOfFacetDraft }) {
+function Harness({
+  initial = FACET,
+  touched = true,
+}: {
+  initial?: PartOfFacetDraft;
+  touched?: boolean;
+}) {
   const [facet, setFacet] = useState(initial);
+  const [isTouched, setIsTouched] = useState(touched);
   return (
     <PartOfRow
       facet={facet}
       source={SOURCE}
       hits={4}
       matched={10}
+      touched={isTouched}
+      onTouch={() => setIsTouched(true)}
       onChange={setFacet}
       onDuplicate={() => {}}
       onDelete={() => {}}
@@ -172,5 +181,24 @@ describe("PartOfRow", () => {
     render(<Harness initial={{ ...FACET, instructions: "Every duct sits on a storey." }} />);
 
     expect(screen.getByText("Every duct sits on a storey.")).toBeInTheDocument();
+  });
+});
+
+describe("PartOfRow — touched gating", () => {
+  it("shows no error for an empty enumeration until the row is touched", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initial={{ ...FACET, entityName: { kind: "enum", values: [] } }}
+        touched={false}
+      />
+    );
+
+    expect(screen.queryByText(/Tick at least one value/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Relationship"));
+    await user.tab();
+
+    expect(screen.getByText(/Tick at least one value/)).toBeInTheDocument();
   });
 });

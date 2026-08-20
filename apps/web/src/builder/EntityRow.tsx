@@ -40,6 +40,8 @@ export interface EntityRowProps {
   source: FieldsForResult;
   hits: number;
   matched: number;
+  touched: boolean;
+  onTouch: () => void;
   onChange: (next: EntityFacetDraft) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -62,6 +64,8 @@ export function EntityRow({
   source,
   hits,
   matched,
+  touched,
+  onTouch,
   onChange,
   onDuplicate,
   onDelete,
@@ -73,7 +77,7 @@ export function EntityRow({
     [source, ifcType]
   );
 
-  const error = conditionProblem(facet);
+  const error = touched ? conditionProblem(facet) : null;
   const errorId = errorIdOf(facet.id);
 
   return (
@@ -86,6 +90,7 @@ export function EntityRow({
       error={error}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
+      onTouch={onTouch}
     >
       <span className="tok">Entity</span>
 
