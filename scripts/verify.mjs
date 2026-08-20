@@ -22,7 +22,10 @@ function run(label, command, commandArgs) {
   return new Promise((resolve) => {
     const started = Date.now();
     process.stdout.write(`▸ ${label}… `);
-    const child = spawn(command, commandArgs, { cwd: ROOT, env: process.env });
+    // shell: true so `corepack` resolves on Windows too — it ships as a .cmd/.ps1 shim there,
+    // which a shell-less spawn cannot execute by bare name. Node quotes the args array correctly
+    // for either shell, so this changes nothing about what actually runs on the NAS side.
+    const child = spawn(command, commandArgs, { cwd: ROOT, env: process.env, shell: true });
     let output = "";
     child.stdout.on("data", (chunk) => { output += chunk; });
     child.stderr.on("data", (chunk) => { output += chunk; });

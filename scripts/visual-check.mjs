@@ -19,11 +19,13 @@
 // machine that cannot run one. Screenshots land in .verify-output/.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { dirname, extname, join, normalize, resolve } from "node:path";
+import { dirname, extname, join, posix, resolve } from "node:path";
 
+const START = Date.now();
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, ".verify-output");
 const BUILD = join(OUT, "build");
@@ -66,10 +68,11 @@ if (probe.status !== 0) {
 mkdirSync(OUT, { recursive: true });
 rmSync(BUILD, { recursive: true, force: true });
 
+// shell: true so `corepack` resolves on Windows too — see the matching note in verify.mjs.
 const build = spawnSync(
   "corepack",
   ["pnpm", "--filter", "@ifc-qa/web", "exec", "vite", "build", "--outDir", BUILD, "--emptyOutDir"],
-  { cwd: ROOT, encoding: "utf8" }
+  { cwd: ROOT, encoding: "utf8", shell: true }
 );
 if (build.status !== 0) {
   console.error("browser check FAILED — vite build errored");
@@ -534,7 +537,10 @@ const server = createServer((req, res) => {
     });
     return;
   }
-  const requested = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^(\.\.[/\\])+/, "");
+  // posix.normalize, not the platform normalize: request URLs are always forward-slash,
+  // and on Windows the default (win32) normalize would turn "/fixtures/..." into
+  // "\fixtures\..." and silently fail the startsWith check below.
+  const requested = posix.normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^(\.\.\/)+/, "");
   // Test fixtures are not part of the build, but a scenario has to be able to
   // hand the app a real file — so they are served alongside it.
   const fromFixtures = requested.startsWith("/fixtures/");
@@ -555,24 +561,49 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 // loop open forever; unref lets the process exit the moment work is done.
 server.unref();
 
+// A fresh throwaway profile — without one, Chrome opens against the real user
+// profile (default on Windows/macOS where no candidate path was matched) and
+// can sit forever behind a first-run/profile-lock prompt no headless flag skips.
+const PROFILE_DIR = mkdtempSync(join(tmpdir(), "ifc-visual-check-"));
+
 // Must be async: spawnSync would block the event loop, leaving the server above
 // unable to answer the very request Chromium is waiting on.
+const DEBUG = !!process.env.VISUAL_DEBUG;
+function debug(...args) {
+  if (DEBUG) console.error(`  [debug +${Date.now() - START}ms]`, ...args);
+}
+
 function chromeRun(extraArgs) {
   return new Promise((resolve) => {
     const child = spawn(
       chrome,
       [
         "--headless", "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
+        `--user-data-dir=${PROFILE_DIR}`, "--no-first-run", "--disable-extensions",
+        "--disable-background-networking", "--disable-sync", "--disable-default-apps",
+        "--metrics-recording-only", "--mute-audio",
         `--virtual-time-budget=${TIME_BUDGET}`, "--run-all-compositor-stages-before-draw",
         ...extraArgs,
         `${origin}/smoke.html`,
       ],
       { stdio: ["ignore", "pipe", "pipe"] }
     );
+    debug("chrome spawned, pid", child.pid);
     let stdout = "", stderr = "";
     child.stdout.on("data", (c) => { stdout += c; });
     child.stderr.on("data", (c) => { stderr += c; });
-    child.on("close", (status) => resolve({ stdout, stderr, status }));
+    // Chromium is expected to exit on its own once --virtual-time-budget elapses;
+    // seen hanging indefinitely instead (no CPU activity, never closes) on Windows
+    // — force it rather than block the whole gate forever.
+    const killTimer = setTimeout(() => {
+      debug("kill timer fired for pid", child.pid, "— stderr so far:", stderr.trim().slice(-500) || "(none)");
+      child.kill("SIGKILL");
+    }, TIME_BUDGET + 30000);
+    child.on("close", (status) => {
+      clearTimeout(killTimer);
+      debug("chrome closed, pid", child.pid, "status", status);
+      resolve({ stdout, stderr, status });
+    });
   });
 }
 
@@ -586,6 +617,7 @@ const VIEWPORTS = [
 ];
 
 async function renderAt(viewport) {
+  debug("renderAt start", viewport.name);
   const reported = new Promise((resolve) => { awaitingReport = resolve; });
   const run = chromeRun([
     `--window-size=${viewport.size}`,
@@ -594,7 +626,7 @@ async function renderAt(viewport) {
   // Not unref'd: if Chromium dies before reporting, an unref'd timer lets the
   // event loop drain and Node exits 13 with no message at all.
   let timer;
-  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(undefined), 45000); });
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => { debug("45s report-wait elapsed for", viewport.name); resolve(undefined); }, 45000); });
   const result = await Promise.race([reported, timeout]);
   clearTimeout(timer);
   awaitingReport = null;
@@ -648,7 +680,10 @@ if (firstResult) {
 console.log(`  screenshots: ${VIEWPORTS.map((v) => `.verify-output/render-${v.name}.png`).join(", ")}`);
 
 server.close();
-if (!KEEP) rmSync(BUILD, { recursive: true, force: true });
+if (!KEEP) {
+  rmSync(BUILD, { recursive: true, force: true });
+  rmSync(PROFILE_DIR, { recursive: true, force: true });
+}
 
 if (failures.length) {
   console.error("\nbrowser check FAILED:");
