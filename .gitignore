@@ -7,3 +7,7 @@ apps/web/public/wasm/
 .verify-output/
 .conformance/
 .conformance-clone/
+
+fixtures/ifc/E_AIH_68_INS-KLI_HOM_Klimaat.ifc
+
+fixtures/ifc/E_AIH_68_INS_NDZ_Sanitair.ifc
