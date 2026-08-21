@@ -15,7 +15,8 @@ import { ModelStructureTree } from "../components/ModelStructureTree";
 export function IfcCheckerPage() {
   const { models, addFiles, applyParseOutcome, removeModel, clearModels } = useLoadedModels();
 
-  const [engine, setEngine] = useState<EngineId | "">("");
+  // ifc-lite is faster and more robust than web-ifc, so it's the only engine offered.
+  const engine: EngineId = "ifc-lite";
   const [idsFile, setIdsFile] = useState<File | null>(null);
   const [results, setResults] = useState<SpecificationSummary[] | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<IssueRow | null>(null);
@@ -33,17 +34,13 @@ export function IfcCheckerPage() {
   // doesn't need remounting.
   const [resetKey, setResetKey] = useState(0);
 
-  // A model already parsed by a different engine counts as unparsed: switching
-  // engine has to mean something, and the table must never claim results the
-  // selected engine didn't produce.
-  const unparsed = engine === "" ? [] : models.filter((model) => model.status !== "succeeded" || model.engine !== engine);
+  const unparsed = models.filter((model) => model.status !== "succeeded" || model.engine !== engine);
   const parsed = models.filter((model) => model.status === "succeeded");
 
-  const canParse = engine !== "" && unparsed.length > 0 && !isParsing;
+  const canParse = unparsed.length > 0 && !isParsing;
   const canCheck = idsFile !== null && parsed.length > 0 && !isParsing && !isChecking;
 
   const parseRequirements: string[] = [];
-  if (engine === "") parseRequirements.push("select an engine");
   if (models.length === 0) parseRequirements.push("choose at least one IFC file");
 
   const checkRequirements: string[] = [];
@@ -101,7 +98,6 @@ export function IfcCheckerPage() {
   }
 
   async function handleParse() {
-    // canParse carries the engine !== "" check, which narrows it for parseFile below.
     if (!canParse) return;
     setIsParsing(true);
     dropStaleResults();
@@ -143,7 +139,6 @@ export function IfcCheckerPage() {
   }
 
   function handleReset() {
-    setEngine("");
     setIdsFile(null);
     clearModels();
     dropStaleResults();
@@ -156,7 +151,6 @@ export function IfcCheckerPage() {
   function loadState(): { text: string; tone: "idle" | "pending" | "ready" } {
     if (models.length === 0) return { text: "No files chosen", tone: "idle" };
     const files = `${models.length} ${models.length === 1 ? "file" : "files"}`;
-    if (engine === "") return { text: `${files} · no engine`, tone: "pending" };
     if (unparsed.length > 0) return { text: `${files} · ${unparsed.length} to parse`, tone: "pending" };
     return { text: `${files} · ${engine}`, tone: "ready" };
   }
@@ -191,32 +185,6 @@ export function IfcCheckerPage() {
 
         <div className="step-body">
           <div className="control-row">
-            <fieldset className="segmented">
-              <legend>Engine</legend>
-              <div className="segments">
-                <label>
-                  <input
-                    type="radio"
-                    name="local-engine"
-                    value="web-ifc"
-                    checked={engine === "web-ifc"}
-                    onChange={() => setEngine("web-ifc")}
-                  />
-                  web-ifc
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="local-engine"
-                    value="ifc-lite"
-                    checked={engine === "ifc-lite"}
-                    onChange={() => setEngine("ifc-lite")}
-                  />
-                  ifc-lite
-                </label>
-              </div>
-            </fieldset>
-
             <div className="file-field">
               <label htmlFor="local-ifc-files">IFC files</label>
               <input

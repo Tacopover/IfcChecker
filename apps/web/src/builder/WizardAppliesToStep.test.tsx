@@ -71,13 +71,44 @@ describe("WizardAppliesToStep", () => {
     render(<Harness />);
 
     const list = within(picklist());
-    expect(list.getByText("IfcBuildingElement")).toBeInTheDocument();
+    // Anchored to the row's own name cell: the ancestor breadcrumb above the root row also
+    // renders "IfcBuildingElement" as its non-interactive current-node label.
+    expect(list.getByText("IfcBuildingElement", { selector: ".name" })).toBeInTheDocument();
     // Wall and Door are individually listed as nested rows, not hidden behind the group — a file
     // where every present type shares one broad root group would otherwise leave no way to pick
     // a narrower type at all.
     expect(list.getByText("IfcWall")).toBeInTheDocument();
     expect(list.getByText("IfcDoor")).toBeInTheDocument();
     expect(list.getByText("5 elements")).toBeInTheDocument();
+  });
+
+  it("shows the schema ancestor chain above the root node, ending in the node itself", () => {
+    render(<Harness />);
+
+    const breadcrumb = document.querySelector(".ancestorpath") as HTMLElement;
+    expect(breadcrumb).toBeInTheDocument();
+    // Real IFC4 chain above IfcBuildingElement: IfcElement, IfcProduct, IfcObject,
+    // IfcObjectDefinition, IfcRoot — none of which qualify as a file group (either they cover the
+    // same types as IfcBuildingElement and lose the deepest-wins tie-break, or the introspection
+    // model excludes them as too abstract to discriminate anything), so this is the only place a
+    // user can find or pick them.
+    expect(within(breadcrumb).getByRole("button", { name: "IfcElement" })).toBeInTheDocument();
+    expect(within(breadcrumb).getByRole("button", { name: "IfcRoot" })).toBeInTheDocument();
+    expect(within(breadcrumb).getByText("IfcBuildingElement")).toHaveClass("cur");
+  });
+
+  it("picking an ancestor from the breadcrumb resolves to the real present types under it", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const breadcrumb = document.querySelector(".ancestorpath") as HTMLElement;
+    await user.click(within(breadcrumb).getByRole("button", { name: "IfcElement" }));
+
+    // IfcElement isn't itself a tracked group (IfcBuildingElement already covers the identical
+    // Wall+Door set and wins the tie-break), so this proves the fallback resolution in
+    // introspect.ts's resolveOne — not just that the click was recorded.
+    expect(screen.getByText("5 elements selected")).toBeInTheDocument();
+    expect(within(breadcrumb).getByRole("button", { name: "IfcElement" })).toHaveClass("checked");
   });
 
   it("picking a nested type individually selects only that type, not its whole group", async () => {

@@ -11,6 +11,14 @@ import {
   applicabilityEntityNamesOf,
   plainName,
 } from "./rule-draft.js";
+import type { SpecificationCardinality } from "./parse-ids.js";
+
+/** `<applicability minOccurs maxOccurs>` for each cardinality, per `specificationCardinalityOf`. */
+const OCCURS_XML: Record<SpecificationCardinality, string> = {
+  required: ` minOccurs="1" maxOccurs="unbounded"`,
+  optional: ` minOccurs="0" maxOccurs="unbounded"`,
+  prohibited: ` minOccurs="0" maxOccurs="0"`,
+};
 
 /**
  * Everything `ids.xsd` puts in `<info>`, which is who wrote the document and what it is for.
@@ -358,9 +366,15 @@ function specificationXml(rule: RuleDraft): string {
     optionalAttributeXml("instructions", rule.instructions) +
     attributesXml(source?.attributes ?? {});
 
-  const applicabilityAttributes = source
-    ? attributesXml(source.applicabilityAttributes)
-    : ` minOccurs="1" maxOccurs="unbounded"`;
+  // An explicit `rule.cardinality` always wins, imported or not — it is the builder's own statement
+  // of how many elements may match, made after whatever the source's occurs attributes said. Failing
+  // that, an imported rule keeps its source verbatim and a fresh one is the exporter's old default.
+  const applicabilityAttributes =
+    rule.cardinality !== undefined
+      ? OCCURS_XML[rule.cardinality]
+      : source
+        ? attributesXml(source.applicabilityAttributes)
+        : OCCURS_XML.required;
 
   const facets = interleave(
     rule.conditions.map((facet) => facetXml(facet)),

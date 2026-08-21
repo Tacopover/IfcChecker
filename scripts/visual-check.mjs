@@ -104,7 +104,6 @@ const SCENARIOS = {
   validate: `
     h.click('[data-smoke-route="validate"]');
     await h.waitFor(function () { return document.getElementById("local-ifc-files"); }, "validate page");
-    document.querySelector('input[name="local-engine"][value="ifc-lite"]').click();
 
     var response = await fetch("/fixtures/ifc/mixed-disciplines.ifc");
     if (!response.ok) throw new Error("fixture fetch failed: " + response.status);
@@ -189,22 +188,28 @@ const SCENARIOS = {
     if (failing.failed === "0") throw new Error("expected the wall rule to fail elements, got " + JSON.stringify(failing));
 
     // The model has no curtain walls, and this rule's applicability is required (minOccurs
-    // defaults to 1), so the rule itself fails. Its counts are the same zeroes a clean model
-    // produces, which is exactly why the reason has to be on screen.
+    // defaults to 1) — but a model that simply doesn't have that kind of element isn't a
+    // failing model, just one with nothing to check. It reads as a friendly notice next to
+    // the rule, not as a failure with its own alert block.
     var inert = specRow("Curtain walls are named");
     if (inert.applied !== "0") throw new Error("expected the curtain wall rule to match nothing, got " + inert.applied);
-    var alerts = h.all(".check-summary [role=alert]").map(function (n) { return n.textContent; }).join(" | ");
-    if (alerts.indexOf("requires at least one matching element") === -1) {
-      throw new Error("a required rule that matched no elements did not say so — it reads as a clean model: " + alerts);
+    var inertRow = h.all(".check-summary .spec-name").filter(function (n) { return n.textContent === "Curtain walls are named"; })[0].closest("tr");
+    var inertStatus = inertRow.querySelector(".spec-status").textContent;
+    if (inertStatus !== "no matching elements found") {
+      throw new Error("a required rule that matched no elements should read as a friendly notice, not " + JSON.stringify(inertStatus));
     }
-    if (h.text(".check-summary .summary-line").indexOf("3 failing") === -1) {
-      throw new Error("a required rule that matched nothing was not counted as failing: " + h.text(".check-summary .summary-line"));
+    var alerts = h.all(".check-summary [role=alert]").map(function (n) { return n.textContent; }).join(" | ");
+    if (alerts.indexOf("requires at least one matching element") !== -1) {
+      throw new Error("a required rule that matched no elements should not show the failing block: " + alerts);
+    }
+    if (h.text(".check-summary .summary-line").indexOf("1 failing") === -1) {
+      throw new Error("only the rule with real violations should count as failing: " + h.text(".check-summary .summary-line"));
     }
 
     // A rule that selects by property value used to be refused whole. It runs now, and this
-    // fixture states no LoadBearing anywhere — so it selects nothing and fails on its own
-    // applicability cardinality, which is the third of the three failures counted above. Real
-    // counts rather than the em-dashes an unchecked rule shows is the whole difference.
+    // fixture states no LoadBearing anywhere — so it selects nothing and reads the same
+    // friendly way as the curtain wall rule above, rather than as a failure. Real counts
+    // rather than the em-dashes an unchecked rule shows is the whole difference.
     var selective = specRow("Load-bearing walls are named");
     if (selective.applied !== "0" || selective.failed !== "0") {
       throw new Error("an applicability property did not run as expected: " + JSON.stringify(selective));
@@ -259,7 +264,6 @@ const SCENARIOS = {
   builder: `
     h.click('[data-smoke-route="validate"]');
     await h.waitFor(function () { return document.getElementById("local-ifc-files"); }, "validate page");
-    document.querySelector('input[name="local-engine"][value="ifc-lite"]').click();
 
     var response = await fetch("/fixtures/ifc/mixed-disciplines.ifc");
     if (!response.ok) throw new Error("fixture fetch failed: " + response.status);

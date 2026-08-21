@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { REQUIRED_CARDINALITY_EMPTY_MESSAGE } from "@ifc-qa/ids-validator";
 import { CheckSummary } from "./CheckSummary";
 import type { SpecificationSummary } from "../local/parseAndValidate.js";
 import type { IssueRow } from "./IssueTable";
@@ -55,13 +56,15 @@ describe("CheckSummary", () => {
       />
     );
 
-    expect(screen.getByText("matched nothing")).toBeInTheDocument();
+    expect(screen.getByText("no matching elements found")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("nothing was checked");
   });
 
-  // IDS defaults an applicability to required, so "nothing matched" is the rule failing, not the
-  // model being clean. The counts are the same zeroes either way, which is the whole problem.
-  it("fails a required specification that matched nothing, and says why", () => {
+  // IDS defaults an applicability to required, and the validator flags that as a cardinality
+  // failure — but a model that simply doesn't have that kind of element isn't a failing model,
+  // just one with nothing to check. This reads the same as an optional specification matching
+  // nothing: a plain notice next to the rule, no failing block.
+  it("treats a required specification that matched nothing as unmet, not failing", () => {
     render(
       <CheckSummary
         summaries={[
@@ -70,17 +73,16 @@ describe("CheckSummary", () => {
             passedCount: 0,
             failedCount: 0,
             violations: [],
-            cardinalityFailure:
-              "This specification requires at least one matching element, and the model has none.",
+            cardinalityFailure: REQUIRED_CARDINALITY_EMPTY_MESSAGE,
           }),
         ]}
       />
     );
 
-    expect(screen.getByText("failing")).toBeInTheDocument();
-    expect(screen.queryByText("matched nothing")).not.toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("requires at least one matching element");
-    expect(screen.getByRole("status")).toHaveTextContent("1 failing");
+    expect(screen.getByText("no matching elements found")).toBeInTheDocument();
+    expect(screen.queryByText("failing")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("none failing");
   });
 
   it("does not call a fully compliant specification unchecked", () => {

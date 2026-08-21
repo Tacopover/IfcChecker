@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ancestorsOf } from "@ifc-qa/ids-validator";
 import type { ModelIntrospection, TreeNode } from "./introspect.js";
 import { allIfcTypeNames } from "./allIfcTypes.js";
 
@@ -10,14 +11,6 @@ export interface WizardAppliesToStepProps {
   onChange: (entityTypes: string[], showAllTypes: boolean) => void;
   onNext: () => void;
   onCancel: () => void;
-}
-
-/** Total elements the current pick covers — summed from each concrete type's own file count. */
-function selectedElementCount(introspection: ModelIntrospection, entityTypes: string[]): number {
-  const picked = new Set(entityTypes.map((name) => name.toUpperCase()));
-  return introspection.entityTypes
-    .filter((entry) => picked.has(entry.name.toUpperCase()))
-    .reduce((sum, entry) => sum + entry.count, 0);
 }
 
 function upperSet(names: string[]): Set<string> {
@@ -68,7 +61,11 @@ export function WizardAppliesToStep({
       .slice(0, 60);
   }, [showAllTypes, query, known]);
 
-  const totalCount = selectedElementCount(introspection, entityTypes);
+  // `fieldsFor` already resolves an ancestor picked above the file's own tree (via its
+  // `descendantsOf` fallback) to the real present types under it, not just a literal-name match —
+  // a plain count-by-name lookup would show 0 for exactly the picks the ancestor breadcrumb exists
+  // to make possible.
+  const totalCount = introspection.fieldsFor(entityTypes).total;
   const exampleGroup = introspection.groups[0] ?? null;
 
   function toggleGroup(name: string) {
@@ -107,8 +104,27 @@ export function WizardAppliesToStep({
       node.kind === "group"
         ? (groupByName.get(node.name)?.types.every((type) => pickedUpper.has(type.toUpperCase())) ?? false)
         : pickedUpper.has(node.name.toUpperCase());
+    // Only at the tree's own top: the schema ancestors sitting above the broadest type/group this
+    // file's tree already shows — e.g. IfcElement's own file has no narrower group above it, but
+    // IfcObject/IfcProduct still exist in the schema and may be the "everything" pick a user wants.
+    const ancestors = depth === 0 ? [...ancestorsOf(node.name)].reverse() : [];
     return (
       <div key={node.name}>
+        {ancestors.length > 0 && (
+          <div className="ancestorpath">
+            {ancestors.map((name) => (
+              <button
+                key={name}
+                type="button"
+                className={pickedUpper.has(name.toUpperCase()) ? "checked" : undefined}
+                onClick={() => toggleType(name)}
+              >
+                {name}
+              </button>
+            ))}
+            <span className="cur">{node.name}</span>
+          </div>
+        )}
         <label
           className={`pickrow${checked ? " checked" : ""}`}
           style={depth > 0 ? { marginLeft: `${depth * 1.25}rem` } : undefined}

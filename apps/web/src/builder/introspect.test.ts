@@ -192,6 +192,21 @@ describe("introspectModel — resolveTypes", () => {
     ]);
     expect(resolveTypes(["IfcWindow", "IFCWALL"])).toEqual(["IfcWall"]);
   });
+
+  it("expands a schema ancestor with no group of its own to the present types under it", () => {
+    const { resolveTypes } = introspectModel(REVIEWED_MODEL);
+
+    // IfcElement covers every present type except IfcSpace (a spatial element, not a physical
+    // one) — and it isn't itself a tracked group, since IfcElement's flow-element and
+    // building-element children don't share one single deepest common ancestor the way two present
+    // types under the same immediate parent do. This is the applies-to step's ancestor breadcrumb
+    // path: a schema type sitting above the file's own tree, picked directly by name.
+    expect(resolveTypes(["IfcElement"]).sort()).toEqual(
+      ["IfcAirTerminal", "IfcDoor", "IfcDuctFitting", "IfcDuctSegment", "IfcPipeSegment", "IfcValve", "IfcWall"].sort()
+    );
+    // IfcProduct sits higher still and covers IfcSpace too.
+    expect(resolveTypes(["IfcProduct"])).toContain("IfcSpace");
+  });
 });
 
 const FIELD_MODEL: NormalizedElement[] = [

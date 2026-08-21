@@ -1899,6 +1899,13 @@ tr.drawer-row > td {
 
 /* --- Loaded files table --- */
 
+.files-table th:first-child,
+.files-table td:first-child {
+  /* Without a floor, the auto table layout gives this column whatever's left after the
+     nowrap columns take what they need — squeezing it down to one character per line. */
+  min-width: 14rem;
+}
+
 .files-table .file-name {
   font-weight: 600;
   overflow-wrap: anywhere;
@@ -2590,19 +2597,35 @@ col.col-message {
   letter-spacing: 0.03em;
 }
 
-.steps {
+.badge.prohibited {
+  flex: none;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--fail);
+  border-radius: 999px;
+  background: var(--fail-soft);
+  color: var(--fail);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.wizard-steps {
   display: flex;
   align-items: center;
   margin-bottom: 2rem;
 }
 
-.step {
+/* Named wizard-step, not step: the validate page's own .step card class lives in this same
+   stylesheet, and a bare .step here silently overrode it with `display: flex`, which knocked
+   the card's stacked header/body into a two-column layout — an accidental cascade collision. */
+.wizard-step {
   display: flex;
   align-items: center;
   gap: 0.55rem;
 }
 
-.step .dot {
+.wizard-step .dot {
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -2617,41 +2640,41 @@ col.col-message {
   background: var(--surface);
 }
 
-.step.done .dot {
+.wizard-step.done .dot {
   background: var(--pass);
   border-color: var(--pass);
   color: var(--accent-text);
   font-size: 13px;
 }
 
-.step.active .dot {
+.wizard-step.active .dot {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
 }
 
-.step .label {
+.wizard-step .label {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--faint);
 }
 
-.step.active .label {
+.wizard-step.active .label {
   color: var(--text);
 }
 
-.step.done .label {
+.wizard-step.done .label {
   color: var(--muted);
 }
 
-.steplink {
+.wizard-steplink {
   width: 52px;
   height: 2px;
   background: var(--border-strong);
   margin: 0 0.5rem;
 }
 
-.steplink.done {
+.wizard-steplink.done {
   background: var(--pass);
 }
 
@@ -2872,6 +2895,46 @@ col.col-message {
   color: var(--faint);
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.ancestorpath {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--faint);
+  margin: 0 0 0.3rem 0.1rem;
+}
+
+.ancestorpath > *:not(:first-child)::before {
+  content: "›";
+  margin: 0 0.35rem;
+  color: var(--faint);
+}
+
+.ancestorpath button {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ancestorpath button:hover {
+  text-decoration: underline;
+}
+
+.ancestorpath button.checked {
+  color: var(--group);
+  font-weight: 700;
+}
+
+.ancestorpath .cur {
+  color: var(--muted);
+  font-weight: 600;
+  font-family: var(--mono);
 }
 
 .divider {

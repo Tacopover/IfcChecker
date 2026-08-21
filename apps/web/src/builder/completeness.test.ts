@@ -105,6 +105,15 @@ describe("ruleProblems", () => {
     });
   });
 
+  it("blocks a prohibited rule that still states conditions, but not one with none", () => {
+    expect(ruleProblems({ ...RULE, cardinality: "prohibited" }).conditions).toMatch(
+      /may not also state requirements/
+    );
+    expect(
+      ruleProblems({ ...RULE, cardinality: "prohibited", conditions: [] }).conditions
+    ).toBeNull();
+  });
+
   // `undefined` is a rule that has never stated one, which the exporter defaults; `""` is one the
   // user cleared, and `ids.xsd` makes the attribute required.
   it("distinguishes a rule that never stated a schema version from one that cleared it", () => {

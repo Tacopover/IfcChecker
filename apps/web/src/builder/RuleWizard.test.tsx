@@ -76,13 +76,13 @@ describe("RuleWizard", () => {
       />
     );
 
-    expect(document.querySelectorAll(".step.done")).toHaveLength(0);
+    expect(document.querySelectorAll(".wizard-step.done")).toHaveLength(0);
 
     await user.click(screen.getByRole("checkbox", { name: /IfcWall/ }));
     await user.click(screen.getByRole("button", { name: /Next: Narrow it down/ }));
 
-    expect(document.querySelectorAll(".step.done")).toHaveLength(1);
-    expect(document.querySelector(".step.active .label")).toHaveTextContent("Narrow it down");
+    expect(document.querySelectorAll(".wizard-step.done")).toHaveLength(1);
+    expect(document.querySelector(".wizard-step.active .label")).toHaveTextContent("Narrow it down");
   });
 
   it("back navigation returns to the previous step without losing what was entered", async () => {

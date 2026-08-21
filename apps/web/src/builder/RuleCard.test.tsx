@@ -253,6 +253,44 @@ describe("RuleCard", () => {
     expect(screen.getByText(/Schema version — IDS requires at least one/)).toBeInTheDocument();
   });
 
+  it("toggling Prohibited on flips the score reading and shows the badge, without touching conditions", async () => {
+    const user = userEvent.setup();
+    // Zero conditions, since a prohibited rule can't state any — the applicability alone is the
+    // check. Targets IfcWall, which ELEMENTS has 3 of, so the toggle has something to find.
+    const noConditions: RuleDraft = { ...RULE, conditions: [] };
+    render(<Harness initial={noConditions} />);
+
+    await user.click(screen.getByRole("button", { name: /About this specification/ }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /Prohibited — no element may match/ })
+    );
+
+    expect(screen.getByText("Prohibited")).toHaveClass("badge", "prohibited");
+    expect(screen.getByText("3 elements found, and none may match this rule")).toBeInTheDocument();
+    expect(document.querySelector(".rule-foot .score")).toHaveClass("has-fail");
+    // The violation is the match itself, not a per-condition failure — there is nothing for the
+    // failing-elements table to show, so the button that opens it stays hidden.
+    expect(screen.queryByRole("button", { name: /Show failing elements/ })).toBeNull();
+  });
+
+  it("reads a prohibited rule with nothing matched as compliant", async () => {
+    const user = userEvent.setup();
+    const targetsNothing: RuleDraft = {
+      ...RULE,
+      entityTypes: ["IfcBuildingElementProxy"],
+      conditions: [],
+    };
+    render(<Harness initial={targetsNothing} />);
+
+    await user.click(screen.getByRole("button", { name: /About this specification/ }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /Prohibited — no element may match/ })
+    );
+
+    expect(screen.getByText("None found — this rule is satisfied")).toBeInTheDocument();
+    expect(document.querySelector(".rule-foot .score")).toHaveClass("all-pass");
+  });
+
   it("renames without remounting the row underneath it", async () => {
     const user = userEvent.setup();
     render(<Harness />);

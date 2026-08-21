@@ -117,6 +117,15 @@ export function validateBySpecification(
   });
 }
 
+/**
+ * Distinct from the other cardinalityFailure messages: those mean the document is invalid or an
+ * element matched that shouldn't have. This one just means the model has nothing this
+ * specification applies to — callers may choose to present it as a plain "no match" rather than
+ * a failure.
+ */
+export const REQUIRED_CARDINALITY_EMPTY_MESSAGE =
+  "This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.";
+
 function cardinalityFailure(
   specification: { cardinality: string; requirements: unknown[] },
   applicableCount: number
@@ -131,7 +140,7 @@ function cardinalityFailure(
   }
 
   if (specification.cardinality === "required" && applicableCount === 0) {
-    return "This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.";
+    return REQUIRED_CARDINALITY_EMPTY_MESSAGE;
   }
 
   return null;

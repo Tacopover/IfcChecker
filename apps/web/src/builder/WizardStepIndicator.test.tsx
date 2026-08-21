@@ -13,7 +13,7 @@ describe("WizardStepIndicator", () => {
   it("marks steps before the current index done, the current one active, the rest upcoming", () => {
     const { container } = render(<WizardStepIndicator steps={STEPS} currentIndex={2} />);
 
-    const stepEls = container.querySelectorAll(".step");
+    const stepEls = container.querySelectorAll(".wizard-step");
     expect(stepEls[0]).toHaveClass("done");
     expect(stepEls[1]).toHaveClass("done");
     expect(stepEls[2]).toHaveClass("active");
@@ -29,7 +29,7 @@ describe("WizardStepIndicator", () => {
   it("draws one line fewer than there are steps, done up to the current step", () => {
     const { container } = render(<WizardStepIndicator steps={STEPS} currentIndex={1} />);
 
-    const links = container.querySelectorAll(".steplink");
+    const links = container.querySelectorAll(".wizard-steplink");
     expect(links).toHaveLength(STEPS.length - 1);
     expect(links[0]).toHaveClass("done");
     expect(links[1]).not.toHaveClass("done");
@@ -39,7 +39,7 @@ describe("WizardStepIndicator", () => {
   it("marks nothing done on the first step", () => {
     const { container } = render(<WizardStepIndicator steps={STEPS} currentIndex={0} />);
 
-    expect(container.querySelectorAll(".step.done")).toHaveLength(0);
-    expect(container.querySelector(".step.active .dot")).toHaveTextContent("1");
+    expect(container.querySelectorAll(".wizard-step.done")).toHaveLength(0);
+    expect(container.querySelector(".wizard-step.active .dot")).toHaveTextContent("1");
   });
 });

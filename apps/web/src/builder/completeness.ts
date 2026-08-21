@@ -152,9 +152,15 @@ export function ruleProblems(rule: RuleDraft): RuleProblems {
         ? "A predefined type narrows the element types, and this rule names none — add a type or remove it."
         : valueProblem(rule.entityPredefinedType ?? null),
     conditions:
-      checksNothing && !applicabilityOnly
-        ? "No conditions — there is nothing for this rule to check."
-        : null,
+      rule.cardinality === "prohibited"
+        ? // Stating none is this rule's complete, intended state — the applicability alone is the
+          // check — so unlike an ordinary rule, no conditions here is not "still being authored".
+          rule.conditions.length > 0
+          ? "A prohibited rule may not also state requirements — the elements it selects are the failure, so there is nothing left to check on them."
+          : null
+        : checksNothing && !applicabilityOnly
+          ? "No conditions — there is nothing for this rule to check."
+          : null,
     // `undefined` is a rule that has never stated one, which the exporter defaults; `""` is one the
     // user cleared, and `ids.xsd` makes the attribute required. The exporter still writes the
     // default either way, so the file stays valid — this is what stops it being written silently.

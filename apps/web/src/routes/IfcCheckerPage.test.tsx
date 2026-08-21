@@ -15,7 +15,13 @@ const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => (
 }));
 
 vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
-vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecification, parseIdsXml, isEvaluable }));
+vi.mock("@ifc-qa/ids-validator", () => ({
+  validateBySpecification,
+  parseIdsXml,
+  isEvaluable,
+  REQUIRED_CARDINALITY_EMPTY_MESSAGE:
+    "This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.",
+}));
 
 /** One specification's outcome, as the validator hands it to the page. */
 function outcome(violations: Array<Record<string, unknown>>, overrides: Record<string, unknown> = {}) {
@@ -66,9 +72,8 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-/** Step 1 of the page: pick an engine, pick files, parse them. */
+/** Step 1 of the page: pick files, parse them (ifc-lite is the only engine offered). */
 async function parseFiles(user: ReturnType<typeof userEvent.setup>, ...files: File[]) {
-  await user.click(screen.getByRole("radio", { name: "web-ifc" }));
   await user.upload(screen.getByLabelText(/IFC files/), files);
   await user.click(screen.getByRole("button", { name: "Parse files" }));
   return screen.findByRole("table", { name: "IFC files" });
@@ -90,14 +95,11 @@ beforeEach(() => {
 });
 
 describe("IfcCheckerPage", () => {
-  it("disables the parse button until an engine and at least one IFC file are chosen", async () => {
+  it("disables the parse button until at least one IFC file is chosen", async () => {
     const user = userEvent.setup();
     renderPage();
 
     const parse = screen.getByRole("button", { name: "Parse files" });
-    expect(parse).toBeDisabled();
-
-    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
     expect(parse).toBeDisabled();
 
     await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-a.ifc"));
@@ -105,7 +107,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("disables the check button until files are parsed and an IDS file is chosen", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
     const user = userEvent.setup();
     renderPage();
@@ -121,12 +123,12 @@ describe("IfcCheckerPage", () => {
   });
 
   it("tells the user what's still needed for each step, updating as fields are filled", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
     const user = userEvent.setup();
     renderPage();
 
-    expect(screen.getByText(/To parse: select an engine, choose at least one IFC file/i)).toBeInTheDocument();
+    expect(screen.getByText(/To parse: choose at least one IFC file/i)).toBeInTheDocument();
     expect(screen.getByText(/To check: parse at least one IFC file, choose an IDS rule set file/i)).toBeInTheDocument();
 
     await parseFiles(user, makeFile("model-a.ifc"));
@@ -159,7 +161,6 @@ describe("IfcCheckerPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
     await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-a.ifc"));
     expect(screen.getByRole("button", { name: "Parse files" })).toBeEnabled();
 
@@ -182,8 +183,8 @@ describe("IfcCheckerPage", () => {
     expect(within(table).getByText("model-b.ifc")).toBeInTheDocument();
   });
 
-  it("resets the engine, files, and results back to the empty state", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+  it("resets the files and results back to the empty state", async () => {
+    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateBySpecification.mockReturnValueOnce([outcome([], { applicableCount: 0, failedCount: 0 })]);
 
     const user = userEvent.setup();
@@ -198,14 +199,13 @@ describe("IfcCheckerPage", () => {
 
     expect(screen.queryByRole("table", { name: "IFC files" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Results" })).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "web-ifc" })).not.toBeChecked();
     expect((screen.getByLabelText("IDS rule set (.ids or .xml)") as HTMLInputElement).files).toHaveLength(0);
     expect((screen.getByLabelText(/IFC files/) as HTMLInputElement).files).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Parse files" })).toBeDisabled();
   });
 
   it("parses uploaded files entirely client-side, then reports violations when a rule set is checked", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({
+    parseIfcLiteBuffer.mockResolvedValueOnce({
       elements: [{ globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} }],
       parseMs: 12,
     });
@@ -229,7 +229,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("checks a second rule set against the files already in memory, without parsing them again", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateBySpecification
       .mockReturnValueOnce([outcome([], { applicableCount: 0, failedCount: 0 })])
       .mockReturnValueOnce([
@@ -248,11 +248,11 @@ describe("IfcCheckerPage", () => {
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
     expect(await screen.findByText("Fails the newer rules")).toBeInTheDocument();
-    expect(parseWebIfcBuffer).toHaveBeenCalledTimes(1);
+    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(1);
   });
 
   it("drops results that no longer describe the current file set", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateBySpecification.mockReturnValueOnce([outcome([violation()])]);
 
     const user = userEvent.setup();
@@ -269,7 +269,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("opens the full attributes and property sets of a failing element when it is picked", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({
+    parseIfcLiteBuffer.mockResolvedValueOnce({
       elements: [
         {
           globalId: "g1",
@@ -319,7 +319,7 @@ describe("IfcCheckerPage", () => {
       attributes: {},
       propertySets: {},
     });
-    parseWebIfcBuffer
+    parseIfcLiteBuffer
       .mockResolvedValueOnce({ elements: [wallIn("Wall in the first file")], parseMs: 5 })
       .mockResolvedValueOnce({ elements: [wallIn("Wall in the second file")], parseMs: 5 });
     validateBySpecification
@@ -345,7 +345,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("reports a specification that matched no elements rather than showing a clean result", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateBySpecification.mockReturnValueOnce([
       outcome([], { name: "Walls are fire rated", applicableCount: 0, passedCount: 0, failedCount: 0 }),
     ]);
@@ -358,11 +358,11 @@ describe("IfcCheckerPage", () => {
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("nothing was checked");
-    expect(screen.getByText("matched nothing")).toBeInTheDocument();
+    expect(screen.getByText("no matching elements found")).toBeInTheDocument();
   });
 
   it("lets the user expand a parsed file's row to see its project/site/building/storey structure", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({
+    parseIfcLiteBuffer.mockResolvedValueOnce({
       elements: [],
       parseMs: 5,
       modelStructure: {
@@ -398,7 +398,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("doesn't offer to show structure for a file that failed to parse", async () => {
-    parseWebIfcBuffer.mockRejectedValueOnce(new Error("unexpected EOF"));
+    parseIfcLiteBuffer.mockRejectedValueOnce(new Error("unexpected EOF"));
 
     const user = userEvent.setup();
     renderPage();
@@ -410,7 +410,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("shows a failed status and error message for a file that fails to parse, without blocking other files", async () => {
-    parseWebIfcBuffer
+    parseIfcLiteBuffer
       .mockRejectedValueOnce(new Error("unexpected EOF"))
       .mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
@@ -426,7 +426,7 @@ describe("IfcCheckerPage", () => {
 
   it("shows an error instead of a silent 'no issues' result when the IDS file has no specifications", async () => {
     parseIdsXml.mockReturnValue([]);
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
     const user = userEvent.setup();
     renderPage();
@@ -442,12 +442,11 @@ describe("IfcCheckerPage", () => {
   it("shows live progress naming the current file and its position in the batch while parsing, then clears it", async () => {
     const first = deferred<{ elements: unknown[]; parseMs: number }>();
     const second = deferred<{ elements: unknown[]; parseMs: number }>();
-    parseWebIfcBuffer.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    parseIfcLiteBuffer.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
 
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
     await user.upload(screen.getByLabelText(/IFC files/), [makeFile("model-a.ifc"), makeFile("model-b.ifc")]);
     await user.click(screen.getByRole("button", { name: "Parse files" }));
 
@@ -458,12 +457,12 @@ describe("IfcCheckerPage", () => {
     await screen.findByText(/Parsing 2 of 2: model-b\.ifc/);
 
     second.resolve({ elements: [], parseMs: 5 });
-    await screen.findByText(/All 2 files are parsed with web-ifc/);
+    await screen.findByText(/All 2 files are parsed with ifc-lite/);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("only re-parses the files that need it when more are added to an already-parsed set", async () => {
-    parseWebIfcBuffer
+    parseIfcLiteBuffer
       .mockResolvedValueOnce({ elements: [], parseMs: 5 })
       .mockResolvedValueOnce({ elements: [], parseMs: 6 });
 
@@ -471,40 +470,21 @@ describe("IfcCheckerPage", () => {
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    expect(parseWebIfcBuffer).toHaveBeenCalledTimes(1);
+    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(1);
 
     await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-b.ifc"));
     await user.click(screen.getByRole("button", { name: "Parse files" }));
-    await screen.findByText(/All 2 files are parsed with web-ifc/);
+    await screen.findByText(/All 2 files are parsed with ifc-lite/);
 
-    expect(parseWebIfcBuffer).toHaveBeenCalledTimes(2);
-  });
-
-  it("treats a switch of engine as work still to do, re-parsing with the newly chosen one", async () => {
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 3 });
-
-    const user = userEvent.setup();
-    renderPage();
-
-    await parseFiles(user, makeFile("model-a.ifc"));
-    expect(screen.getByRole("button", { name: "Parse files" })).toBeDisabled();
-
-    await user.click(screen.getByRole("radio", { name: "ifc-lite" }));
-    expect(screen.getByRole("button", { name: "Parse files" })).toBeEnabled();
-
-    await user.click(screen.getByRole("button", { name: "Parse files" }));
-    await screen.findByText(/All 1 file is parsed with ifc-lite/);
-    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(1);
+    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(2);
   });
 
   it("puts no cap on how many IFC files may be loaded at once", async () => {
-    parseWebIfcBuffer.mockResolvedValue({ elements: [], parseMs: 1 });
+    parseIfcLiteBuffer.mockResolvedValue({ elements: [], parseMs: 1 });
 
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole("radio", { name: "web-ifc" }));
     await user.upload(
       screen.getByLabelText(/IFC files/),
       Array.from({ length: 25 }, (_, i) => makeFile(`model-${i}.ifc`))
@@ -515,7 +495,7 @@ describe("IfcCheckerPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Parse files" }));
 
-    await screen.findByText(/All 25 files are parsed with web-ifc/);
-    expect(parseWebIfcBuffer).toHaveBeenCalledTimes(25);
+    await screen.findByText(/All 25 files are parsed with ifc-lite/);
+    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(25);
   });
 });

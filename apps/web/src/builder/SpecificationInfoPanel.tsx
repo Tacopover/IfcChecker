@@ -91,6 +91,26 @@ export function SpecificationInfoPanel({
           </label>
         ))}
       </fieldset>
+      <div className="docinfo-field">
+        <label>
+          <input
+            type="checkbox"
+            checked={rule.cardinality === "prohibited"}
+            onChange={(event) =>
+              onChange({
+                ...rule,
+                cardinality: event.target.checked ? "prohibited" : undefined,
+              })
+            }
+          />
+          Prohibited — no element may match this rule's applicability
+        </label>
+        <p className="docinfo-hint">
+          Flips this from a check to a ban: instead of judging elements that match, it fails the
+          moment any element does. A prohibited rule can't also state requirements — remove any
+          below, or this rule won't export.
+        </p>
+      </div>
     </MetadataPanel>
   );
 }

@@ -16,17 +16,17 @@ export interface WizardStepIndicatorProps {
  */
 export function WizardStepIndicator({ steps, currentIndex }: WizardStepIndicatorProps) {
   return (
-    <div className="steps">
+    <div className="wizard-steps">
       {steps.map((step, index) => {
         const done = index < currentIndex;
         const active = index === currentIndex;
         return (
           <Fragment key={step.id}>
-            <div className={`step${done ? " done" : active ? " active" : ""}`}>
+            <div className={`wizard-step${done ? " done" : active ? " active" : ""}`}>
               <span className="dot">{done ? "✓" : index + 1}</span>
               <span className="label">{step.label}</span>
             </div>
-            {index < steps.length - 1 && <span className={`steplink${done ? " done" : ""}`} />}
+            {index < steps.length - 1 && <span className={`wizard-steplink${done ? " done" : ""}`} />}
           </Fragment>
         );
       })}

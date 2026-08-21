@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { NormalizedElement } from "@ifc-qa/shared-types";
 import { buildIdsXml, infoProblems } from "./build-ids.js";
 import { EVERY_FACET } from "./every-facet.fixture.js";
 import { idsSchemaViolations } from "./ids-schema-shape.js";
 import { parseIdsXml } from "./parse-ids.js";
 import type { ParsedRequirementFacet, ParsedRestriction, ParsedSpecification } from "./parse-ids.js";
+import { validateBySpecification } from "./validate-elements.js";
 
 /**
  * The restriction on a facet that reads one value slot.
@@ -144,6 +146,66 @@ describe("buildIdsXml", () => {
     expect(xml).toContain("<title>Tower-A-MEP</title>");
     expect(xml).toContain("<date>2026-07-24</date>");
     expect(xml.match(/<specification /g)).toHaveLength(2);
+  });
+
+  describe("specification cardinality", () => {
+    function makeElement(overrides: Partial<NormalizedElement>): NormalizedElement {
+      return {
+        globalId: "g1",
+        ifcType: "IFCBUILDINGELEMENTPROXY",
+        predefinedType: null,
+        name: null,
+        attributes: {},
+        propertySets: {},
+        ...overrides,
+      };
+    }
+
+    it("writes the exporter's old default — minOccurs=1 maxOccurs=unbounded — when unstated", () => {
+      const xml = buildIdsXml([{ id: "r1", name: "Rule", entityTypes: ["IfcWall"], conditions: [] }]);
+      expect(xml).toContain('<applicability minOccurs="1" maxOccurs="unbounded">');
+    });
+
+    it('writes minOccurs="0" maxOccurs="0" for a prohibited rule', () => {
+      const xml = buildIdsXml([
+        {
+          id: "r1",
+          name: "No proxies",
+          entityTypes: ["IfcBuildingElementProxy"],
+          conditions: [],
+          cardinality: "prohibited",
+        },
+      ]);
+      expect(xml).toContain('<applicability minOccurs="0" maxOccurs="0">');
+    });
+
+    it('writes minOccurs="0" maxOccurs="unbounded" for an optional rule', () => {
+      const xml = buildIdsXml([
+        { id: "r1", name: "Rule", entityTypes: ["IfcWall"], conditions: [], cardinality: "optional" },
+      ]);
+      expect(xml).toContain('<applicability minOccurs="0" maxOccurs="unbounded">');
+    });
+
+    it("a prohibited rule's exported XML fails the real checker when the type is present, and passes when it is not", () => {
+      const xml = buildIdsXml([
+        {
+          id: "r1",
+          name: "No proxies",
+          entityTypes: ["IfcBuildingElementProxy"],
+          conditions: [],
+          cardinality: "prohibited",
+        },
+      ]);
+
+      const [withProxy] = validateBySpecification([makeElement({ globalId: "proxy-1" })], xml);
+      expect(withProxy.cardinalityFailure).toMatch(/Nothing may match/);
+
+      const [withoutProxy] = validateBySpecification(
+        [makeElement({ globalId: "wall-1", ifcType: "IFCWALL" })],
+        xml
+      );
+      expect(withoutProxy.cardinalityFailure).toBeNull();
+    });
   });
 
   // `ids.xsd` fixes the order of the eight children, so they are written at their index rather than

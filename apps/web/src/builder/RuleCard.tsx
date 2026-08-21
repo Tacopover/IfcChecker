@@ -77,10 +77,21 @@ export function RuleCard({
   );
 
   const { matched, passed, perCondition, failures } = evaluation;
+  const prohibited = rule.cardinality === "prohibited";
   const failing = matched - passed;
   const ratio = matched ? passed / matched : 0;
-  const scoreClass =
-    matched === 0 || rule.conditions.length === 0 ? "empty" : failing === 0 ? "all-pass" : "has-fail";
+  // A prohibited rule's own zero conditions are its complete, intended state — not the "still being
+  // authored" state the same emptiness means for an ordinary rule — so it gets its own read: any
+  // match at all is a violation, and no match is full compliance.
+  const scoreClass = prohibited
+    ? matched === 0
+      ? "all-pass"
+      : "has-fail"
+    : matched === 0 || rule.conditions.length === 0
+      ? "empty"
+      : failing === 0
+        ? "all-pass"
+        : "has-fail";
 
   // Local, because it is presentation only: which panels are open is not part of the draft, and
   // the page already tracks which rules are open.
@@ -159,8 +170,11 @@ export function RuleCard({
   // Qualified whenever requirements were kept but not shown, so "all pass" never reads as a verdict
   // on the whole specification when part of it was never checked here.
   const shownOnly = preserved.length > 0 ? " on the conditions shown" : "";
-  const summary =
-    rule.conditions.length === 0
+  const summary = prohibited
+    ? matched === 0
+      ? "None found — this rule is satisfied"
+      : `${matched} element${matched === 1 ? "" : "s"} found, and none may match this rule`
+    : rule.conditions.length === 0
       ? preserved.length > 0
         ? "Nothing shown here to check"
         : "Nothing checked yet"
@@ -194,6 +208,7 @@ export function RuleCard({
           onChange={(event) => onChange({ ...rule, name: event.target.value })}
         />
         {isNew && <span className="badge new">Just added</span>}
+        {prohibited && <span className="badge prohibited">Prohibited</span>}
         {preserved.length > 0 && (
           <span className="badge kept" title={preserved.map((entry) => entry.construct).join(", ")}>
             {preserved.length} kept
@@ -517,14 +532,17 @@ export function RuleCard({
             <span className={`score ${scoreClass}`}>
               <span className="score-text">{summary}</span>
             </span>
-            {failing > 0 && (
+            {/* A prohibited rule's violation is the match itself, not a per-condition failure — the
+                table's "Checked"/"Actual" columns read a condition that never runs here, so it has
+                nothing to show. The score text above already says how many were found. */}
+            {failing > 0 && !prohibited && (
               <button type="button" className="linkbtn" onClick={onToggleFailures}>
                 {showFailures ? "Hide" : "Show"} failing elements
               </button>
             )}
           </div>
 
-          {showFailures && failing > 0 && (
+          {showFailures && failing > 0 && !prohibited && (
             <FailingElementsTable failures={failures} conditions={rule.conditions} />
           )}
         </div>

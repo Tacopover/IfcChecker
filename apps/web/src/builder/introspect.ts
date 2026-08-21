@@ -1,5 +1,5 @@
 import type { NormalizedElement, PropertyValue } from "@ifc-qa/shared-types";
-import { ancestorsOf, canonicalIfcType } from "@ifc-qa/ids-validator";
+import { ancestorsOf, canonicalIfcType, descendantsOf } from "@ifc-qa/ids-validator";
 
 export interface FieldSummary {
   name: string;
@@ -252,8 +252,16 @@ export function introspectModel(elements: NormalizedElement[]): ModelIntrospecti
   }
   const resolveOne = (name: string): string[] => {
     const selectable = canonicalSelectable.get(name.trim().toUpperCase());
-    if (!selectable) return [];
-    return groupByName.get(selectable)?.types ?? [selectable];
+    if (selectable) return groupByName.get(selectable)?.types ?? [selectable];
+    // Not one of the file's own types/groups — e.g. a schema ancestor picked from the
+    // applies-to step's ancestor breadcrumb, sitting above the deepest group that already
+    // covers the same types (or blocked from being a group by TOO_ABSTRACT). It still
+    // resolves to real elements if any present type descends from it; a schema type with no
+    // present descendants (including a leaf the file simply doesn't contain) drops out exactly
+    // like an unrecognized name always has.
+    const canonical = canonicalIfcType(name);
+    if (!canonical) return [];
+    return descendantsOf(canonical).filter((type) => byType.has(type));
   };
   const resolveTypes = (names: string[]) => [...new Set(names.flatMap(resolveOne))];
 

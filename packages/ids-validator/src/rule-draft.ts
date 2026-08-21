@@ -6,6 +6,7 @@ import type {
   ParsedRequirementFacet,
   ParsedRestriction,
   ParsedSpecification,
+  SpecificationCardinality,
 } from "./parse-ids.js";
 import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
 
@@ -327,6 +328,18 @@ export interface RuleDraft {
   id: string;
   name: string;
   entityTypes: string[];
+  /**
+   * Whether a matching element must exist, may exist, or must not — `<applicability minOccurs
+   * maxOccurs>`, per `specificationCardinalityOf`. Absent means `"required"`, the exporter's default
+   * before this field existed: at least one element must match, and every matched one is judged
+   * against `conditions`. `"prohibited"` inverts that — no element may match at all, so the
+   * applicability itself becomes the check and `conditions` must stay empty (`ruleProblems` says so).
+   *
+   * An imported rule with no explicit reading here keeps evaluating by its source's own occurs
+   * attributes (`compileDraft`) — this field is only ever the builder's own override, authored fresh
+   * or toggled onto an imported rule, never a second copy of what the source already states.
+   */
+  cardinality?: SpecificationCardinality;
   /**
    * The predefined type the applicability's `<entity>` narrows those classes to.
    *
@@ -685,12 +698,16 @@ function applicabilityOf(rule: RuleDraft): ParsedApplicability {
 export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
   return rules.map((rule) => ({
     name: rule.name,
-    // Authored rules are written minOccurs="1"; imported ones keep their source's occurs
-    // attributes, so both read back the same way parseIdsXml would read the built XML.
-    cardinality: specificationCardinalityOf(
-      rule.imported?.applicabilityAttributes.minOccurs,
-      rule.imported?.applicabilityAttributes.maxOccurs
-    ),
+    // An explicit reading on the draft always wins — it is the builder's own statement, made after
+    // whatever the source said. Failing that: authored rules are written minOccurs="1"; imported ones
+    // keep their source's occurs attributes, so both read back the same way parseIdsXml would read
+    // the built XML.
+    cardinality:
+      rule.cardinality ??
+      specificationCardinalityOf(
+        rule.imported?.applicabilityAttributes.minOccurs,
+        rule.imported?.applicabilityAttributes.maxOccurs
+      ),
     applicability: applicabilityOf(rule),
     requirements: rule.conditions.map(compileFacet),
     // Authored rules can say nothing the builder cannot; imported ones carry what it could not read.

@@ -1,16 +1,23 @@
 import { Fragment, useState, type ReactNode } from "react";
+import { REQUIRED_CARDINALITY_EMPTY_MESSAGE } from "@ifc-qa/ids-validator";
 import type { SpecificationSummary } from "../local/parseAndValidate.js";
 import { IssueTable, type IssueRow } from "./IssueTable";
 
 type SpecStatus = "failed" | "passed" | "not-applied" | "not-checked";
 
+// A required specification with nothing to match it is, structurally, the same "matched nothing"
+// case as an optional one — the model just doesn't have that kind of element. Not a failure.
+function isEmptyRequiredMatch(summary: SpecificationSummary): boolean {
+  return summary.cardinalityFailure === REQUIRED_CARDINALITY_EMPTY_MESSAGE;
+}
+
 function statusOf(summary: SpecificationSummary): SpecStatus {
   // Ordered by how much the counts can be trusted: an unchecked specification has no counts at
   // all, so it can never be mistaken for one that ran and matched nothing.
   if (!summary.checked) return "not-checked";
-  // Before the count check, because a required specification that matched nothing has failed —
-  // and its counts are the same zeroes a clean model produces. An optional one falls through to
-  // "matched nothing", which is a real and passing answer.
+  if (isEmptyRequiredMatch(summary)) return "not-applied";
+  // A prohibited specification that matched elements, or one paired with requirements it
+  // can't also state, is a real failure independent of any element's own pass/fail.
   if (summary.cardinalityFailure !== null) return "failed";
   if (summary.applicableCount === 0) return "not-applied";
   return summary.failedCount > 0 ? "failed" : "passed";
@@ -19,7 +26,7 @@ function statusOf(summary: SpecificationSummary): SpecStatus {
 const STATUS_LABEL: Record<SpecStatus, string> = {
   failed: "failing",
   passed: "passed",
-  "not-applied": "matched nothing",
+  "not-applied": "no matching elements found",
   "not-checked": "not checked",
 };
 
@@ -171,7 +178,7 @@ export function CheckSummary({
                     </tr>
                   )}
 
-                  {summary.cardinalityFailure !== null && (
+                  {summary.cardinalityFailure !== null && !isEmptyRequiredMatch(summary) && (
                     <tr className="spec-cardinality">
                       <td colSpan={5}>
                         {/* Failed as a whole, with no failing element to show for it — so the
@@ -181,7 +188,7 @@ export function CheckSummary({
                     </tr>
                   )}
 
-                  {status === "not-applied" && (
+                  {status === "not-applied" && !isEmptyRequiredMatch(summary) && (
                     <tr className="spec-not-applied">
                       <td colSpan={5}>
                         {/* Ran, but selected nothing — a real measurement, unlike "not checked". */}

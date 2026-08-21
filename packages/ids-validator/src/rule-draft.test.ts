@@ -389,6 +389,33 @@ describe("compileDraft", () => {
     expect(spec.applicability.entityNames).toEqual(applicabilityEntityNamesOf(walls));
   });
 
+  it("defaults an authored rule's cardinality to required, and honors an explicit reading", () => {
+    const [required] = compileDraft([rule()]);
+    expect(required.cardinality).toBe("required");
+
+    const [prohibited] = compileDraft([rule({ cardinality: "prohibited" })]);
+    expect(prohibited.cardinality).toBe("prohibited");
+
+    const [optional] = compileDraft([rule({ cardinality: "optional" })]);
+    expect(optional.cardinality).toBe("optional");
+  });
+
+  it("prefers an explicit cardinality over an imported rule's source occurs attributes", () => {
+    const [spec] = compileDraft([
+      rule({
+        cardinality: "prohibited",
+        imported: {
+          attributes: {},
+          applicabilityAttributes: { minOccurs: "1", maxOccurs: "unbounded" },
+          entityNamesAsEnumeration: false,
+          requirementsAttributes: null,
+          passThrough: [],
+        },
+      }),
+    ]);
+    expect(spec.cardinality).toBe("prohibited");
+  });
+
   it("emits one requirement per condition, in condition order", () => {
     const [spec] = compileDraft([
       rule({
