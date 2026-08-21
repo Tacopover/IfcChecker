@@ -40,19 +40,27 @@ const KEPT_ROOTS = ["IFCELEMENT", "IFCSPACE", "IFCSPATIALZONE"];
 // keeping them out of the reviewer's list takes an explicit rule.
 const AUXILIARY_SUBTREES = ["IFCFEATUREELEMENT"];
 
+// The spatial backbone: excluded from the reviewer element list because it
+// drives the model-structure tree, not the explorer rail. Exported so a rule
+// builder can still let a user pick one directly — checking already supports
+// naming these in an applicability (they're part of `idsScope`), only
+// discovering one to pick was missing.
+export const SPATIAL_STRUCTURE_TYPES: ReadonlySet<string> = new Set([
+  "IFCPROJECT",
+  "IFCSITE",
+  "IFCBUILDING",
+  "IFCBUILDINGSTOREY",
+]);
+
 // None of these are under a kept root today, so this list is belt-and-braces:
 // it pins the decision in one readable place and survives a schema that
-// re-parents something. IfcProject/Site/Building/BuildingStorey already drive
-// the separate model-structure tree; ports are connection points, not parts.
+// re-parents something. Ports are connection points, not parts.
 const AUXILIARY_TYPES = new Set([
   "IFCANNOTATION",
   "IFCGRID",
   "IFCPORT",
   "IFCDISTRIBUTIONPORT",
-  "IFCPROJECT",
-  "IFCSITE",
-  "IFCBUILDING",
-  "IFCBUILDINGSTOREY",
+  ...SPATIAL_STRUCTURE_TYPES,
 ]);
 
 function isUnder(upper: string, rootUpper: string): boolean {

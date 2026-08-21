@@ -8,5 +8,6 @@
 // moment a top-level `node:fs/promises` import is evaluated, regardless of
 // whether the Node-only code is ever called.
 export * from "./types.js";
+export * from "./element-filter.js";
 export * from "./web-ifc-buffer.js";
 export * from "./ifc-lite-buffer.js";

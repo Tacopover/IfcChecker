@@ -7,6 +7,7 @@ import type {
   RuleDraft,
 } from "@ifc-qa/ids-validator";
 import { expandedTypeNamesFor, plainName } from "@ifc-qa/ids-validator";
+import { SPATIAL_STRUCTURE_TYPES } from "@ifc-qa/parser-adapters/browser";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
 import { ModelTree } from "./ModelTree.js";
@@ -157,8 +158,20 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   // removed on the validate page, and the builder must not go blank while a usable model is loaded.
   const model = parsedModels.find((entry) => entry.key === modelKey) ?? parsedModels[0] ?? null;
 
+  // The reviewer element list plus the spatial backbone (Project/Site/Building/Storey): excluded
+  // from `elements` because a reviewer doesn't check them, but a rule can still be written against
+  // one, and checking already reads them via `idsScope` — only picking one in the builder was missing.
+  const builderElements = useMemo(
+    () => [
+      ...(model?.elements ?? NO_ELEMENTS),
+      ...(model?.idsScope.filter((entity) => SPATIAL_STRUCTURE_TYPES.has(entity.ifcType.toUpperCase())) ??
+        NO_ELEMENTS),
+    ],
+    [model]
+  );
+
   // Introspection walks every element; it must survive keystrokes elsewhere on the page.
-  const introspection = useMemo(() => introspectModel(model?.elements ?? NO_ELEMENTS), [model]);
+  const introspection = useMemo(() => introspectModel(builderElements), [builderElements]);
   // A selection made against a previous model may name a type this one doesn't have.
   const known = useMemo(
     () =>
@@ -356,7 +369,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
         <RuleCard
           key={rule.id}
           rule={rule}
-          elements={model?.elements ?? NO_ELEMENTS}
+          elements={builderElements}
           introspection={introspection}
           isActive={rule.id === activeRuleId}
           isOpen={openRuleIds.has(rule.id)}
@@ -495,7 +508,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             {wizardOpen ? (
               <RuleWizard
                 introspection={introspection}
-                elements={model.elements}
+                elements={builderElements}
                 fileName={model.fileName}
                 onFinish={handleWizardFinish}
                 onCancel={() => setWizardOpen(false)}
