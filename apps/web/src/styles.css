@@ -1136,6 +1136,20 @@ caption {
   border-color: var(--fail);
 }
 
+/* Off by default and easy to miss on purpose — most rules never need it. */
+.cond-ci {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 11px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.cond-ci input {
+  margin: 0;
+}
+
 /* `ManualConditionRow`'s "typed manually" note, rendered as a `.cond` flex child rather than
    through `FacetRowFrame`'s own note/error props — same wrap-to-its-own-line treatment as
    `.cond-note` gets, so it reads as a caption under the sentence, not a stray inline fragment. */

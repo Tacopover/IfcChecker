@@ -9,7 +9,9 @@ import type {
 import {
   affixReadingOf,
   applicabilityEntityNamesOf,
+  caseInsensitivePattern,
   carryAnnotation,
+  carryCaseInsensitive,
   compileDraft,
   compileValue,
   escapeRegExp,
@@ -329,6 +331,97 @@ describe("carryAnnotation", () => {
   // everything else that records how the file was written.
   it("states nothing the validator checks", () => {
     expect(compileValue(documented)).toEqual(compileValue({ kind: "pattern", sources: ["D.*"] }));
+  });
+});
+
+describe("caseInsensitivePattern", () => {
+  it("folds every ASCII letter into a class matching either case", () => {
+    expect(caseInsensitivePattern("Wall")).toBe("[Ww][Aa][Ll][Ll]");
+  });
+
+  it("still escapes regex metacharacters, so a literal dot or paren cannot over-match", () => {
+    expect(caseInsensitivePattern("A.B(c)")).toBe("[Aa]\\.[Bb]\\([Cc]\\)");
+  });
+
+  it("leaves digits and other non-letters untouched", () => {
+    expect(caseInsensitivePattern("L-01")).toBe("[Ll]-01");
+  });
+});
+
+describe("compileValue — case-insensitive", () => {
+  it("folds equals into a pattern restriction instead of an exact one", () => {
+    const compiled = compileValue({ kind: "simple", value: "Level 1", caseInsensitive: true });
+    if (compiled?.kind !== "pattern") throw new Error("expected a pattern restriction");
+
+    expect(compiled.regex.test("LEVEL 1")).toBe(true);
+    expect(compiled.regex.test("level 1")).toBe(true);
+    expect(compiled.regex.test("Level 2")).toBe(false);
+  });
+
+  it("leaves equals exact when the flag is off", () => {
+    expect(compileValue({ kind: "simple", value: "Level 1" })).toEqual({
+      kind: "exact",
+      value: "Level 1",
+    });
+  });
+
+  it("folds oneOf into a disjunction matching any listed value in any case", () => {
+    const compiled = compileValue({
+      kind: "enum",
+      values: ["Level 1", "Level 2"],
+      caseInsensitive: true,
+    });
+    if (compiled?.kind !== "pattern") throw new Error("expected a pattern restriction");
+
+    expect(compiled.regex.test("LEVEL 1")).toBe(true);
+    expect(compiled.regex.test("level 2")).toBe(true);
+    expect(compiled.regex.test("Level 3")).toBe(false);
+  });
+
+  it("folds an affix operator's literal, keeping the wildcard case-sensitive escaping otherwise unchanged", () => {
+    const compiled = compileValue({
+      kind: "affix",
+      operator: "startsWith",
+      literal: "GF",
+      caseInsensitive: true,
+    });
+    if (compiled?.kind !== "pattern") throw new Error("expected a pattern restriction");
+
+    expect(compiled.source).toBe("[Gg][Ff].*");
+    expect(compiled.regex.test("gf-01")).toBe(true);
+    expect(compiled.regex.test("01-gf")).toBe(false);
+  });
+});
+
+describe("carryCaseInsensitive", () => {
+  const folded: ValueDraft = { kind: "simple", value: "Level 1", caseInsensitive: true };
+
+  it("carries the flag onto whatever value replaces the one that stated it", () => {
+    expect(carryCaseInsensitive(folded, { kind: "enum", values: ["A"] })).toEqual({
+      kind: "enum",
+      values: ["A"],
+      caseInsensitive: true,
+    });
+  });
+
+  it("does not carry into a pattern, bounds, or length — the toggle is never shown beside those", () => {
+    expect(carryCaseInsensitive(folded, { kind: "pattern", sources: ["A.*"] })).toEqual({
+      kind: "pattern",
+      sources: ["A.*"],
+    });
+    expect(
+      carryCaseInsensitive(folded, { kind: "bounds", base: "xs:double", min: null, max: null })
+    ).toEqual({ kind: "bounds", base: "xs:double", min: null, max: null });
+  });
+
+  it("leaves a value alone when there was nothing to carry", () => {
+    const plain: ValueDraft = { kind: "simple", value: "x" };
+    expect(carryCaseInsensitive(plain, { kind: "enum", values: ["A"] })).toEqual({
+      kind: "enum",
+      values: ["A"],
+    });
+    expect(carryCaseInsensitive(null, folded)).toEqual(folded);
+    expect(carryCaseInsensitive(folded, null)).toBeNull();
   });
 });
 

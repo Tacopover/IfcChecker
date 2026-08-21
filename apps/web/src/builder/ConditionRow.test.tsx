@@ -332,6 +332,43 @@ describe("ConditionRow", () => {
     expect(onDuplicate).toHaveBeenCalledOnce();
     expect(onDelete).toHaveBeenCalledOnce();
   });
+
+  describe("ignore case toggle", () => {
+    it("offers it beside equals/oneOf/contains/startsWith/endsWith, but not exists or matches", async () => {
+      const user = userEvent.setup();
+      render(<Harness />);
+
+      expect(screen.queryByLabelText("ignore case")).not.toBeInTheDocument();
+
+      for (const operator of ["equals", "oneOf", "contains", "startsWith", "endsWith"]) {
+        await user.selectOptions(screen.getByLabelText("Operator"), operator);
+        expect(screen.getByLabelText("ignore case")).toBeInTheDocument();
+      }
+
+      await user.selectOptions(screen.getByLabelText("Operator"), "matches");
+      expect(screen.queryByLabelText("ignore case")).not.toBeInTheDocument();
+    });
+
+    it("folds the value into a case-insensitive one once checked", async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={{ ...CONDITION, ...stating("equals", "REI90") }} />);
+
+      await user.click(screen.getByLabelText("ignore case"));
+
+      expect(screen.getByLabelText("ignore case")).toBeChecked();
+      expect(screen.getByLabelText("Value")).toHaveValue("REI90");
+    });
+
+    it("carries the toggle across an operator change instead of silently resetting it", async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={{ ...CONDITION, ...stating("equals", "REI90") }} />);
+
+      await user.click(screen.getByLabelText("ignore case"));
+      await user.selectOptions(screen.getByLabelText("Operator"), "startsWith");
+
+      expect(screen.getByLabelText("ignore case")).toBeChecked();
+    });
+  });
 });
 
 // `ids.xsd` types the names as `idsValue`, so an imported facet may name a set of fields. The row

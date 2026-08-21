@@ -79,7 +79,9 @@ export type AffixOperator = "contains" | "startsWith" | "endsWith";
  * 4 `xs:integer`, and 6 with a capitalised spelling `xs:Decimal` or `xs:Integer` that no XSD type
  * has. Assuming `xs:double` would hand 8 authors back a file they did not write.
  */
-export type ValueDraft = { kind: "simple"; value: string } | RestrictionValueDraft;
+export type ValueDraft =
+  | { kind: "simple"; value: string; caseInsensitive?: boolean }
+  | RestrictionValueDraft;
 
 /**
  * Every value that reaches a file as an `<xs:restriction>`, which is all of them but `simple`.
@@ -122,6 +124,16 @@ export type RestrictionValueDraft = (
    * `<xs:documentation>` gets an empty one back.
    */
   annotation?: string;
+  /**
+   * Whether letters in this value should match either case. Meaningful on `enum` and `affix` —
+   * IDS/XSD has no case-insensitive flag, so this is not a comparator setting: it is folded into the
+   * value itself at compile and export time, replacing an exact-match restriction with a pattern
+   * that classes each letter (`wall` becomes `[Ww][Aa][Ll][Ll]`). That keeps the exported XML — and
+   * any other conforming checker reading it — in agreement with what this app's own preview shows.
+   * Ignored on `pattern` (the author's own regex — a checkbox second-guessing it would be a second,
+   * conflicting way to say the same thing) and on the non-textual `bounds`/`length`.
+   */
+  caseInsensitive?: boolean;
 };
 
 /**
@@ -413,11 +425,29 @@ export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * `escapeRegExp`, with every ASCII letter folded into a class matching either case — `"Wall"`
+ * becomes `[Ww][Aa][Ll][Ll]`. XSD's regex language has no `i` flag, so this is the only
+ * spec-portable way to write "ignore case" into a `<xs:pattern>`: any conforming IDS checker reads
+ * the class the same way this app's own preview does, which a side-channel flag could not promise.
+ * ASCII only — case-folding beyond it is a locale question `ids.xsd` does not answer either.
+ */
+export function caseInsensitivePattern(literal: string): string {
+  return escapeRegExp(literal).replace(
+    /[A-Za-z]/g,
+    (letter) => `[${letter.toUpperCase()}${letter.toLowerCase()}]`
+  );
+}
+
 const ANY = ".*";
 
 /** The regex an affix operator stands for. The literal is escaped, so "A.B" cannot over-match. */
-export function affixPatternSource(operator: AffixOperator, literal: string): string {
-  const escaped = escapeRegExp(literal);
+export function affixPatternSource(
+  operator: AffixOperator,
+  literal: string,
+  caseInsensitive = false
+): string {
+  const escaped = caseInsensitive ? caseInsensitivePattern(literal) : escapeRegExp(literal);
   if (operator === "contains") return `${ANY}${escaped}${ANY}`;
   if (operator === "startsWith") return `${escaped}${ANY}`;
   return `${ANY}${escaped}`;
@@ -497,15 +527,22 @@ export function compileValue(value: ValueDraft | null): ParsedRestriction | null
   if (value === null) return null;
   switch (value.kind) {
     case "simple":
-      return { kind: "exact", value: value.value };
+      return value.caseInsensitive
+        ? patternRestriction(caseInsensitivePattern(value.value))
+        : { kind: "exact", value: value.value };
     case "enum":
-      return { kind: "enum", values: [...value.values] };
+      // Same disjunction rule as `pattern` below: N case-folded literals joined by "|" is one
+      // restriction admitting any of them, matching the N `<xs:pattern>` elements the exporter
+      // writes for this case — see `restrictionPartsOf`.
+      return value.caseInsensitive
+        ? patternRestriction(value.values.map(caseInsensitivePattern).join("|"))
+        : { kind: "enum", values: [...value.values] };
     // Joined the way `parseRestriction` joins them, so the two readers compile one file the same
     // way: several `<xs:pattern>` are a disjunction, and a disjunction of anchored patterns is one.
     case "pattern":
       return patternRestriction(value.sources.join("|"));
     case "affix":
-      return patternRestriction(affixPatternSource(value.operator, value.literal));
+      return patternRestriction(affixPatternSource(value.operator, value.literal, value.caseInsensitive));
     case "bounds": {
       const min = compileBound(value.min);
       const max = compileBound(value.max);
@@ -584,6 +621,24 @@ export function carryAnnotation(
   if (from === null || from.kind === "simple" || from.annotation === undefined) return to;
   if (to === null || to.kind === "simple") return to;
   return { ...to, annotation: from.annotation };
+}
+
+/**
+ * `to`, keeping whatever case-sensitivity `from` stated — mirrors `carryAnnotation` so switching
+ * operators (or retargeting a row to another field) does not silently turn the toggle back off.
+ *
+ * Unlike the annotation, `simple` is not where this stops: `equals` is exactly the operator the
+ * toggle matters most for, so it carries there too. It stops at `pattern` instead — `matches` is
+ * the author's own regex, and folding a checkbox into it would be a second, conflicting way to say
+ * the same thing — and at the two non-textual kinds, which the box is never shown beside.
+ */
+export function carryCaseInsensitive(
+  from: ValueDraft | null,
+  to: ValueDraft | null
+): ValueDraft | null {
+  if (from === null || to === null || !from.caseInsensitive) return to;
+  if (to.kind === "pattern" || to.kind === "bounds" || to.kind === "length") return to;
+  return { ...to, caseInsensitive: true };
 }
 
 /** The value an operator states, given whatever text and ticked values the row is holding. */

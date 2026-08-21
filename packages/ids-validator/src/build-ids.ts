@@ -9,6 +9,7 @@ import {
   BUILDER_PROPERTY_DATA_TYPE,
   affixPatternSource,
   applicabilityEntityNamesOf,
+  caseInsensitivePattern,
   plainName,
 } from "./rule-draft.js";
 import type { SpecificationCardinality } from "./parse-ids.js";
@@ -73,13 +74,27 @@ function restrictionPartsOf(
     // The author's base, or the string base every authored rule states. An enumeration is the one
     // string-shaped restriction whose members may be typed — `matchesLiteral` compares "42" and 42
     // correctly either way, so this is reproduction and not a change of meaning.
+    //
+    // Case-insensitive writes one `<xs:pattern>` per value instead — `xs:enumeration` has no
+    // case-insensitive form, so XSD 1.0 §4.3.4's "several patterns are a disjunction" rule is what
+    // this borrows, the same rule the `pattern` kind below already relies on.
     case "enum":
-      return {
-        base: escapeXml(value.base ?? "xs:string"),
-        body: value.values
-          .map((entry) => `\n${itemIndent}<xs:enumeration value="${escapeXml(entry)}" />`)
-          .join(""),
-      };
+      return value.caseInsensitive
+        ? {
+            base: "xs:string",
+            body: value.values
+              .map(
+                (entry) =>
+                  `\n${itemIndent}<xs:pattern value="${escapeXml(caseInsensitivePattern(entry))}" />`
+              )
+              .join(""),
+          }
+        : {
+            base: escapeXml(value.base ?? "xs:string"),
+            body: value.values
+              .map((entry) => `\n${itemIndent}<xs:enumeration value="${escapeXml(entry)}" />`)
+              .join(""),
+          };
     // One element per source, in the order the file wrote them. XSD reads them as a disjunction, so
     // joining them into one would be rewriting the author's regexes into a regex they did not write.
     case "pattern":
@@ -92,7 +107,7 @@ function restrictionPartsOf(
     case "affix":
       return {
         base: "xs:string",
-        body: `\n${itemIndent}<xs:pattern value="${escapeXml(affixPatternSource(value.operator, value.literal))}" />`,
+        body: `\n${itemIndent}<xs:pattern value="${escapeXml(affixPatternSource(value.operator, value.literal, value.caseInsensitive))}" />`,
       };
     // A range is the one value whose base is not a string, so it carries its own.
     case "bounds": {
@@ -136,18 +151,26 @@ function restrictionPartsOf(
  */
 function idsValueXml(tag: string, value: ValueDraft | null, indent = "        "): string {
   if (value === null) return "";
-  if (value.kind === "simple") {
+  if (value.kind === "simple" && !value.caseInsensitive) {
     return `\n${indent}<${tag}><simpleValue>${escapeXml(value.value)}</simpleValue></${tag}>`;
   }
   const itemIndent = `${indent}    `;
-  const { base, body } = restrictionPartsOf(value, itemIndent);
+  // A case-insensitive `simple` value has no `<simpleValue>` form — XSD gives that shape no way to
+  // say "either case" — so it takes the same `<xs:pattern>` shape `affix` already writes.
+  const { base, body } =
+    value.kind === "simple"
+      ? {
+          base: "xs:string",
+          body: `\n${itemIndent}<xs:pattern value="${escapeXml(caseInsensitivePattern(value.value))}" />`,
+        }
+      : restrictionPartsOf(value, itemIndent);
   // First, because `ids.xsd` fixes `<xs:annotation>` as the restriction's first child — it cannot
   // be appended to the facets. `undefined` writes nothing; `""` writes an empty documentation,
-  // which is what a document stating one gets back.
+  // which is what a document stating one gets back. `simple` never carries one (see `carryAnnotation`).
   const annotation =
-    value.annotation === undefined
-      ? ""
-      : `\n${itemIndent}<xs:annotation><xs:documentation>${escapeXml(value.annotation)}</xs:documentation></xs:annotation>`;
+    value.kind !== "simple" && value.annotation !== undefined
+      ? `\n${itemIndent}<xs:annotation><xs:documentation>${escapeXml(value.annotation)}</xs:documentation></xs:annotation>`
+      : "";
   return (
     `\n${indent}<${tag}>` +
     `\n${indent}  <xs:restriction base="${base}">${annotation}${body}` +

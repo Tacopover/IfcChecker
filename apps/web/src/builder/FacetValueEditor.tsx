@@ -1,10 +1,28 @@
 import type { ConditionOperator, ValueDraft } from "@ifc-qa/ids-validator";
-import { carryAnnotation, friendlyReadingOf, valueDraftForOperator } from "@ifc-qa/ids-validator";
+import {
+  carryAnnotation,
+  carryCaseInsensitive,
+  friendlyReadingOf,
+  valueDraftForOperator,
+} from "@ifc-qa/ids-validator";
 import { ValuePicker, type ObservedValue } from "./ValuePicker.js";
 import { OPERATORS_NEEDING_TEXT } from "./completeness.js";
 
 /** How many of the model's own values the text box offers before the list stops being a help. */
 const MAX_SUGGESTIONS = 40;
+
+/**
+ * Operators the "ignore case" toggle applies to. Not `matches` — that box already holds the
+ * author's own regex, and a checkbox second-guessing it would be a second, conflicting way to say
+ * the same thing. Not `exists` — there is no text to fold.
+ */
+const CASE_INSENSITIVE_OPERATORS: ReadonlySet<ConditionOperator> = new Set([
+  "equals",
+  "oneOf",
+  "contains",
+  "startsWith",
+  "endsWith",
+]);
 
 export const OPERATORS: Array<{ id: ConditionOperator; label: string }> = [
   { id: "exists", label: "be filled in" },
@@ -107,7 +125,13 @@ export function FacetValueEditor({
     // The prose follows the value it documents. Choosing "be exactly" is the one edit that drops
     // it, because a <simpleValue> has no restriction to hold one, and the note going with it is
     // what tells the author that.
-    onChange(carryAnnotation(value, valueDraftForOperator(operator, text, values)));
+    const next = carryAnnotation(value, valueDraftForOperator(operator, text, values));
+    onChange(carryCaseInsensitive(value, next));
+  }
+
+  function toggleCaseInsensitive(checked: boolean) {
+    if (value === null) return;
+    onChange({ ...value, caseInsensitive: checked });
   }
 
   return (
@@ -151,6 +175,17 @@ export function FacetValueEditor({
           selected={reading.values}
           onChange={(values) => change("oneOf", reading.text, values)}
         />
+      )}
+
+      {CASE_INSENSITIVE_OPERATORS.has(reading.operator) && (
+        <label className="cond-ci">
+          <input
+            type="checkbox"
+            checked={value?.caseInsensitive ?? false}
+            onChange={(event) => toggleCaseInsensitive(event.target.checked)}
+          />
+          ignore case
+        </label>
       )}
 
       {annotation}

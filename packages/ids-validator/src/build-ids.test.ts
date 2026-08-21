@@ -208,6 +208,105 @@ describe("buildIdsXml", () => {
     });
   });
 
+  describe("case-insensitive comparisons", () => {
+    function makeElement(overrides: Partial<NormalizedElement>): NormalizedElement {
+      return {
+        globalId: "g1",
+        ifcType: "IFCWALL",
+        predefinedType: null,
+        name: null,
+        attributes: {},
+        propertySets: {},
+        ...overrides,
+      };
+    }
+
+    // XSD's `xs:enumeration`/`<simpleValue>` are exact-match by definition — there is no
+    // case-insensitive flag in ids.xsd — so "ignore case" has to become a different, still valid
+    // restriction rather than a hidden checker-only relaxation, or the exported file would say one
+    // thing and this app's own preview would check another.
+    it("writes equals as a pattern, not a simpleValue, once case-insensitive is set", () => {
+      const xml = buildIdsXml([
+        {
+          id: "r1",
+          name: "Storey named GF",
+          entityTypes: ["IfcBuildingStorey"],
+          conditions: [
+            condition({
+              id: "c1",
+              name: "Name",
+              value: { kind: "simple", value: "GF", caseInsensitive: true },
+            }),
+          ],
+        },
+      ]);
+
+      expect(xml).not.toContain("<simpleValue>GF</simpleValue>");
+      expect(xml).toContain('<xs:pattern value="[Gg][Ff]" />');
+      expect(idsSchemaViolations(xml)).toEqual([]);
+    });
+
+    it("writes oneOf as one pattern per value, each folded", () => {
+      const xml = buildIdsXml([
+        {
+          id: "r1",
+          name: "Storey named from a list",
+          entityTypes: ["IfcBuildingStorey"],
+          conditions: [
+            condition({
+              id: "c1",
+              name: "Name",
+              value: { kind: "enum", values: ["Ground Floor", "First Floor"], caseInsensitive: true },
+            }),
+          ],
+        },
+      ]);
+
+      expect(xml).not.toContain("<xs:enumeration");
+      expect(xml.match(/<xs:pattern/g)).toHaveLength(2);
+      expect(idsSchemaViolations(xml)).toEqual([]);
+    });
+
+    // The exported XML, checked by the real validator, is what actually matters — proof the
+    // toggle changes what gets flagged, not just what the XML happens to say.
+    it("an exported case-insensitive rule matches regardless of the stored casing, and still rejects a real mismatch", () => {
+      const xml = buildIdsXml([
+        {
+          id: "r1",
+          name: "Storeys are named from the approved list",
+          entityTypes: ["IfcBuildingStorey"],
+          conditions: [
+            condition({
+              id: "c1",
+              name: "Name",
+              value: { kind: "enum", values: ["Ground Floor", "Level 1"], caseInsensitive: true },
+            }),
+          ],
+        },
+      ]);
+
+      const [shouty] = validateBySpecification(
+        [makeElement({ ifcType: "IFCBUILDINGSTOREY", name: "GROUND FLOOR" })],
+        xml
+      );
+      expect(shouty.passedCount).toBe(1);
+      expect(shouty.failedCount).toBe(0);
+
+      const [mismatch] = validateBySpecification(
+        [makeElement({ ifcType: "IFCBUILDINGSTOREY", name: "Level 2" })],
+        xml
+      );
+      expect(mismatch.passedCount).toBe(0);
+      expect(mismatch.failedCount).toBe(1);
+    });
+
+    it("leaves equals/oneOf unchanged when the flag is off", () => {
+      const xml = buildIdsXml(DRAFTS);
+      expect(xml).toContain("<simpleValue>D-1 &amp; D-2</simpleValue>");
+      expect(xml).toContain('<xs:enumeration value="SA" />');
+    });
+  });
+
   // `ids.xsd` fixes the order of the eight children, so they are written at their index rather than
   // in the order the caller happens to state them.
   it("writes every info child the schema names, in the order the schema fixes", () => {
