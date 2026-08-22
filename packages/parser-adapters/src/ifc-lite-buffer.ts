@@ -123,13 +123,17 @@ function readMaterials(store: IfcDataStore, expressId: number): string[] | null 
 // ever has an in-memory ArrayBuffer from a <input type="file"> — never a
 // filesystem path. This module deliberately has no Node-only imports so it's
 // safe to import from a browser bundle via the package's "./browser" export.
-export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResult> {
+export async function parseIfcLiteBuffer(
+  raw: Uint8Array,
+  onProgress?: (phase: string, percent: number) => void
+): Promise<IfcParseResult> {
   const start = performance.now();
   assertWellFormedStepFile(raw);
 
   const parser = new IfcParser();
   const store = await parser.parseColumnar(
-    raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer
+    raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer,
+    onProgress ? { onProgress: (p) => onProgress(p.phase, p.percent) } : undefined
   );
 
   const idsScope: NormalizedElement[] = [];

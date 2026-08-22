@@ -106,4 +106,14 @@ describe("parseIfcLiteBuffer", () => {
     expect(result.unrecognizedTypes).toEqual([{ ifcType: "IFCVENDOREXTENSIONTHING", count: 1 }]);
     expect(result.elements.map((element) => element.ifcType)).not.toContain("IFCVENDOREXTENSIONTHING");
   });
+
+  it("forwards onProgress to the underlying parseColumnar call", async () => {
+    const raw = await readFile(fixturePath("minimal-wall.ifc"));
+    const events: Array<{ phase: string; percent: number }> = [];
+
+    await parseIfcLiteBuffer(raw, (phase, percent) => events.push({ phase, percent }));
+
+    // parseColumnar always reports at least a start and a completion phase for any input.
+    expect(events.length).toBeGreaterThan(0);
+  });
 });
