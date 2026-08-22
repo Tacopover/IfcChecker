@@ -59,6 +59,11 @@ export class ParseWorkerClient {
     else entry.reject(new Error(message.message));
   }
 
+  cancel(): void {
+    if (this.pending.size === 0 && !this.worker) return;
+    this.handleFatal("Cancelled");
+  }
+
   private handleFatal(message: string) {
     for (const entry of this.pending.values()) {
       entry.reject(new Error(`Parsing failed: ${message}`));

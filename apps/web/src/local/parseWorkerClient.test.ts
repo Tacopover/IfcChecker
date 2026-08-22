@@ -87,4 +87,20 @@ describe("ParseWorkerClient", () => {
     worker.respond({ type: "success", requestId, result: { elements: [], idsScope: [], unitScales: {}, parseMs: 1, modelStructure: null } });
     await expect(pending).resolves.toBeDefined();
   });
+
+  it("cancel() rejects every pending parse() with a Cancelled error and drops the worker", async () => {
+    let worker!: FakeWorker;
+    const client = new ParseWorkerClient(() => (worker = new FakeWorker()) as unknown as Worker);
+
+    const pending = client.parse(makeFile("a.ifc"), "ifc-lite");
+    client.cancel();
+
+    await expect(pending).rejects.toThrow(/Cancelled/);
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancel() with nothing in flight is a no-op", () => {
+    const client = new ParseWorkerClient(() => new FakeWorker() as unknown as Worker);
+    expect(() => client.cancel()).not.toThrow();
+  });
 });
