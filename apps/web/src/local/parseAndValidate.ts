@@ -29,6 +29,7 @@ export interface ParseProgress {
   fileName: string;
   index: number;
   total: number;
+  percent: number | null;
 }
 
 // A file is parsed on its own, before any rule set exists: the user may be
@@ -36,10 +37,14 @@ export interface ParseProgress {
 // thrown, so one bad file in a batch doesn't cost the user the others — including a failure
 // caused by the parse worker itself dying (see parseWorkerClient.ts), which surfaces here as
 // an ordinary rejection.
-export async function parseFile(file: File, engine: EngineId): Promise<ParseOutcome> {
+export async function parseFile(
+  file: File,
+  engine: EngineId,
+  onProgress?: (phase: string, percent: number) => void
+): Promise<ParseOutcome> {
   try {
     const { elements, idsScope, unitScales, parseMs, modelStructure } =
-      await parseWorkerClient.parse(file, engine);
+      await parseWorkerClient.parse(file, engine, onProgress);
     return {
       status: "succeeded",
       engine,

@@ -76,7 +76,7 @@ describe("parseFile", () => {
 
     const outcome = await parseFile(makeFile("model-b.ifc"), "ifc-lite");
 
-    expect(parse).toHaveBeenCalledWith(expect.anything(), "ifc-lite");
+    expect(parse).toHaveBeenCalledWith(expect.anything(), "ifc-lite", undefined);
     expect(outcome.modelStructure).toBeNull();
   });
 

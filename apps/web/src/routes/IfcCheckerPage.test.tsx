@@ -4,14 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { IfcCheckerPage } from "./IfcCheckerPage";
 import { LoadedModelsProvider } from "../state/loadedModels";
 
-const { parse } = vi.hoisted(() => ({ parse: vi.fn() }));
+const { parse, cancel } = vi.hoisted(() => ({ parse: vi.fn(), cancel: vi.fn() }));
 const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => ({
   validateBySpecification: vi.fn(),
   parseIdsXml: vi.fn(),
   isEvaluable: vi.fn(),
 }));
 
-vi.mock("../local/parseWorkerClient.js", () => ({ parseWorkerClient: { parse } }));
+vi.mock("../local/parseWorkerClient.js", () => ({ parseWorkerClient: { parse, cancel } }));
 vi.mock("@ifc-qa/ids-validator", () => ({
   validateBySpecification,
   parseIdsXml,
@@ -494,5 +494,49 @@ describe("IfcCheckerPage", () => {
 
     await screen.findByText(/All 25 files are parsed with ifc-lite/);
     expect(parse).toHaveBeenCalledTimes(25);
+  });
+
+  it("shows parse percent once the engine reports progress, and offers Cancel while parsing", async () => {
+    const first = deferred<unknown>();
+    let onProgress!: (phase: string, percent: number) => void;
+    parse.mockImplementationOnce((_file, _engine, progress) => {
+      onProgress = progress;
+      return first.promise;
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+    await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-a.ifc"));
+    await user.click(screen.getByRole("button", { name: "Parse files" }));
+
+    onProgress("scan", 37);
+    expect(await screen.findByRole("status")).toHaveTextContent(/37%/);
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+
+    first.resolve({ elements: [], idsScope: [], unitScales: {}, parseMs: 5, modelStructure: null });
+    await screen.findByText(/All 1 file is parsed with ifc-lite/);
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("Cancel stops the current file and does not start the next one in the batch", async () => {
+    const first = deferred<unknown>();
+    parse.mockReturnValueOnce(first.promise);
+
+    const user = userEvent.setup();
+    renderPage();
+    await user.upload(screen.getByLabelText(/IFC files/), [makeFile("model-a.ifc"), makeFile("model-b.ifc")]);
+    await user.click(screen.getByRole("button", { name: "Parse files" }));
+    await screen.findByRole("button", { name: "Cancel" });
+
+    // Cancel first, then reject: matches production causality (clicking Cancel triggers
+    // parseWorkerClient.cancel(), which is what causes the pending parse() to reject) and
+    // avoids a race where the mocked rejection's microtasks start model-b before the click
+    // (a real DOM event dispatch, with its own microtask hops) sets cancelledRef.
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    first.reject(new Error("Parsing failed: Cancelled"));
+
+    const table = await screen.findByRole("table", { name: "IFC files" });
+    expect(within(table).getByText("model-a.ifc").closest("tr")).toHaveTextContent("failed");
+    expect(parse).toHaveBeenCalledTimes(1); // model-b.ifc was never started
   });
 });
