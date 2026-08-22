@@ -1,5 +1,5 @@
 import type { RuleDraft } from "@ifc-qa/ids-validator";
-import { DEFAULT_IFC_VERSION } from "@ifc-qa/ids-validator";
+import { DEFAULT_IFC_VERSION, effectiveCardinalityOf } from "@ifc-qa/ids-validator";
 import { MetadataPanel, type MetadataField } from "./MetadataPanel.js";
 import { ruleProblems } from "./completeness.js";
 
@@ -95,11 +95,15 @@ export function SpecificationInfoPanel({
         <label>
           <input
             type="checkbox"
-            checked={rule.cardinality === "prohibited"}
+            checked={effectiveCardinalityOf(rule) === "prohibited"}
             onChange={(event) =>
               onChange({
                 ...rule,
-                cardinality: event.target.checked ? "prohibited" : undefined,
+                // Explicit either way, not `undefined` on uncheck: an imported rule may be
+                // effectively prohibited through its own source's <applicability minOccurs
+                // maxOccurs> rather than this field, and `undefined` would just fall back to that
+                // source again — leaving the checkbox unable to ever turn a real import's ban off.
+                cardinality: event.target.checked ? "prohibited" : "required",
               })
             }
           />

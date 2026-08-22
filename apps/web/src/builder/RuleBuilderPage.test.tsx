@@ -258,6 +258,22 @@ describe("RuleBuilderPage", () => {
     expect(screen.getAllByLabelText("Rule name").map((input) => (input as HTMLInputElement).value))
       .toEqual(["New rule", "New rule (copy)"]);
   });
+
+  it("carries the Prohibited toggle through to the exported XML", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+
+    await user.click(screen.getByRole("button", { name: "Expand New rule" }));
+    await user.click(screen.getByRole("button", { name: /About this specification/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Prohibited — no element may match/ }));
+
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
+    expect(screen.getByLabelText("IDS XML preview")).toHaveTextContent(
+      /minOccurs="0"\s*maxOccurs="0"/
+    );
+  });
 });
 
 const IMPORTED_IDS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -453,6 +469,41 @@ describe("RuleBuilderPage importing an IDS file", () => {
       "schedule.xml contains no IDS specifications."
     );
     expect(screen.queryAllByLabelText("Rule name")).toHaveLength(0);
+  });
+
+  // The importer never sets `RuleDraft.cardinality` — it is only the builder's own override — so an
+  // imported prohibited specification's minOccurs="0" maxOccurs="0" has to keep reading as
+  // Prohibited everywhere the card decides something from it, with nothing touched by the user yet.
+  it("shows an imported prohibited specification's checkbox as checked", async () => {
+    const user = userEvent.setup();
+    const prohibited = `<?xml version="1.0" encoding="UTF-8"?>
+<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <info><title>Client standard</title></info>
+  <specifications>
+    <specification name="No proxies" ifcVersion="IFC4">
+      <applicability minOccurs="0" maxOccurs="0">
+        <entity><name><simpleValue>IFCBUILDINGELEMENTPROXY</simpleValue></name></entity>
+      </applicability>
+      <requirements></requirements>
+    </specification>
+  </specifications>
+</ids>`;
+    renderBuilder([{ fileName: "tower.ifc" }]);
+
+    await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile("client.ids", prohibited));
+    await user.click(screen.getByRole("button", { name: "Expand No proxies" }));
+    await user.click(screen.getByRole("button", { name: /About this specification/ }));
+
+    expect(
+      screen.getByRole("checkbox", { name: /Prohibited — no element may match/ })
+    ).toBeChecked();
+
+    // Untouched, the rule must still export exactly what was imported — re-exporting the file the
+    // user just opened must not silently flip its meaning.
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
+    expect(screen.getByLabelText("IDS XML preview")).toHaveTextContent(
+      /minOccurs="0"\s*maxOccurs="0"/
+    );
   });
 });
 

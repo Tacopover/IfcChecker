@@ -4,6 +4,7 @@ import type { ApplicabilityFacetDraft, FacetDraft, RuleDraft } from "@ifc-qa/ids
 import {
   collapsibleEntityGroupsFor,
   descendantsOf,
+  effectiveCardinalityOf,
   expandedTypeNamesFor,
   isAbstractIfcType,
   plainName,
@@ -77,7 +78,7 @@ export function RuleCard({
   );
 
   const { matched, passed, perCondition, failures } = evaluation;
-  const prohibited = rule.cardinality === "prohibited";
+  const prohibited = effectiveCardinalityOf(rule) === "prohibited";
   const failing = matched - passed;
   const ratio = matched ? passed / matched : 0;
   // A prohibited rule's own zero conditions are its complete, intended state — not the "still being
