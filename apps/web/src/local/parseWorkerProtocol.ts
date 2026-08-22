@@ -31,4 +31,11 @@ export interface ParseErrorMessage {
   message: string;
 }
 
-export type ParseWorkerResponse = ParseSuccessMessage | ParseErrorMessage;
+export interface ParseProgressMessage {
+  type: "progress";
+  requestId: string;
+  phase: string;
+  percent: number;
+}
+
+export type ParseWorkerResponse = ParseSuccessMessage | ParseErrorMessage | ParseProgressMessage;

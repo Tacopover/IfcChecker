@@ -39,4 +39,16 @@ describe("runParse", () => {
     expect(parseWebIfcBuffer).toHaveBeenCalledWith(expect.any(Uint8Array), expect.any(Function));
     expect(result.elements).toBe(elements);
   });
+
+  it("forwards progress events to the caller's callback for ifc-lite", async () => {
+    parseIfcLiteBuffer.mockImplementationOnce(async (_buffer, onProgress) => {
+      onProgress?.("scan", 50);
+      return { elements: [], parseMs: 1 };
+    });
+    const events: Array<[string, number]> = [];
+
+    await runParse(makeFile("model.ifc"), "ifc-lite", (phase, percent) => events.push([phase, percent]));
+
+    expect(events).toEqual([["scan", 50]]);
+  });
 });

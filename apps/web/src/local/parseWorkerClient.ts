@@ -1,7 +1,11 @@
 import type { EngineId } from "@ifc-qa/shared-types";
 import type { ParseRequestMessage, ParseWorkerResponse, ParseWorkerResult } from "./parseWorkerProtocol.js";
 
-type PendingEntry = { resolve: (result: ParseWorkerResult) => void; reject: (error: Error) => void };
+type PendingEntry = {
+  resolve: (result: ParseWorkerResult) => void;
+  reject: (error: Error) => void;
+  onProgress?: (phase: string, percent: number) => void;
+};
 
 function defaultWorkerFactory(): Worker {
   return new Worker(new URL("./parse.worker.ts", import.meta.url), { type: "module" });
@@ -19,11 +23,15 @@ export class ParseWorkerClient {
 
   constructor(private readonly createWorker: () => Worker = defaultWorkerFactory) {}
 
-  parse(file: File, engine: EngineId): Promise<ParseWorkerResult> {
+  parse(
+    file: File,
+    engine: EngineId,
+    onProgress?: (phase: string, percent: number) => void
+  ): Promise<ParseWorkerResult> {
     const worker = this.ensureWorker();
     const requestId = String(this.nextId++);
     const result = new Promise<ParseWorkerResult>((resolve, reject) => {
-      this.pending.set(requestId, { resolve, reject });
+      this.pending.set(requestId, { resolve, reject, onProgress });
     });
     const message: ParseRequestMessage = { type: "parse", requestId, engine, file };
     worker.postMessage(message);
@@ -42,6 +50,10 @@ export class ParseWorkerClient {
   private handleMessage(message: ParseWorkerResponse) {
     const entry = this.pending.get(message.requestId);
     if (!entry) return;
+    if (message.type === "progress") {
+      entry.onProgress?.(message.phase, message.percent);
+      return;
+    }
     this.pending.delete(message.requestId);
     if (message.type === "success") entry.resolve(message.result);
     else entry.reject(new Error(message.message));

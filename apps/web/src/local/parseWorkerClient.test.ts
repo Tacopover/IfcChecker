@@ -72,4 +72,19 @@ describe("ParseWorkerClient", () => {
 
     await expect(pending).rejects.toThrow("unexpected EOF");
   });
+
+  it("forwards progress messages to the per-request onProgress callback, and never resolves/rejects on them", async () => {
+    let worker!: FakeWorker;
+    const client = new ParseWorkerClient(() => (worker = new FakeWorker()) as unknown as Worker);
+    const events: Array<[string, number]> = [];
+
+    const pending = client.parse(makeFile("a.ifc"), "ifc-lite", (phase, percent) => events.push([phase, percent]));
+    const requestId = (worker.posted[0] as { requestId: string }).requestId;
+    worker.respond({ type: "progress", requestId, phase: "scan", percent: 10 });
+    worker.respond({ type: "progress", requestId, phase: "scan", percent: 90 });
+
+    expect(events).toEqual([["scan", 10], ["scan", 90]]);
+    worker.respond({ type: "success", requestId, result: { elements: [], idsScope: [], unitScales: {}, parseMs: 1, modelStructure: null } });
+    await expect(pending).resolves.toBeDefined();
+  });
 });

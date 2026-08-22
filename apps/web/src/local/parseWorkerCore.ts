@@ -5,12 +5,16 @@ import type { ParseWorkerResult } from "./parseWorkerProtocol.js";
 
 // Runs inside the parse worker (see parse.worker.ts) — kept separate from the worker's
 // onmessage/postMessage plumbing so it can be unit tested without a real Worker runtime.
-export async function runParse(file: File, engine: EngineId): Promise<ParseWorkerResult> {
+export async function runParse(
+  file: File,
+  engine: EngineId,
+  onProgress?: (phase: string, percent: number) => void
+): Promise<ParseWorkerResult> {
   const buffer = new Uint8Array(await file.arrayBuffer());
   const outcome =
     engine === "web-ifc"
       ? await parseWebIfcBuffer(buffer, locateWebIfcWasm)
-      : await parseIfcLiteBuffer(buffer);
+      : await parseIfcLiteBuffer(buffer, onProgress);
   return {
     elements: outcome.elements,
     idsScope: outcome.idsScope ?? outcome.elements,

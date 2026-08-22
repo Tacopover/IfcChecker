@@ -38,4 +38,18 @@ describe("parse.worker", () => {
 
     expect(postMessage).toHaveBeenCalledWith({ type: "error", requestId: "2", message: "out of memory" });
   });
+
+  it("posts a progress message for each onProgress call, tagged with the request id", async () => {
+    runParse.mockImplementationOnce(async (_file, _engine, onProgress) => {
+      onProgress?.("scan", 42);
+      return { elements: [], idsScope: [], unitScales: {}, parseMs: 1, modelStructure: null };
+    });
+    const postMessage = vi.spyOn(self, "postMessage").mockImplementation(() => {});
+
+    await self.onmessage?.({
+      data: { type: "parse", requestId: "3", engine: "ifc-lite", file: makeFile("a.ifc") },
+    } as MessageEvent);
+
+    expect(postMessage).toHaveBeenCalledWith({ type: "progress", requestId: "3", phase: "scan", percent: 42 });
+  });
 });
