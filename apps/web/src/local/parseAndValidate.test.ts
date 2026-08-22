@@ -1,17 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InvalidIdsRuleSetError, parseFile, validateParsedModels } from "./parseAndValidate.js";
 
-const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
-  parseWebIfcBuffer: vi.fn(),
-  parseIfcLiteBuffer: vi.fn(),
-}));
+const { parse } = vi.hoisted(() => ({ parse: vi.fn() }));
 const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => ({
   validateBySpecification: vi.fn(),
   parseIdsXml: vi.fn(),
   isEvaluable: vi.fn(),
 }));
 
-vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
+vi.mock("./parseWorkerClient.js", () => ({ parseWorkerClient: { parse } }));
 vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecification, parseIdsXml, isEvaluable }));
 
 function outcome(overrides: Record<string, unknown> = {}) {
@@ -54,7 +51,7 @@ describe("parseFile", () => {
     const elements = [
       { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
     ];
-    parseWebIfcBuffer.mockResolvedValueOnce({ elements, idsScope: elements, parseMs: 9, modelStructure });
+    parse.mockResolvedValueOnce({ elements, idsScope: elements, unitScales: {}, parseMs: 9, modelStructure });
 
     const outcome = await parseFile(makeFile("model-a.ifc"), "web-ifc");
 
@@ -74,18 +71,17 @@ describe("parseFile", () => {
     expect(parseIdsXml).not.toHaveBeenCalled();
   });
 
-  it("routes to the ifc-lite engine and normalises a missing model structure to null", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], idsScope: [], parseMs: 4 });
+  it("routes through the parse worker client and normalises a missing model structure to null", async () => {
+    parse.mockResolvedValueOnce({ elements: [], idsScope: [], unitScales: {}, parseMs: 4, modelStructure: null });
 
     const outcome = await parseFile(makeFile("model-b.ifc"), "ifc-lite");
 
-    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(1);
-    expect(parseWebIfcBuffer).not.toHaveBeenCalled();
+    expect(parse).toHaveBeenCalledWith(expect.anything(), "ifc-lite");
     expect(outcome.modelStructure).toBeNull();
   });
 
   it("records a parse failure as an outcome instead of throwing, so one bad file doesn't sink a batch", async () => {
-    parseWebIfcBuffer.mockRejectedValueOnce(new Error("unexpected EOF"));
+    parse.mockRejectedValueOnce(new Error("unexpected EOF"));
 
     const outcome = await parseFile(makeFile("corrupt.ifc"), "web-ifc");
 
@@ -181,8 +177,7 @@ describe("validateParsedModels", () => {
     );
 
     expect(summary).toMatchObject({ applicableCount: 7, passedCount: 6, failedCount: 1 });
-    expect(parseWebIfcBuffer).not.toHaveBeenCalled();
-    expect(parseIfcLiteBuffer).not.toHaveBeenCalled();
+    expect(parse).not.toHaveBeenCalled();
   });
 
   it("reports a specification that matched nothing, rather than returning an empty result set", () => {
