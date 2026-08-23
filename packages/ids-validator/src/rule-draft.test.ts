@@ -14,6 +14,7 @@ import {
   carryCaseInsensitive,
   compileDraft,
   compileValue,
+  effectiveCardinalityOf,
   escapeRegExp,
   friendlyReadingOf,
   patternValueDraft,
@@ -469,6 +470,47 @@ describe("applicabilityEntityNamesOf", () => {
   });
 });
 
+describe("effectiveCardinalityOf", () => {
+  it("defaults to required for a rule that never stated one and never imported one", () => {
+    expect(effectiveCardinalityOf(rule())).toBe("required");
+  });
+
+  it("reads the builder's own explicit override", () => {
+    expect(effectiveCardinalityOf(rule({ cardinality: "prohibited" }))).toBe("prohibited");
+  });
+
+  // The bug this guards: the importer deliberately never sets `cardinality` on the draft (it is only
+  // the builder's own statement), so a specification imported straight from a file with
+  // minOccurs="0" maxOccurs="0" has to keep reading as prohibited from its own source, not from a
+  // field that was never written.
+  it("falls back to an untouched import's own source occurs attributes", () => {
+    const imported = rule({
+      imported: {
+        attributes: {},
+        applicabilityAttributes: { minOccurs: "0", maxOccurs: "0" },
+        entityNamesAsEnumeration: false,
+        requirementsAttributes: {},
+        passThrough: [],
+      },
+    });
+    expect(effectiveCardinalityOf(imported)).toBe("prohibited");
+  });
+
+  it("lets an explicit override win over an imported source that disagrees", () => {
+    const overridden = rule({
+      cardinality: "required",
+      imported: {
+        attributes: {},
+        applicabilityAttributes: { minOccurs: "0", maxOccurs: "0" },
+        entityNamesAsEnumeration: false,
+        requirementsAttributes: {},
+        passThrough: [],
+      },
+    });
+    expect(effectiveCardinalityOf(overridden)).toBe("required");
+  });
+});
+
 describe("compileDraft", () => {
   it("uppercases applicability entity names and keeps the rule name", () => {
     const [spec] = compileDraft([rule({ name: "Sanitary", entityTypes: ["IfcSanitaryTerminal", "ifcBoiler"] })]);
@@ -502,6 +544,24 @@ describe("compileDraft", () => {
           applicabilityAttributes: { minOccurs: "1", maxOccurs: "unbounded" },
           entityNamesAsEnumeration: false,
           requirementsAttributes: null,
+          passThrough: [],
+        },
+      }),
+    ]);
+    expect(spec.cardinality).toBe("prohibited");
+  });
+
+  // A rule the importer read straight out of a file never gets `cardinality` set on the draft —
+  // that field is only the builder's own override — so an imported prohibited specification has to
+  // keep reading as prohibited from its own source's occurs attributes, with nothing touched.
+  it("reads an untouched import's cardinality from its own source occurs attributes", () => {
+    const [spec] = compileDraft([
+      rule({
+        imported: {
+          attributes: {},
+          applicabilityAttributes: { minOccurs: "0", maxOccurs: "0" },
+          entityNamesAsEnumeration: false,
+          requirementsAttributes: {},
           passThrough: [],
         },
       }),

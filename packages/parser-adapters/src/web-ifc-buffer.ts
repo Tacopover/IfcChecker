@@ -180,7 +180,7 @@ export async function parseWebIfcBuffer(
 
   const ifcApi = new WebIFC.IfcAPI();
   await ifcApi.Init(locateWasm, true);
-  const modelID = ifcApi.OpenModel(new Uint8Array(raw));
+  const modelID = ifcApi.OpenModel(raw);
 
   try {
     const idsScope: NormalizedElement[] = [];

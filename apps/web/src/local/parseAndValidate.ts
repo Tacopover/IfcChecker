@@ -5,11 +5,10 @@ import type {
   NormalizedElement,
   UnitScales,
 } from "@ifc-qa/shared-types";
-import { parseIfcLiteBuffer, parseWebIfcBuffer } from "@ifc-qa/parser-adapters/browser";
 import type { UnsupportedConstruct } from "@ifc-qa/ids-validator";
 import { isEvaluable, parseIdsXml, validateBySpecification } from "@ifc-qa/ids-validator";
 import type { ParseOutcome } from "../state/loadedModels.js";
-import { locateWebIfcWasm } from "./webIfcWasm.js";
+import { parseWorkerClient } from "./parseWorkerClient.js";
 
 // A rule-set XML with zero <specification> elements is indistinguishable
 // from "everything passed" downstream (validateElements just has nothing to
@@ -30,30 +29,22 @@ export interface ParseProgress {
   fileName: string;
   index: number;
   total: number;
+  percent: number | null;
 }
-
-const PARSE_BY_ENGINE: Record<
-  EngineId,
-  (buffer: Uint8Array) => Promise<{
-    elements: NormalizedElement[];
-    idsScope: NormalizedElement[];
-    unitScales: UnitScales;
-    parseMs: number;
-    modelStructure: ModelStructureNode | null;
-  }>
-> = {
-  "web-ifc": (buffer) => parseWebIfcBuffer(buffer, locateWebIfcWasm),
-  "ifc-lite": parseIfcLiteBuffer,
-};
 
 // A file is parsed on its own, before any rule set exists: the user may be
 // heading for the rule builder rather than a check. A failure is returned, not
-// thrown, so one bad file in a batch doesn't cost the user the others.
-export async function parseFile(file: File, engine: EngineId): Promise<ParseOutcome> {
+// thrown, so one bad file in a batch doesn't cost the user the others — including a failure
+// caused by the parse worker itself dying (see parseWorkerClient.ts), which surfaces here as
+// an ordinary rejection.
+export async function parseFile(
+  file: File,
+  engine: EngineId,
+  onProgress?: (phase: string, percent: number) => void
+): Promise<ParseOutcome> {
   try {
-    const buffer = new Uint8Array(await file.arrayBuffer());
     const { elements, idsScope, unitScales, parseMs, modelStructure } =
-      await PARSE_BY_ENGINE[engine](buffer);
+      await parseWorkerClient.parse(file, engine, onProgress);
     return {
       status: "succeeded",
       engine,

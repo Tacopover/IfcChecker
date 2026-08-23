@@ -7,6 +7,7 @@ import {
   type SpecificationSummary,
 } from "../local/parseAndValidate.js";
 import { useLoadedModels } from "../state/loadedModels.js";
+import { parseWorkerClient } from "../local/parseWorkerClient.js";
 import { CheckSummary } from "../components/CheckSummary";
 import { ElementDetails } from "../components/ElementDetails";
 import type { IssueRow } from "../components/IssueTable";
@@ -27,6 +28,7 @@ export function IfcCheckerPage() {
   const [progress, setProgress] = useState<ParseProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const cancelledRef = useRef(false);
   // Bumped on Reset to remount the IDS file input — clearing its React state
   // doesn't clear what the native <input type="file"> visually shows, since
   // its displayed filename isn't controlled by React. The IFC input is
@@ -100,6 +102,7 @@ export function IfcCheckerPage() {
   async function handleParse() {
     if (!canParse) return;
     setIsParsing(true);
+    cancelledRef.current = false;
     dropStaleResults();
     setExpandedFiles(new Set());
     const targets = unparsed;
@@ -109,11 +112,15 @@ export function IfcCheckerPage() {
       // those concurrently in one tab risks memory pressure on a large batch
       // (files run to 2GB, and the batch size is the user's to choose).
       for (const [index, model] of targets.entries()) {
+        if (cancelledRef.current) break;
         clearInterval(tickIntervalRef.current);
-        setProgress({ fileName: model.fileName, index: index + 1, total: targets.length });
+        setProgress({ fileName: model.fileName, index: index + 1, total: targets.length, percent: null });
         setElapsedSeconds(0);
         tickIntervalRef.current = setInterval(() => setElapsedSeconds((seconds) => seconds + 1), 1000);
-        applyParseOutcome(model.key, await parseFile(model.file, engine));
+        const outcome = await parseFile(model.file, engine, (_phase, percent) => {
+          setProgress((current) => (current ? { ...current, percent } : current));
+        });
+        applyParseOutcome(model.key, outcome);
       }
     } finally {
       clearInterval(tickIntervalRef.current);
@@ -121,6 +128,11 @@ export function IfcCheckerPage() {
       setProgress(null);
       setElapsedSeconds(0);
     }
+  }
+
+  function handleCancel() {
+    cancelledRef.current = true;
+    parseWorkerClient.cancel();
   }
 
   async function handleCheck() {
@@ -306,9 +318,15 @@ export function IfcCheckerPage() {
           {isParsing && progress && (
             <p role="status" className="progress">
               <span className="spinner" aria-hidden="true" />
-              Parsing {progress.index} of {progress.total}: {progress.fileName}… ({elapsedSeconds}s
+              Parsing {progress.index} of {progress.total}: {progress.fileName}
+              {progress.percent !== null ? ` (${Math.round(progress.percent)}%)` : ""}… ({elapsedSeconds}s
               elapsed)
             </p>
+          )}
+          {isParsing && (
+            <button type="button" className="secondary" onClick={handleCancel}>
+              Cancel
+            </button>
           )}
         </div>
       </section>

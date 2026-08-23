@@ -348,8 +348,12 @@ export interface RuleDraft {
    * applicability itself becomes the check and `conditions` must stay empty (`ruleProblems` says so).
    *
    * An imported rule with no explicit reading here keeps evaluating by its source's own occurs
-   * attributes (`compileDraft`) — this field is only ever the builder's own override, authored fresh
-   * or toggled onto an imported rule, never a second copy of what the source already states.
+   * attributes — this field is only ever the builder's own override, authored fresh or toggled onto
+   * an imported rule, never a second copy of what the source already states. Reading this field bare
+   * is therefore almost never right: `effectiveCardinalityOf` is what falls back to the source for an
+   * untouched import, and every place that decides something from cardinality — the preview, the
+   * Prohibited checkbox, `ruleProblems` — has to go through it or it will show a freshly imported
+   * prohibited rule as an ordinary one.
    */
   cardinality?: SpecificationCardinality;
   /**
@@ -744,6 +748,26 @@ function applicabilityOf(rule: RuleDraft): ParsedApplicability {
 }
 
 /**
+ * The cardinality this rule actually has: `rule.cardinality` if the builder ever stated one,
+ * otherwise whatever the imported source's own `<applicability minOccurs maxOccurs>` says.
+ *
+ * `rule.cardinality` alone is undefined for every freshly imported rule until the builder's own
+ * checkbox is touched — the importer deliberately never writes a second copy of what the source
+ * already states (see `RuleDraft.cardinality`). Reading it bare anywhere a decision is made — the
+ * live preview, the Prohibited checkbox, `ruleProblems`'s "may not also state requirements" check —
+ * would read an untouched imported prohibited rule as an ordinary required one.
+ */
+export function effectiveCardinalityOf(rule: RuleDraft): SpecificationCardinality {
+  return (
+    rule.cardinality ??
+    specificationCardinalityOf(
+      rule.imported?.applicabilityAttributes.minOccurs,
+      rule.imported?.applicabilityAttributes.maxOccurs
+    )
+  );
+}
+
+/**
  * In-memory equivalent of `parseIdsXml(buildIdsXml(rules))`, so the live preview never has to
  * serialise and re-parse per keystroke. The round-trip test keeps the two in step.
  *
@@ -753,16 +777,7 @@ function applicabilityOf(rule: RuleDraft): ParsedApplicability {
 export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
   return rules.map((rule) => ({
     name: rule.name,
-    // An explicit reading on the draft always wins — it is the builder's own statement, made after
-    // whatever the source said. Failing that: authored rules are written minOccurs="1"; imported ones
-    // keep their source's occurs attributes, so both read back the same way parseIdsXml would read
-    // the built XML.
-    cardinality:
-      rule.cardinality ??
-      specificationCardinalityOf(
-        rule.imported?.applicabilityAttributes.minOccurs,
-        rule.imported?.applicabilityAttributes.maxOccurs
-      ),
+    cardinality: effectiveCardinalityOf(rule),
     applicability: applicabilityOf(rule),
     requirements: rule.conditions.map(compileFacet),
     // Authored rules can say nothing the builder cannot; imported ones carry what it could not read.

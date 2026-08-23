@@ -5,7 +5,7 @@ import type {
   RuleDraft,
   ValueDraft,
 } from "@ifc-qa/ids-validator";
-import { plainNameOf } from "@ifc-qa/ids-validator";
+import { effectiveCardinalityOf, plainNameOf } from "@ifc-qa/ids-validator";
 
 /** Operators whose meaning lives entirely in the text box beside them. */
 export const OPERATORS_NEEDING_TEXT: ReadonlySet<ConditionOperator> = new Set<ConditionOperator>([
@@ -152,9 +152,11 @@ export function ruleProblems(rule: RuleDraft): RuleProblems {
         ? "A predefined type narrows the element types, and this rule names none — add a type or remove it."
         : valueProblem(rule.entityPredefinedType ?? null),
     conditions:
-      rule.cardinality === "prohibited"
+      effectiveCardinalityOf(rule) === "prohibited"
         ? // Stating none is this rule's complete, intended state — the applicability alone is the
           // check — so unlike an ordinary rule, no conditions here is not "still being authored".
+          // Reads the effective cardinality, not the bare field: an imported rule can be prohibited
+          // through its own source's occurs attributes without the builder ever stating one.
           rule.conditions.length > 0
           ? "A prohibited rule may not also state requirements — the elements it selects are the failure, so there is nothing left to check on them."
           : null

@@ -123,14 +123,30 @@ function readMaterials(store: IfcDataStore, expressId: number): string[] | null 
 // ever has an in-memory ArrayBuffer from a <input type="file"> — never a
 // filesystem path. This module deliberately has no Node-only imports so it's
 // safe to import from a browser bundle via the package's "./browser" export.
-export async function parseIfcLiteBuffer(raw: Uint8Array): Promise<IfcParseResult> {
+export async function parseIfcLiteBuffer(
+  raw: Uint8Array,
+  onProgress?: (phase: string, percent: number) => void
+): Promise<IfcParseResult> {
   const start = performance.now();
   assertWellFormedStepFile(raw);
 
   const parser = new IfcParser();
-  const store = await parser.parseColumnar(
-    raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer
-  );
+  // .slice() always copies, even across its own full range — wasted on a multi-GB file.
+  // Both callers (this file's browser path, and the Node adapter above its Buffer-pool
+  // threshold) already hand in a view spanning byteOffset 0 through the buffer's full
+  // length; only Node's small-file pooled Buffers are a genuine sub-view needing the copy.
+  const arrayBuffer =
+    raw.byteOffset === 0 && raw.byteLength === raw.buffer.byteLength
+      ? (raw.buffer as ArrayBuffer)
+      : (raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer);
+  const store = await parser.parseColumnar(arrayBuffer, {
+    // The buffer above is already fully loaded on this thread (browser: inside our own
+    // parse worker; Node: readFile already resolved) — nesting ifc-lite's own scan worker
+    // in it would only add another full-buffer copy (into a SharedArrayBuffer) and
+    // postMessage latency for no responsiveness benefit. See ParseOptions.disableWorkerScan.
+    disableWorkerScan: true,
+    ...(onProgress ? { onProgress: (p) => onProgress(p.phase, p.percent) } : null),
+  });
 
   const idsScope: NormalizedElement[] = [];
   // Kept parallel to idsScope so partOf can be resolved in a second pass: the walk needs every

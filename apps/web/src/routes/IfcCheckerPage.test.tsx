@@ -4,17 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { IfcCheckerPage } from "./IfcCheckerPage";
 import { LoadedModelsProvider } from "../state/loadedModels";
 
-const { parseWebIfcBuffer, parseIfcLiteBuffer } = vi.hoisted(() => ({
-  parseWebIfcBuffer: vi.fn(),
-  parseIfcLiteBuffer: vi.fn(),
-}));
+const { parse, cancel } = vi.hoisted(() => ({ parse: vi.fn(), cancel: vi.fn() }));
 const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => ({
   validateBySpecification: vi.fn(),
   parseIdsXml: vi.fn(),
   isEvaluable: vi.fn(),
 }));
 
-vi.mock("@ifc-qa/parser-adapters/browser", () => ({ parseWebIfcBuffer, parseIfcLiteBuffer }));
+vi.mock("../local/parseWorkerClient.js", () => ({ parseWorkerClient: { parse, cancel } }));
 vi.mock("@ifc-qa/ids-validator", () => ({
   validateBySpecification,
   parseIdsXml,
@@ -107,7 +104,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("disables the check button until files are parsed and an IDS file is chosen", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
     const user = userEvent.setup();
     renderPage();
@@ -123,7 +120,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("tells the user what's still needed for each step, updating as fields are filled", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
     const user = userEvent.setup();
     renderPage();
@@ -184,7 +181,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("resets the files and results back to the empty state", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateBySpecification.mockReturnValueOnce([outcome([], { applicableCount: 0, failedCount: 0 })]);
 
     const user = userEvent.setup();
@@ -205,7 +202,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("parses uploaded files entirely client-side, then reports violations when a rule set is checked", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({
+    parse.mockResolvedValueOnce({
       elements: [{ globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} }],
       parseMs: 12,
     });
@@ -229,7 +226,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("checks a second rule set against the files already in memory, without parsing them again", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateBySpecification
       .mockReturnValueOnce([outcome([], { applicableCount: 0, failedCount: 0 })])
       .mockReturnValueOnce([
@@ -248,11 +245,11 @@ describe("IfcCheckerPage", () => {
     await user.click(screen.getByRole("button", { name: "Check files" }));
 
     expect(await screen.findByText("Fails the newer rules")).toBeInTheDocument();
-    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(1);
+    expect(parse).toHaveBeenCalledTimes(1);
   });
 
   it("drops results that no longer describe the current file set", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateBySpecification.mockReturnValueOnce([outcome([violation()])]);
 
     const user = userEvent.setup();
@@ -269,7 +266,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("opens the full attributes and property sets of a failing element when it is picked", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({
+    parse.mockResolvedValueOnce({
       elements: [
         {
           globalId: "g1",
@@ -319,7 +316,7 @@ describe("IfcCheckerPage", () => {
       attributes: {},
       propertySets: {},
     });
-    parseIfcLiteBuffer
+    parse
       .mockResolvedValueOnce({ elements: [wallIn("Wall in the first file")], parseMs: 5 })
       .mockResolvedValueOnce({ elements: [wallIn("Wall in the second file")], parseMs: 5 });
     validateBySpecification
@@ -345,7 +342,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("reports a specification that matched no elements rather than showing a clean result", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateBySpecification.mockReturnValueOnce([
       outcome([], { name: "Walls are fire rated", applicableCount: 0, passedCount: 0, failedCount: 0 }),
     ]);
@@ -362,7 +359,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("lets the user expand a parsed file's row to see its project/site/building/storey structure", async () => {
-    parseIfcLiteBuffer.mockResolvedValueOnce({
+    parse.mockResolvedValueOnce({
       elements: [],
       parseMs: 5,
       modelStructure: {
@@ -398,7 +395,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("doesn't offer to show structure for a file that failed to parse", async () => {
-    parseIfcLiteBuffer.mockRejectedValueOnce(new Error("unexpected EOF"));
+    parse.mockRejectedValueOnce(new Error("unexpected EOF"));
 
     const user = userEvent.setup();
     renderPage();
@@ -410,7 +407,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("shows a failed status and error message for a file that fails to parse, without blocking other files", async () => {
-    parseIfcLiteBuffer
+    parse
       .mockRejectedValueOnce(new Error("unexpected EOF"))
       .mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
@@ -426,7 +423,7 @@ describe("IfcCheckerPage", () => {
 
   it("shows an error instead of a silent 'no issues' result when the IDS file has no specifications", async () => {
     parseIdsXml.mockReturnValue([]);
-    parseIfcLiteBuffer.mockResolvedValueOnce({ elements: [], parseMs: 5 });
+    parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
     const user = userEvent.setup();
     renderPage();
@@ -442,7 +439,7 @@ describe("IfcCheckerPage", () => {
   it("shows live progress naming the current file and its position in the batch while parsing, then clears it", async () => {
     const first = deferred<{ elements: unknown[]; parseMs: number }>();
     const second = deferred<{ elements: unknown[]; parseMs: number }>();
-    parseIfcLiteBuffer.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    parse.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
 
     const user = userEvent.setup();
     renderPage();
@@ -462,7 +459,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("only re-parses the files that need it when more are added to an already-parsed set", async () => {
-    parseIfcLiteBuffer
+    parse
       .mockResolvedValueOnce({ elements: [], parseMs: 5 })
       .mockResolvedValueOnce({ elements: [], parseMs: 6 });
 
@@ -470,17 +467,17 @@ describe("IfcCheckerPage", () => {
     renderPage();
 
     await parseFiles(user, makeFile("model-a.ifc"));
-    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(1);
+    expect(parse).toHaveBeenCalledTimes(1);
 
     await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-b.ifc"));
     await user.click(screen.getByRole("button", { name: "Parse files" }));
     await screen.findByText(/All 2 files are parsed with ifc-lite/);
 
-    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(2);
+    expect(parse).toHaveBeenCalledTimes(2);
   });
 
   it("puts no cap on how many IFC files may be loaded at once", async () => {
-    parseIfcLiteBuffer.mockResolvedValue({ elements: [], parseMs: 1 });
+    parse.mockResolvedValue({ elements: [], parseMs: 1 });
 
     const user = userEvent.setup();
     renderPage();
@@ -496,6 +493,50 @@ describe("IfcCheckerPage", () => {
     await user.click(screen.getByRole("button", { name: "Parse files" }));
 
     await screen.findByText(/All 25 files are parsed with ifc-lite/);
-    expect(parseIfcLiteBuffer).toHaveBeenCalledTimes(25);
+    expect(parse).toHaveBeenCalledTimes(25);
+  });
+
+  it("shows parse percent once the engine reports progress, and offers Cancel while parsing", async () => {
+    const first = deferred<unknown>();
+    let onProgress!: (phase: string, percent: number) => void;
+    parse.mockImplementationOnce((_file, _engine, progress) => {
+      onProgress = progress;
+      return first.promise;
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+    await user.upload(screen.getByLabelText(/IFC files/), makeFile("model-a.ifc"));
+    await user.click(screen.getByRole("button", { name: "Parse files" }));
+
+    onProgress("scan", 37);
+    expect(await screen.findByRole("status")).toHaveTextContent(/37%/);
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+
+    first.resolve({ elements: [], idsScope: [], unitScales: {}, parseMs: 5, modelStructure: null });
+    await screen.findByText(/All 1 file is parsed with ifc-lite/);
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("Cancel stops the current file and does not start the next one in the batch", async () => {
+    const first = deferred<unknown>();
+    parse.mockReturnValueOnce(first.promise);
+
+    const user = userEvent.setup();
+    renderPage();
+    await user.upload(screen.getByLabelText(/IFC files/), [makeFile("model-a.ifc"), makeFile("model-b.ifc")]);
+    await user.click(screen.getByRole("button", { name: "Parse files" }));
+    await screen.findByRole("button", { name: "Cancel" });
+
+    // Cancel first, then reject: matches production causality (clicking Cancel triggers
+    // parseWorkerClient.cancel(), which is what causes the pending parse() to reject) and
+    // avoids a race where the mocked rejection's microtasks start model-b before the click
+    // (a real DOM event dispatch, with its own microtask hops) sets cancelledRef.
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    first.reject(new Error("Parsing failed: Cancelled"));
+
+    const table = await screen.findByRole("table", { name: "IFC files" });
+    expect(within(table).getByText("model-a.ifc").closest("tr")).toHaveTextContent("failed");
+    expect(parse).toHaveBeenCalledTimes(1); // model-b.ifc was never started
   });
 });
