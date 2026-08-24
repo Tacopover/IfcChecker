@@ -37,8 +37,8 @@ Windows, set `CHROME_BIN` or the visual stage silently checks nothing while the 
 
 pnpm workspace. `apps/web` (React 19 + Vite/Rolldown) is the only live app. Packages:
 `parser-adapters` (two IFC engines), `ids-validator` (IDS XML parse/build/evaluate), `shared-types`
-(zod domain + generated IFC entity table), `report-generator` (pdf/excel, not wired into the UI),
-`storage`.
+(zod domain + generated IFC entity table), `report-generator` (pdf/excel, not wired into the UI).
+Everything runs client-side; no server-side storage of an uploaded IFC or IDS file.
 
 Workspace packages export TypeScript source (`main: ./src/index.ts`) — importers need no build;
 `tsc -p` is a typecheck gate. Tests are vitest, colocated as `*.test.ts` beside the source.

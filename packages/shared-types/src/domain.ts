@@ -148,17 +148,6 @@ export const ModelStructureNodeSchema: z.ZodType<ModelStructureNode> = z.lazy(()
 export const EngineIdSchema = z.enum(["web-ifc", "ifc-lite"]);
 export type EngineId = z.infer<typeof EngineIdSchema>;
 
-export const FileJobStatusSchema = z.enum([
-  "queued",
-  "running",
-  "succeeded",
-  "failed",
-]);
-export type FileJobStatus = z.infer<typeof FileJobStatusSchema>;
-
-export const RunStatusSchema = z.enum(["queued", "running", "completed"]);
-export type RunStatus = z.infer<typeof RunStatusSchema>;
-
 export const SeveritySchema = z.enum(["error", "warning"]);
 export type Severity = z.infer<typeof SeveritySchema>;
 

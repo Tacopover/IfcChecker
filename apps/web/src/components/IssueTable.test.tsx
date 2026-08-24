@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IssueTable, type IssueRow } from "./IssueTable";
-import { runResultsFixture } from "../test/mocks/fixtures";
+import { elementResultsFixture } from "../test/mocks/fixtures";
 
-const fixtureRows: IssueRow[] = runResultsFixture.results.map((result) => ({
+const fixtureRows: IssueRow[] = elementResultsFixture.map((result) => ({
   ...result,
   modelKey: "model-a.ifc:1:1",
   elementName: null,
