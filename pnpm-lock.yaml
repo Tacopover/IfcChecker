@@ -26,6 +26,9 @@ importers:
       '@ifc-qa/parser-adapters':
         specifier: workspace:*
         version: link:../../packages/parser-adapters
+      '@ifc-qa/report-generator':
+        specifier: workspace:*
+        version: link:../../packages/report-generator
       '@ifc-qa/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

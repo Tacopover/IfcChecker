@@ -12,6 +12,7 @@
   "dependencies": {
     "@ifc-qa/ids-validator": "workspace:*",
     "@ifc-qa/parser-adapters": "workspace:*",
+    "@ifc-qa/report-generator": "workspace:*",
     "@ifc-qa/shared-types": "workspace:*",
     "@tanstack/react-table": "^8.21.3",
     "react": "^19.2.7",

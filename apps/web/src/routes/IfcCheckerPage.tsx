@@ -8,6 +8,7 @@ import {
 } from "../local/parseAndValidate.js";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { parseWorkerClient } from "../local/parseWorkerClient.js";
+import { exportResultsAsCsv, exportResultsAsExcel } from "../local/exportResults.js";
 import { CheckSummary } from "../components/CheckSummary";
 import { ElementDetails } from "../components/ElementDetails";
 import type { IssueRow } from "../components/IssueTable";
@@ -25,6 +26,8 @@ export function IfcCheckerPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ParseProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -72,6 +75,7 @@ export function IfcCheckerPage() {
     setResults(null);
     setSelectedIssue(null);
     setCheckError(null);
+    setExportError(null);
   }
 
   function handleIfcFilesChange(event: ChangeEvent<HTMLInputElement>) {
@@ -147,6 +151,29 @@ export function IfcCheckerPage() {
       setCheckError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsChecking(false);
+    }
+  }
+
+  function handleExportCsv() {
+    if (!results || !idsFile) return;
+    setExportError(null);
+    try {
+      exportResultsAsCsv(results, idsFile.name, engine);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleExportExcel() {
+    if (!results || !idsFile) return;
+    setExportError(null);
+    setIsExportingExcel(true);
+    try {
+      await exportResultsAsExcel(results, idsFile.name, engine);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsExportingExcel(false);
     }
   }
 
@@ -389,6 +416,21 @@ export function IfcCheckerPage() {
           </header>
 
           <div className="step-body">
+            <div className="step-actions">
+              <button type="button" className="secondary" onClick={handleExportCsv}>
+                Export CSV
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={isExportingExcel}
+                onClick={handleExportExcel}
+              >
+                {isExportingExcel ? "Exporting..." : "Export Excel"}
+              </button>
+            </div>
+            {exportError && <p role="alert">{exportError}</p>}
+
             {/* The panel opens inside the table, under the row that was clicked, so
                 reading an element never costs a trip to the bottom of the page and back. */}
             <CheckSummary
