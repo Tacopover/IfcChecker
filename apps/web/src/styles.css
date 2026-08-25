@@ -935,6 +935,97 @@ caption {
   background: var(--fail-soft);
 }
 
+.version-toggle {
+  display: flex;
+  flex: none;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.version-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.version-toggle input {
+  margin: 0;
+}
+
+.prohibited-toggle {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.prohibited-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.prohibited-toggle input {
+  margin: 0;
+}
+
+.prohibited-toggle input:checked {
+  accent-color: var(--fail);
+}
+
+.tip {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.tip-btn {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1;
+  margin: 0;
+  cursor: pointer;
+}
+
+.tip-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.tip-bubble {
+  position: absolute;
+  top: 130%;
+  right: 0;
+  z-index: 5;
+  width: 15rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
 .rule-body {
   padding: 0 0.7rem 0.7rem 1.5rem;
 }
@@ -1707,12 +1798,16 @@ pre.xml .v {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
   margin-top: 1.15rem;
 }
 
 .checker .step-actions button {
   margin: 0;
+}
+
+.step-results .step-actions {
+  margin-bottom: 1.1rem;
 }
 
 .requirement {
@@ -2521,24 +2616,6 @@ col.col-message {
   padding-left: 1rem;
 }
 
-.docinfo-field.versions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.docinfo-field.versions label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-family: var(--mono);
-  font-size: 11.5px;
-}
-
 /* The rule's own panel sits inside a card that already has padding. */
 .rule-body > .docinfo {
   margin: 0.55rem 0 0;
@@ -2605,19 +2682,6 @@ col.col-message {
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-dark);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.badge.prohibited {
-  flex: none;
-  padding: 0.1rem 0.5rem;
-  border: 1px solid var(--fail);
-  border-radius: 999px;
-  background: var(--fail-soft);
-  color: var(--fail);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;

@@ -3,6 +3,7 @@ import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type { ApplicabilityFacetDraft, FacetDraft, RuleDraft } from "@ifc-qa/ids-validator";
 import {
   collapsibleEntityGroupsFor,
+  DEFAULT_IFC_VERSION,
   descendantsOf,
   effectiveCardinalityOf,
   expandedTypeNamesFor,
@@ -32,6 +33,20 @@ import { nextDraftId } from "./draftIds.js";
  * beside the type chips rather than in `applicabilityFacets`.
  */
 const PREDEFINED_TYPE_OPTION = "entityPredefinedType";
+
+/**
+ * The three schema versions `ids.xsd` lists, and the only three a document may name.
+ *
+ * A checkbox each rather than a text box: `ifcVersion` is a space-separated list drawn from a
+ * closed enumeration, so a box would let a user write a value that makes the document invalid.
+ * 344 of the 464 hand-authored corpus specifications say `"IFC2X3 IFC4"`.
+ */
+const IFC_VERSIONS = ["IFC2X3", "IFC4", "IFC4X3_ADD2"];
+
+const PROHIBITED_HINT =
+  "Flips this from a check to a ban: instead of judging elements that match, it fails the " +
+  "moment any element does. A prohibited rule can't also state requirements — remove any " +
+  "below, or this rule won't export.";
 
 export interface RuleCardProps {
   rule: RuleDraft;
@@ -97,6 +112,18 @@ export function RuleCard({
   // Local, because it is presentation only: which panels are open is not part of the draft, and
   // the page already tracks which rules are open.
   const [infoOpen, setInfoOpen] = useState(false);
+  // Whether the "what does Prohibited mean" bubble is open — presentation only, same as `infoOpen`.
+  const [prohibitedTipOpen, setProhibitedTipOpen] = useState(false);
+
+  // `??`, not `||`: a rule that has never stated one gets the exporter's default, and one the user
+  // cleared states none — which `ruleProblems` reports rather than this control silently re-checking.
+  const statedVersions = (rule.ifcVersion ?? DEFAULT_IFC_VERSION).split(/\s+/).filter(Boolean);
+  function toggleVersion(version: string) {
+    const next = statedVersions.includes(version)
+      ? statedVersions.filter((entry) => entry !== version)
+      : [...IFC_VERSIONS.filter((entry) => statedVersions.includes(entry) || entry === version)];
+    onChange({ ...rule, ifcVersion: next.join(" ") });
+  }
   // Which facets the user has interacted with, so a freshly-added one doesn't show a completeness
   // error before they've touched it (see `FacetRowFrameProps.onTouch`). Keyed by facet id rather
   // than boolean-per-row so a duplicate or a newly-added facet — with its own fresh id — always
@@ -209,12 +236,58 @@ export function RuleCard({
           onChange={(event) => onChange({ ...rule, name: event.target.value })}
         />
         {isNew && <span className="badge new">Just added</span>}
-        {prohibited && <span className="badge prohibited">Prohibited</span>}
         {preserved.length > 0 && (
           <span className="badge kept" title={preserved.map((entry) => entry.construct).join(", ")}>
             {preserved.length} kept
           </span>
         )}
+        <fieldset className="version-toggle" aria-label="Schema versions">
+          {IFC_VERSIONS.map((version) => (
+            <label key={version}>
+              <input
+                type="checkbox"
+                checked={statedVersions.includes(version)}
+                onChange={() => toggleVersion(version)}
+              />
+              {version}
+            </label>
+          ))}
+        </fieldset>
+        <span className="prohibited-toggle">
+          <label>
+            <input
+              type="checkbox"
+              checked={prohibited}
+              onChange={(event) =>
+                onChange({
+                  ...rule,
+                  // Explicit either way, not `undefined` on uncheck: an imported rule may be
+                  // effectively prohibited through its own source's <applicability minOccurs
+                  // maxOccurs> rather than this field, and `undefined` would just fall back to that
+                  // source again — leaving the checkbox unable to ever turn a real import's ban off.
+                  cardinality: event.target.checked ? "prohibited" : "required",
+                })
+              }
+            />
+            Prohibited
+          </label>
+          <span className="tip">
+            <button
+              type="button"
+              className="tip-btn"
+              aria-label="What does Prohibited mean?"
+              aria-expanded={prohibitedTipOpen}
+              onClick={() => setProhibitedTipOpen((wasOpen) => !wasOpen)}
+            >
+              ?
+            </button>
+            {prohibitedTipOpen && (
+              <div className="tip-bubble" role="tooltip">
+                {PROHIBITED_HINT}
+              </div>
+            )}
+          </span>
+        </span>
         <span className={`score ${scoreClass}`}>
           <span className="bar" data-empty={matched ? 0 : 1}>
             <i style={{ width: `${ratio * 100}%` }} />

@@ -219,8 +219,8 @@ describe("RuleCard", () => {
     expect(screen.queryByLabelText("Predefined type")).toBeNull();
   });
 
-  // Four attributes and the schema versions, all of which survived a round trip before this and
-  // none of which could be edited.
+  // Four attributes, all of which survived a round trip before this and none of which could be
+  // edited. The schema versions and Prohibited live on the card header instead — see below.
   it("edits what the specification says about itself", async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -234,12 +234,11 @@ describe("RuleCard", () => {
   });
 
   // `ifcVersion` is a space-separated list drawn from a closed enumeration, so a text box would let
-  // a user write a value that makes the document invalid.
+  // a user write a value that makes the document invalid. Lives on the card header, visible without
+  // opening "About this specification", so no disclosure click is needed to reach it.
   it("picks schema versions from the three the schema lists, and refuses none", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-
-    await user.click(screen.getByRole("button", { name: /About this specification/ }));
 
     const ifc4 = screen.getByRole("checkbox", { name: "IFC4" });
     expect(ifc4).toBeChecked();
@@ -250,22 +249,22 @@ describe("RuleCard", () => {
 
     await user.click(ifc4);
     await user.click(screen.getByRole("checkbox", { name: "IFC2X3" }));
+
+    // The resulting problem is still reported inside "About this specification", the one place
+    // that lists everything blocking export.
+    await user.click(screen.getByRole("button", { name: /About this specification/ }));
     expect(screen.getByText(/Schema version — IDS requires at least one/)).toBeInTheDocument();
   });
 
-  it("toggling Prohibited on flips the score reading and shows the badge, without touching conditions", async () => {
+  it("toggling Prohibited on flips the score reading, without touching conditions", async () => {
     const user = userEvent.setup();
     // Zero conditions, since a prohibited rule can't state any — the applicability alone is the
     // check. Targets IfcWall, which ELEMENTS has 3 of, so the toggle has something to find.
     const noConditions: RuleDraft = { ...RULE, conditions: [] };
     render(<Harness initial={noConditions} />);
 
-    await user.click(screen.getByRole("button", { name: /About this specification/ }));
-    await user.click(
-      screen.getByRole("checkbox", { name: /Prohibited — no element may match/ })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Prohibited" }));
 
-    expect(screen.getByText("Prohibited")).toHaveClass("badge", "prohibited");
     expect(screen.getByText("3 elements found, and none may match this rule")).toBeInTheDocument();
     expect(document.querySelector(".rule-foot .score")).toHaveClass("has-fail");
     // The violation is the match itself, not a per-condition failure — there is nothing for the
@@ -282,13 +281,19 @@ describe("RuleCard", () => {
     };
     render(<Harness initial={targetsNothing} />);
 
-    await user.click(screen.getByRole("button", { name: /About this specification/ }));
-    await user.click(
-      screen.getByRole("checkbox", { name: /Prohibited — no element may match/ })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Prohibited" }));
 
     expect(screen.getByText("None found — this rule is satisfied")).toBeInTheDocument();
     expect(document.querySelector(".rule-foot .score")).toHaveClass("all-pass");
+  });
+
+  it("expands a tooltip explaining what Prohibited means", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "What does Prohibited mean?" }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/fails the/);
   });
 
   it("renames without remounting the row underneath it", async () => {

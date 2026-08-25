@@ -265,10 +265,9 @@ describe("RuleBuilderPage", () => {
     await screen.findByRole("tree");
     await createRuleViaWizard(user);
 
-    await user.click(screen.getByRole("button", { name: "Expand New rule" }));
-    await user.click(screen.getByRole("button", { name: /About this specification/ }));
-    await user.click(screen.getByRole("checkbox", { name: /Prohibited — no element may match/ }));
+    await user.click(screen.getByRole("checkbox", { name: "Prohibited" }));
 
+    await user.click(screen.getByRole("button", { name: "Expand New rule" }));
     await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
     expect(screen.getByLabelText("IDS XML preview")).toHaveTextContent(
       /minOccurs="0"\s*maxOccurs="0"/
@@ -491,12 +490,8 @@ describe("RuleBuilderPage importing an IDS file", () => {
     renderBuilder([{ fileName: "tower.ifc" }]);
 
     await user.upload(await screen.findByLabelText("Import an IDS file"), idsFile("client.ids", prohibited));
-    await user.click(screen.getByRole("button", { name: "Expand No proxies" }));
-    await user.click(screen.getByRole("button", { name: /About this specification/ }));
 
-    expect(
-      screen.getByRole("checkbox", { name: /Prohibited — no element may match/ })
-    ).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Prohibited" })).toBeChecked();
 
     // Untouched, the rule must still export exactly what was imported — re-exporting the file the
     // user just opened must not silently flip its meaning.

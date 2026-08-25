@@ -1,5 +1,4 @@
 import type { RuleDraft } from "@ifc-qa/ids-validator";
-import { DEFAULT_IFC_VERSION, effectiveCardinalityOf } from "@ifc-qa/ids-validator";
 import { MetadataPanel, type MetadataField } from "./MetadataPanel.js";
 import { ruleProblems } from "./completeness.js";
 
@@ -26,15 +25,6 @@ const FIELDS: ReadonlyArray<MetadataField<SpecificationField>> = [
   },
 ];
 
-/**
- * The three schema versions `ids.xsd` lists, and the only three a document may name.
- *
- * A checkbox each rather than a text box: `ifcVersion` is a space-separated list drawn from a
- * closed enumeration, so a box would let a user write a value that makes the document invalid.
- * 344 of the 464 hand-authored corpus specifications say `"IFC2X3 IFC4"`.
- */
-const IFC_VERSIONS = ["IFC2X3", "IFC4", "IFC4X3_ADD2"];
-
 export interface SpecificationInfoPanelProps {
   rule: RuleDraft;
   open: boolean;
@@ -46,8 +36,9 @@ export interface SpecificationInfoPanelProps {
  * What this one specification says about itself, beside the rule it states.
  *
  * The same panel as the document's, over the four attributes `ids.xsd` puts on a `<specification>`
- * and its `<requirements>`, plus the schema versions. All five survived a round trip before this
- * and none could be edited.
+ * and its `<requirements>`. All four survived a round trip before this and none could be edited.
+ * The schema versions and the Prohibited toggle live on the rule card's always-visible header
+ * instead, since both are decisions worth seeing without opening this panel.
  */
 export function SpecificationInfoPanel({
   rule,
@@ -55,17 +46,6 @@ export function SpecificationInfoPanel({
   onToggle,
   onChange,
 }: SpecificationInfoPanelProps) {
-  // `??`, not `||`: a rule that has never stated one gets the exporter's default, and one the user
-  // cleared states none — which `ruleProblems` reports rather than the panel silently re-checking.
-  const stated = (rule.ifcVersion ?? DEFAULT_IFC_VERSION).split(/\s+/).filter(Boolean);
-
-  function toggleVersion(version: string) {
-    const next = stated.includes(version)
-      ? stated.filter((entry) => entry !== version)
-      : [...IFC_VERSIONS.filter((entry) => stated.includes(entry) || entry === version)];
-    onChange({ ...rule, ifcVersion: next.join(" ") });
-  }
-
   return (
     <MetadataPanel
       label="About this specification"
@@ -77,44 +57,6 @@ export function SpecificationInfoPanel({
       open={open}
       onToggle={onToggle}
       onChange={(id, value) => onChange({ ...rule, [id]: value })}
-    >
-      <fieldset className="docinfo-field versions">
-        <legend className="micro">Schema versions</legend>
-        {IFC_VERSIONS.map((version) => (
-          <label key={version}>
-            <input
-              type="checkbox"
-              checked={stated.includes(version)}
-              onChange={() => toggleVersion(version)}
-            />
-            {version}
-          </label>
-        ))}
-      </fieldset>
-      <div className="docinfo-field">
-        <label>
-          <input
-            type="checkbox"
-            checked={effectiveCardinalityOf(rule) === "prohibited"}
-            onChange={(event) =>
-              onChange({
-                ...rule,
-                // Explicit either way, not `undefined` on uncheck: an imported rule may be
-                // effectively prohibited through its own source's <applicability minOccurs
-                // maxOccurs> rather than this field, and `undefined` would just fall back to that
-                // source again — leaving the checkbox unable to ever turn a real import's ban off.
-                cardinality: event.target.checked ? "prohibited" : "required",
-              })
-            }
-          />
-          Prohibited — no element may match this rule's applicability
-        </label>
-        <p className="docinfo-hint">
-          Flips this from a check to a ban: instead of judging elements that match, it fails the
-          moment any element does. A prohibited rule can't also state requirements — remove any
-          below, or this rule won't export.
-        </p>
-      </div>
-    </MetadataPanel>
+    />
   );
 }
