@@ -97,9 +97,12 @@ describe("parseIfcLiteBuffer", () => {
   // classification rule itself.
   it("reports a type outside the IFC4/IFC2X3 tables instead of dropping it silently", async () => {
     const raw = await readFile(fixturePath("mep-systems.ifc"));
+    // Fixture is committed with LF endings but checks out as CRLF on Windows
+    // (core.autocrlf), so match either line ending and reuse whichever was found.
     const withUnknown = new TextDecoder().decode(raw).replace(
-      "ENDSEC;\nEND-ISO-10303-21;",
-      "#90=IFCVENDOREXTENSIONTHING('1Mm2Bb3Cc4Dd5Ee6Ff7G31',$,'VX-001',$,$,#12,$,'VX-001',$);\nENDSEC;\nEND-ISO-10303-21;"
+      /ENDSEC;(\r?\n)END-ISO-10303-21;/,
+      (_match, eol: string) =>
+        `#90=IFCVENDOREXTENSIONTHING('1Mm2Bb3Cc4Dd5Ee6Ff7G31',$,'VX-001',$,$,#12,$,'VX-001',$);${eol}ENDSEC;${eol}END-ISO-10303-21;`
     );
     const result = await parseIfcLiteBuffer(new TextEncoder().encode(withUnknown));
 
