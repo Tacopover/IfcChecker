@@ -16,6 +16,7 @@ export interface IssueRow extends ElementResult {
   fileName: string;
   modelKey: string;
   elementName: string | null;
+  elementTag: string | null;
 }
 
 const columnHelper = createColumnHelper<IssueRow>();

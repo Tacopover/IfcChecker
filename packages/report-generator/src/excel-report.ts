@@ -25,8 +25,10 @@ export async function generateExcelReport(data: RunReportData): Promise<Buffer> 
   const resultsSheet = workbook.addWorksheet(RESULTS_SHEET_NAME);
   resultsSheet.columns = [
     { header: "File", key: "fileName", width: 25 },
+    { header: "Element", key: "elementName", width: 25 },
     { header: "Element Type", key: "elementType", width: 20 },
     { header: "Global ID", key: "elementGlobalId", width: 25 },
+    { header: "Tag", key: "elementTag", width: 15 },
     { header: "Rule", key: "ruleId", width: 20 },
     { header: "Severity", key: "severity", width: 12 },
     { header: "Message", key: "message", width: 50 },

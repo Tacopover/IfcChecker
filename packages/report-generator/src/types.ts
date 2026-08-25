@@ -5,5 +5,7 @@ export interface RunReportData {
   ruleSetName: string;
   engine: "web-ifc" | "ifc-lite";
   generatedAt: string; // ISO timestamp
-  results: Array<ElementResult & { fileName: string }>;
+  results: Array<
+    ElementResult & { fileName: string; elementName: string | null; elementTag: string | null }
+  >;
 }

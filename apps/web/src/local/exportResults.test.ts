@@ -11,6 +11,7 @@ function violation(overrides: Record<string, unknown> = {}) {
     elementGlobalId: "g1",
     elementType: "IFCWALL",
     elementName: "Wall-1",
+    elementTag: "W-001",
     ruleId: "naming-prefix",
     severity: "error" as const,
     message: "Name must start with 'W-'",
@@ -71,9 +72,21 @@ describe("buildCsv", () => {
 
     const lines = buildCsv(data).split("\r\n");
 
-    expect(lines[0]).toBe("File,Element Type,Global ID,Rule,Severity,Message");
+    expect(lines[0]).toBe("File,Element,Element Type,Global ID,Tag,Rule,Severity,Message");
     expect(lines[1]).toContain("a.ifc");
     expect(lines[2]).toContain("b.ifc");
+  });
+
+  it("exports an empty cell for a violation whose element has no Tag attribute", () => {
+    const data = buildRunReportData(
+      [summary({ violations: [violation({ elementTag: null })] })],
+      "rules.ids",
+      "ifc-lite"
+    );
+
+    const [header, row] = buildCsv(data).split("\r\n");
+    const tagColumn = header.split(",").indexOf("Tag");
+    expect(row.split(",")[tagColumn]).toBe("");
   });
 
   it("quotes a field that holds a comma, and doubles an embedded quote", () => {

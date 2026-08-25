@@ -7,9 +7,16 @@ export interface IdsViolation {
   elementGlobalId: string;
   elementType: string;
   elementName: string | null;
+  /** The element's Tag attribute (IfcIdentifier) — not every element carries one. */
+  elementTag: string | null;
   ruleId: string;
   severity: Severity;
   message: string;
+}
+
+function elementTag(element: NormalizedElement): string | null {
+  const tag = element.attributes.Tag?.value;
+  return tag == null ? null : String(tag);
 }
 
 // What one specification did to the model. Violations alone cannot answer the
@@ -83,10 +90,23 @@ export function validateBySpecification(
       }
       applicableCount += 1;
 
-      // A prohibited specification is a statement that nothing should match, so
-      // the elements it selects are the failure. There is nothing to check on
-      // them, and a document that asks for checks anyway is invalid.
-      if (specification.cardinality === "prohibited") continue;
+      // A prohibited specification is a statement that nothing should match, so the elements
+      // it selects are themselves the failure — each one is reported as a violation rather than
+      // checked against requirements (a document pairing "prohibited" with requirements is
+      // invalid, and cardinalityFailure below says so).
+      if (specification.cardinality === "prohibited") {
+        violations.push({
+          elementGlobalId: element.globalId,
+          elementType: element.ifcType,
+          elementName: element.name,
+          elementTag: elementTag(element),
+          ruleId: specification.name,
+          severity: "error",
+          message: "This element matches a specification whose applicability is prohibited.",
+        });
+        failedCount += 1;
+        continue;
+      }
 
       const before = violations.length;
       for (const facet of specification.requirements) {
@@ -96,6 +116,7 @@ export function validateBySpecification(
           elementGlobalId: element.globalId,
           elementType: element.ifcType,
           elementName: element.name,
+          elementTag: elementTag(element),
           ruleId: specification.name,
           severity: "error",
           message: result.message,

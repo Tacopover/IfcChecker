@@ -21,7 +21,16 @@ export function buildRunReportData(
   };
 }
 
-const CSV_HEADER = ["File", "Element Type", "Global ID", "Rule", "Severity", "Message"];
+const CSV_HEADER = [
+  "File",
+  "Element",
+  "Element Type",
+  "Global ID",
+  "Tag",
+  "Rule",
+  "Severity",
+  "Message",
+];
 
 // RFC 4180: a field holding a comma, quote, or line break is wrapped in quotes, with any quote
 // inside it doubled.
@@ -46,8 +55,10 @@ function sortForExport(results: RunReportData["results"]): RunReportData["result
 export function buildCsv(data: RunReportData): string {
   const rows = sortForExport(data.results).map((result) => [
     result.fileName,
+    result.elementName ?? "",
     result.elementType,
     result.elementGlobalId,
+    result.elementTag ?? "",
     result.ruleId,
     result.severity,
     result.message,

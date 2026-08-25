@@ -83,6 +83,7 @@ export interface CheckRow extends ElementResult {
   fileName: string;
   modelKey: string;
   elementName: string | null;
+  elementTag: string | null;
 }
 
 export interface SpecificationSummary {
@@ -154,6 +155,7 @@ export function validateParsedModels(
           elementGlobalId: violation.elementGlobalId,
           elementType: violation.elementType,
           elementName: violation.elementName,
+          elementTag: violation.elementTag,
           ruleId: violation.ruleId,
           severity: violation.severity,
           message: violation.message,

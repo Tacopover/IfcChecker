@@ -14,6 +14,7 @@ function violation(overrides: Partial<IssueRow> = {}): IssueRow {
     modelKey: "model.ifc:1:1",
     elementGlobalId: "g1",
     elementName: "West Wall",
+    elementTag: null,
     elementType: "IFCWALL",
     ruleId: "Walls are fire rated",
     severity: "error",

@@ -14,6 +14,8 @@ const fixture: RunReportData = {
       fileJobId: "fj1",
       elementGlobalId: "g1",
       elementType: "IFCWALL",
+      elementName: "Wall-1",
+      elementTag: "W-001",
       ruleId: "naming-prefix",
       severity: "error",
       message: "Name must start with 'W-'",
@@ -24,6 +26,8 @@ const fixture: RunReportData = {
       fileJobId: "fj1",
       elementGlobalId: "g2",
       elementType: "IFCDOOR",
+      elementName: "Door-1",
+      elementTag: null,
       ruleId: "naming-prefix",
       severity: "warning",
       message: "Door name missing suffix",
@@ -34,6 +38,8 @@ const fixture: RunReportData = {
       fileJobId: "fj2",
       elementGlobalId: "g3",
       elementType: "IFCWALL",
+      elementName: "Wall-2",
+      elementTag: "W-002",
       ruleId: "fire-rating-required",
       severity: "error",
       message: "Missing FireRating property",
@@ -61,18 +67,21 @@ describe("generateExcelReport", () => {
     // Row 2: model-a.ifc / IFCWALL / error (sorted before model-a's warning)
     const row2 = resultsSheet.getRow(2);
     expect(row2.getCell(1).value).toBe("model-a.ifc");
-    expect(row2.getCell(2).value).toBe("IFCWALL");
-    expect(row2.getCell(5).value).toBe("error");
-    expect(row2.getCell(6).value).toBe("Missing FireRating property");
+    expect(row2.getCell(2).value).toBe("Wall-2");
+    expect(row2.getCell(3).value).toBe("IFCWALL");
+    expect(row2.getCell(5).value).toBe("W-002");
+    expect(row2.getCell(7).value).toBe("error");
+    expect(row2.getCell(8).value).toBe("Missing FireRating property");
 
-    // Row 3: model-a.ifc / IFCDOOR / warning
+    // Row 3: model-a.ifc / IFCDOOR / warning, with no Tag attribute on the element
     const row3 = resultsSheet.getRow(3);
     expect(row3.getCell(1).value).toBe("model-a.ifc");
-    expect(row3.getCell(5).value).toBe("warning");
+    expect(row3.getCell(5).value).toBeNull();
+    expect(row3.getCell(7).value).toBe("warning");
 
     // Row 4: model-b.ifc / IFCWALL / error
     const row4 = resultsSheet.getRow(4);
     expect(row4.getCell(1).value).toBe("model-b.ifc");
-    expect(row4.getCell(5).value).toBe("error");
+    expect(row4.getCell(7).value).toBe("error");
   });
 });

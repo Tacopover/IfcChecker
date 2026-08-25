@@ -353,6 +353,21 @@ describe("validateBySpecification", () => {
     });
   });
 
+  it("carries the element's Tag attribute, and null when it has none", () => {
+    const tagged = makeElement({
+      globalId: "wall-7",
+      name: "West Wall",
+      attributes: { Tag: { value: "W-002" } },
+      propertySets: { Pset_WallCommon: {} },
+    });
+
+    const [tagOutcome] = validateBySpecification([tagged], IDS_XML);
+    expect(tagOutcome.violations[0]).toMatchObject({ elementTag: "W-002" });
+
+    const [untaggedOutcome] = validateBySpecification([failingWall], IDS_XML);
+    expect(untaggedOutcome.violations[0]).toMatchObject({ elementTag: null });
+  });
+
   // ids.xsd inherits XML Schema's occurs group, where minOccurs defaults to 1. So the plain
   // <applicability maxOccurs="unbounded"> every rule in the wild carries is *required*, and a
   // model where nothing matches fails it — indistinguishable from a clean model on the counts.
@@ -426,17 +441,22 @@ describe("validateBySpecification", () => {
       expect(outcome.cardinalityFailure).toMatch(/cannot also state requirements/);
     });
 
-    // The elements a prohibited specification selects are the failure; there is nothing to check
-    // on them, so they must not be counted as failing on their own merits.
-    it("does not judge the elements a prohibited specification selects", () => {
+    // The elements a prohibited specification selects are themselves the failure — there is
+    // nothing to check on them, so each one is reported as a violation directly rather than run
+    // against requirements.
+    it("reports each element a prohibited specification selects as a violation", () => {
       const [outcome] = validateBySpecification(
         [failingWall],
         cardinalityIds(`minOccurs="0" maxOccurs="0"`, false)
       );
 
       expect(outcome.applicableCount).toBe(1);
-      expect(outcome.failedCount).toBe(0);
-      expect(outcome.violations).toEqual([]);
+      expect(outcome.failedCount).toBe(1);
+      expect(outcome.violations).toHaveLength(1);
+      expect(outcome.violations[0]).toMatchObject({
+        elementGlobalId: failingWall.globalId,
+        elementType: "IFCWALL",
+      });
     });
   });
 

@@ -8,6 +8,7 @@ const fixtureRows: IssueRow[] = elementResultsFixture.map((result) => ({
   ...result,
   modelKey: "model-a.ifc:1:1",
   elementName: null,
+  elementTag: null,
 }));
 
 function makeManyResults(count: number): IssueRow[] {
@@ -17,6 +18,7 @@ function makeManyResults(count: number): IssueRow[] {
     modelKey: "model.ifc:1:1",
     elementGlobalId: `g${i}`,
     elementName: `Wall ${i}`,
+    elementTag: null,
     elementType: "IFCWALL",
     ruleId: "naming-prefix",
     severity: "error" as const,
