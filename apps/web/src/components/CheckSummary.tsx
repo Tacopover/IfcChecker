@@ -108,6 +108,7 @@ export function CheckSummary({
               <th className="num">Applied to</th>
               <th className="num">Passed</th>
               <th className="num">Failed</th>
+              <th className="num">Success</th>
               <th className="col-issues">Issues</th>
             </tr>
           </thead>
@@ -130,6 +131,11 @@ export function CheckSummary({
                     <td className="num">{status === "not-checked" ? "—" : summary.applicableCount}</td>
                     <td className="num">{status === "not-checked" ? "—" : summary.passedCount}</td>
                     <td className="num">{status === "not-checked" ? "—" : summary.failedCount}</td>
+                    <td className="num">
+                      {status === "not-checked" || summary.applicableCount === 0
+                        ? "—"
+                        : `${Math.round((summary.passedCount / summary.applicableCount) * 100)}%`}
+                    </td>
                     <td className="col-issues">
                       {issueCount > 0 ? (
                         // The visible label stays short so it can't wrap the column open; the
@@ -155,7 +161,7 @@ export function CheckSummary({
 
                   {status === "not-checked" && (
                     <tr className="spec-not-checked">
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         {/* The worst failure mode there is, and it arrives from two directions: a
                             rule whose elements we cannot select matches nothing, and a rule whose
                             every requirement we had to drop finds nothing wrong. Both report a
@@ -180,7 +186,7 @@ export function CheckSummary({
 
                   {summary.cardinalityFailure !== null && !isEmptyRequiredMatch(summary) && (
                     <tr className="spec-cardinality">
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         {/* Failed as a whole, with no failing element to show for it — so the
                             reason has to be stated, or the row reads as an empty accusation. */}
                         <p role="alert">{summary.cardinalityFailure}</p>
@@ -190,7 +196,7 @@ export function CheckSummary({
 
                   {status === "not-applied" && !isEmptyRequiredMatch(summary) && (
                     <tr className="spec-not-applied">
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         {/* Ran, but selected nothing — a real measurement, unlike "not checked". */}
                         <p role="alert">
                           No element matched this specification, so nothing was checked. Its
@@ -202,7 +208,7 @@ export function CheckSummary({
 
                   {status !== "not-checked" && droppedRequirements(summary).length > 0 && (
                     <tr className="spec-partial">
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         {/* Ran, but against fewer requirements than the author wrote — so a pass
                             here is weaker than the source asked for, and says so. */}
                         <p role="alert">
@@ -222,7 +228,7 @@ export function CheckSummary({
 
                   {isExpanded && (
                     <tr className="drawer-row">
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         <IssueTable
                           results={summary.violations}
                           onSelectElement={onSelectElement}
