@@ -11,6 +11,12 @@ function isEmptyRequiredMatch(summary: SpecificationSummary): boolean {
   return summary.cardinalityFailure === REQUIRED_CARDINALITY_EMPTY_MESSAGE;
 }
 
+// A prohibited specification that matched elements already reads as "failing" in the status badge
+// and lists every match in the issue table below — this message would only repeat that in prose.
+function isProhibitedMatchFailure(summary: SpecificationSummary): boolean {
+  return summary.cardinalityFailure !== null && summary.cardinalityFailure.startsWith("Nothing may match");
+}
+
 function statusOf(summary: SpecificationSummary): SpecStatus {
   // Ordered by how much the counts can be trusted: an unchecked specification has no counts at
   // all, so it can never be mistaken for one that ran and matched nothing.
@@ -184,7 +190,9 @@ export function CheckSummary({
                     </tr>
                   )}
 
-                  {summary.cardinalityFailure !== null && !isEmptyRequiredMatch(summary) && (
+                  {summary.cardinalityFailure !== null &&
+                    !isEmptyRequiredMatch(summary) &&
+                    !isProhibitedMatchFailure(summary) && (
                     <tr className="spec-cardinality">
                       <td colSpan={6}>
                         {/* Failed as a whole, with no failing element to show for it — so the

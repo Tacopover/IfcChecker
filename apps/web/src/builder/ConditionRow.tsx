@@ -183,12 +183,13 @@ export function ConditionRow({
   // a select over the model's field list cannot state one. The rest of the row still works.
   const { propertySet: plainSet, name: plainField } = plainNamesOf(condition);
 
-  const nameOptions =
+  const nameOptions = (
     condition.kind === "attribute"
       ? source.attributes.map((field) => field.name)
       : (source.propertySets.find((set) => set.name === plainSet)?.fields ?? []).map(
           (field) => field.name
-        );
+        )
+  ).sort((a, b) => a.localeCompare(b));
 
   const errorId = errorIdOf(condition.id);
 
@@ -298,7 +299,7 @@ export function ConditionRow({
               onChange={(event) => changePropertySet(event.target.value)}
             >
               {optionsWith(
-                source.propertySets.map((set) => set.name),
+                source.propertySets.map((set) => set.name).sort((a, b) => a.localeCompare(b)),
                 plainSet
               ).map((option) => (
                 <option key={option.value} value={option.value}>

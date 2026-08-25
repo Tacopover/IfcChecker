@@ -258,6 +258,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
         name: `${selectionName} rule`,
         entityTypes: expandedTypeNamesFor(selectionName),
         conditions: [condition],
+        ifcVersion: "IFC2X3 IFC4",
       };
       setRules([rule]);
       openRule(rule.id);

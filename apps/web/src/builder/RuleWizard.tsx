@@ -25,7 +25,13 @@ const STEPS: WizardStepDescriptor[] = [
 ];
 
 function emptyDraft(): RuleDraft {
-  return { id: nextDraftId("r"), name: "New rule", entityTypes: [], conditions: [] };
+  return {
+    id: nextDraftId("r"),
+    name: "New rule",
+    entityTypes: [],
+    conditions: [],
+    ifcVersion: "IFC2X3 IFC4",
+  };
 }
 
 /**

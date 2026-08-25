@@ -432,6 +432,7 @@ export function RuleCard({
                 <optgroup label="Groups (inherited)">
                   {introspection.groups
                     .filter((group) => !usedTypes.has(group.name))
+                    .sort((a, b) => a.name.localeCompare(b.name))
                     .map((group) => (
                       <option key={group.name} value={group.name}>
                         {group.name} — {group.types.length} types, {group.count}
@@ -441,6 +442,7 @@ export function RuleCard({
                 <optgroup label="Entity types in this file">
                   {introspection.entityTypes
                     .filter((entry) => !usedTypes.has(entry.name))
+                    .sort((a, b) => a.name.localeCompare(b.name))
                     .map((entry) => (
                       <option key={entry.name} value={entry.name}>
                         {entry.name} ({entry.count})
