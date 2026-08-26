@@ -235,6 +235,7 @@ export function RuleCard({
           value={rule.name}
           onChange={(event) => onChange({ ...rule, name: event.target.value })}
         />
+        {isActive && <span className="badge target">Adding here</span>}
         {isNew && <span className="badge new">Just added</span>}
         {preserved.length > 0 && (
           <span className="badge kept" title={preserved.map((entry) => entry.construct).join(", ")}>

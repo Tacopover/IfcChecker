@@ -136,7 +136,10 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   const [expandedOverride, setExpanded] = useState<ReadonlySet<string> | null>(null);
 
   const [rules, setRules] = useState<RuleDraft[]>([]);
-  const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
+  // Which rule a field click in the left rail adds a condition to — a rule id, or "new" to start
+  // one. Doubles as the explorer's "Add conditions to" selection and the active rule's highlight,
+  // so the two can never disagree about what a click will do.
+  const [target, setTarget] = useState<string>("new");
   const [openRuleIds, setOpenRuleIds] = useState<ReadonlySet<string>>(new Set());
   const [failureRuleIds, setFailureRuleIds] = useState<ReadonlySet<string>>(new Set());
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -225,7 +228,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   }
 
   function openRule(id: string) {
-    setActiveRuleId(id);
+    setTarget(id);
     setOpenRuleIds((previous) => new Set(previous).add(id));
   }
 
@@ -250,9 +253,11 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             kind: "property",
             propertySet: field.propertySet === null ? null : plainName(field.propertySet),
           };
-    const target = rules.find((rule) => rule.id === activeRuleId) ?? rules[0] ?? null;
+    // A stale id (its rule got deleted) falls back to the first rule, same as an unset target —
+    // "new" is the only way to reach rule creation once at least one rule exists.
+    const targetRule = target === "new" ? null : (rules.find((rule) => rule.id === target) ?? rules[0] ?? null);
 
-    if (!target) {
+    if (!targetRule) {
       const rule: RuleDraft = {
         id: nextDraftId("r"),
         name: `${selectionName} rule`,
@@ -260,14 +265,14 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
         conditions: [condition],
         ifcVersion: "IFC2X3 IFC4",
       };
-      setRules([rule]);
+      setRules([...rules, rule]);
       openRule(rule.id);
       return;
     }
 
     setRules(
       rules.map((rule) =>
-        rule.id === target.id
+        rule.id === targetRule.id
           ? {
               ...rule,
               entityTypes: [...new Set([...rule.entityTypes, ...expandedTypeNamesFor(selectionName)])],
@@ -276,7 +281,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
           : rule
       )
     );
-    openRule(target.id);
+    openRule(targetRule.id);
   }
 
   /**
@@ -287,6 +292,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   function handleWizardFinish(rule: RuleDraft) {
     setRules([...rules, rule]);
     setJustAddedRuleId(rule.id);
+    setTarget(rule.id);
     setWizardOpen(false);
   }
 
@@ -342,7 +348,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     // The title is a field of the same block, so the panel edits all eight through one state.
     setDocumentInfo({ ...outcome.result.info, title: outcome.result.title ?? undefined });
     setExtraInfo(outcome.result.extraInfo);
-    setActiveRuleId(null);
+    setTarget("new");
     setOpenRuleIds(new Set());
     setFailureRuleIds(new Set());
     setJustAddedRuleId(null);
@@ -372,7 +378,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
           rule={rule}
           elements={builderElements}
           introspection={introspection}
-          isActive={rule.id === activeRuleId}
+          isActive={rule.id === target}
           isOpen={openRuleIds.has(rule.id)}
           showFailures={failureRuleIds.has(rule.id)}
           isNew={rule.id === justAddedRuleId}
@@ -380,8 +386,11 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             setRules((previous) => previous.map((entry) => (entry.id === rule.id ? next : entry)))
           }
           onDuplicate={() => handleDuplicateRule(rule)}
-          onDelete={() => setRules(rules.filter((entry) => entry.id !== rule.id))}
-          onActivate={() => setActiveRuleId(rule.id)}
+          onDelete={() => {
+            setRules(rules.filter((entry) => entry.id !== rule.id));
+            setTarget((current) => (current === rule.id ? "new" : current));
+          }}
+          onActivate={() => setTarget(rule.id)}
           onToggleOpen={() => toggleIn(setOpenRuleIds, rule.id)}
           onToggleFailures={() => toggleIn(setFailureRuleIds, rule.id)}
         />
@@ -496,6 +505,24 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
                 />
               </div>
             </section>
+
+            {rules.length > 0 && (
+              <div className="target-strip">
+                <label htmlFor="rule-target" className="micro">
+                  Add conditions to
+                </label>
+                <select id="rule-target" value={target} onChange={(event) => setTarget(event.target.value)}>
+                  <option value="new">+ Create a new rule</option>
+                  <optgroup label="Existing rules">
+                    {rules.map((rule) => (
+                      <option key={rule.id} value={rule.id}>
+                        {rule.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+            )}
 
             <SchemaCards
               source={selectionSource}
