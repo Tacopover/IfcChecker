@@ -10,7 +10,10 @@ const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => (
   parseIdsXml: vi.fn(),
   isEvaluable: vi.fn(),
 }));
-const { exportResultsAsExcel } = vi.hoisted(() => ({ exportResultsAsExcel: vi.fn() }));
+const { exportResultsAsExcel, exportResultsAsBcf } = vi.hoisted(() => ({
+  exportResultsAsExcel: vi.fn(),
+  exportResultsAsBcf: vi.fn(),
+}));
 
 vi.mock("../local/parseWorkerClient.js", () => ({ parseWorkerClient: { parse, cancel } }));
 vi.mock("@ifc-qa/ids-validator", () => ({
@@ -20,13 +23,14 @@ vi.mock("@ifc-qa/ids-validator", () => ({
   REQUIRED_CARDINALITY_EMPTY_MESSAGE:
     "This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.",
 }));
-// The real exportResultsAsCsv needs no library and is exercised for real below; only the
-// Excel path is mocked here, since it dynamically imports exceljs — a large bundled library
-// whose own tests already cover it in @ifc-qa/report-generator, and which is unreliable to
-// load through vite-node's module transform when many unrelated test files run alongside it.
+// The real exportResultsAsCsv needs no library and is exercised for real below; the Excel and
+// BCF paths are mocked here, since both dynamically import bundled libraries (exceljs; fflate +
+// fast-xml-parser) whose own tests already cover them in @ifc-qa/report-generator, and which are
+// unreliable to load through vite-node's module transform when many unrelated test files run
+// alongside it.
 vi.mock("../local/exportResults.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../local/exportResults.js")>();
-  return { ...actual, exportResultsAsExcel };
+  return { ...actual, exportResultsAsExcel, exportResultsAsBcf };
 });
 
 /** One specification's outcome, as the validator hands it to the page. */
@@ -621,6 +625,40 @@ describe("IfcCheckerPage", () => {
 
       expect(await screen.findByRole("alert")).toHaveTextContent("workbook generation failed");
       expect(screen.getByRole("button", { name: "Export Excel" })).toBeEnabled();
+    });
+
+    it("hands the checked results and rule set name to the BCF exporter, disabling the button while it runs", async () => {
+      const user = userEvent.setup();
+      const pending = deferred<void>();
+      exportResultsAsBcf.mockReturnValueOnce(pending.promise);
+
+      renderPage();
+      await checkOneFailure(user);
+
+      await user.click(screen.getByRole("button", { name: "Export BCF" }));
+
+      expect(exportResultsAsBcf).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ name: "fake-spec" })]),
+        "rules.ids",
+        "ifc-lite"
+      );
+      expect(screen.getByRole("button", { name: "Exporting..." })).toBeDisabled();
+
+      pending.resolve();
+      expect(await screen.findByRole("button", { name: "Export BCF" })).toBeEnabled();
+    });
+
+    it("shows an error and re-enables the button when the BCF export fails", async () => {
+      const user = userEvent.setup();
+      exportResultsAsBcf.mockRejectedValueOnce(new Error("zip generation failed"));
+
+      renderPage();
+      await checkOneFailure(user);
+
+      await user.click(screen.getByRole("button", { name: "Export BCF" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("zip generation failed");
+      expect(screen.getByRole("button", { name: "Export BCF" })).toBeEnabled();
     });
   });
 });
