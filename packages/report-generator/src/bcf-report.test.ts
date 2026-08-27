@@ -67,9 +67,10 @@ describe("generateBcfReport", () => {
     const zip = unzipSync(generateBcfReport(fixture));
     const paths = Object.keys(zip).sort();
 
-    // naming-prefix/error, naming-prefix/warning, fire-rating-required/error: 3 topics, 2 files each.
+    // naming-prefix/error, naming-prefix/warning, fire-rating-required/error: 3 topics, 3 files each.
     expect(paths.filter((path) => path.endsWith("markup.bcf"))).toHaveLength(3);
     expect(paths.filter((path) => path.endsWith("viewpoint.bcfv"))).toHaveLength(3);
+    expect(paths.filter((path) => path.endsWith("snapshot.png"))).toHaveLength(3);
     expect(paths).toContain("bcf.version");
   });
 
@@ -87,12 +88,19 @@ describe("generateBcfReport", () => {
     expect(markup).toContain("model-b.ifc");
     expect(markup).toContain(WALL_1); // the one comment for this topic names its element
 
+    expect(markup).toContain("<Snapshot>snapshot.png</Snapshot>");
+
     const viewpoint = decode(zip, `${folder}/viewpoint.bcfv`);
     expect(viewpoint).toContain(`IfcGuid="${WALL_1}"`);
     // A fixed camera, not a real "frame this element" view — see the comment in bcf-report.ts.
     // Some receivers (observed: BIMcollab's Navisworks plugin) refuse to open a viewpoint at all
     // without one, which also blocks Selection from being applied.
     expect(viewpoint).toContain("<OrthogonalCamera>");
+
+    const snapshot = zip[`${folder}/snapshot.png`];
+    if (!snapshot) throw new Error("snapshot.png missing from archive");
+    expect(snapshot[0]).toBe(0x89); // PNG signature byte 0
+    expect(snapshot[1]).toBe(0x50); // 'P'
   });
 
   it("satisfies the real BCF-XML 2.1 schemas for every emitted file", async () => {

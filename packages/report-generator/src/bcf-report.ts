@@ -23,6 +23,23 @@ function xmlFile(tree: Record<string, unknown>): Uint8Array {
   return strToU8(XML_PROLOG + xmlBuilder.build(tree));
 }
 
+// A real, minimal PNG (1x1, light gray), not a placeholder string: after DEFAULT_CAMERA below still
+// left BIMcollab's Navisworks plugin reporting "no viewpoint to zoom to", a missing Snapshot is the
+// next suspect — markup.xsd's ViewPoint type allows either or both, but this app has no way yet to
+// confirm which one that plugin actually treats as mandatory. atob/charCodeAt, not Buffer, so this
+// decodes the same way in the browser bundle and under Node's test runner.
+const DEFAULT_SNAPSHOT_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4ceIEAAS0AlkWLoFAAAAAAElFTkSuQmCC";
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+const DEFAULT_SNAPSHOT_PNG = base64ToBytes(DEFAULT_SNAPSHOT_PNG_BASE64);
+
 const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1 };
 const TOPIC_TYPE: Record<Severity, string> = { error: "Error", warning: "Warning" };
 
@@ -115,6 +132,7 @@ function markupFile(group: TopicGroup, generatedAt: string): Uint8Array {
       Viewpoints: {
         "@_Guid": group.viewpointGuid,
         Viewpoint: "viewpoint.bcfv",
+        Snapshot: "snapshot.png",
       },
     },
   });
@@ -165,6 +183,7 @@ export function generateBcfReport(data: RunReportData): Uint8Array {
   for (const group of groups) {
     entries[`${group.topicGuid}/markup.bcf`] = markupFile(group, data.generatedAt);
     entries[`${group.topicGuid}/viewpoint.bcfv`] = viewpointFile(group);
+    entries[`${group.topicGuid}/snapshot.png`] = DEFAULT_SNAPSHOT_PNG;
   }
 
   return zipSync(entries);
