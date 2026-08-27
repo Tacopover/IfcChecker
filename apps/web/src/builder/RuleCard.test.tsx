@@ -57,11 +57,13 @@ const RULE: RuleDraft = {
 function Harness({
   initial = RULE,
   isOpen = true,
+  isActive = true,
   onDuplicate = () => {},
   onDelete = () => {},
 }: {
   initial?: RuleDraft;
   isOpen?: boolean;
+  isActive?: boolean;
   onDuplicate?: () => void;
   onDelete?: () => void;
 }) {
@@ -73,7 +75,7 @@ function Harness({
       rule={rule}
       elements={ELEMENTS}
       introspection={INTROSPECTION}
-      isActive
+      isActive={isActive}
       isOpen={open}
       showFailures={showFailures}
       onChange={setRule}
@@ -87,6 +89,16 @@ function Harness({
 }
 
 describe("RuleCard", () => {
+  it("marks the rule that a field click would add a condition to, and only that one", () => {
+    render(<Harness isActive />);
+    expect(screen.getByText("Adding here")).toBeInTheDocument();
+  });
+
+  it("shows no target badge when this rule isn't the one field clicks would add to", () => {
+    render(<Harness isActive={false} />);
+    expect(screen.queryByText("Adding here")).not.toBeInTheDocument();
+  });
+
   it("scores the rule against the model, at rule and at condition level", () => {
     const { container } = render(<Harness />);
 

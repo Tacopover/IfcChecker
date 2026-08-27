@@ -204,6 +204,95 @@ describe("RuleBuilderPage", () => {
     expect(document.querySelector(".rule-head .score-text")).toHaveTextContent("2/3");
   });
 
+  it("starts a second rule from a field click even though one already exists", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    await user.click(screen.getByRole("button", { name: /FireRating/ }));
+    expect(screen.getAllByLabelText("Rule name")).toHaveLength(1);
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("IfcWall rule");
+
+    await user.selectOptions(screen.getByLabelText("Add conditions to"), "+ Create a new rule");
+    await user.click(screen.getByRole("button", { name: /Status/ }));
+
+    expect(screen.getAllByLabelText("Rule name")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Field name").map((input) => (input as HTMLInputElement).value)).toEqual([
+      "FireRating",
+      "Status",
+    ]);
+  });
+
+  it("adds to whichever rule is chosen from the target picker, not just the one last clicked", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    await user.click(screen.getByRole("button", { name: /FireRating/ }));
+    await createRuleViaWizard(user);
+    // The wizard's rule becomes the target the moment it is created.
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("New rule");
+
+    await user.selectOptions(screen.getByLabelText("Add conditions to"), "IfcWall rule");
+    await user.click(screen.getByRole("button", { name: /Status/ }));
+
+    expect(screen.getAllByLabelText("Rule name")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Field name").map((input) => (input as HTMLInputElement).value)).toEqual([
+      "FireRating",
+      "Status",
+    ]);
+  });
+
+  it("shows the target picker before any rule exists, offering only to create one", async () => {
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("+ Create a new rule");
+  });
+
+  it("puts the full rule name in a title attribute, for names too long to read in the narrow rail", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    await user.click(screen.getByRole("button", { name: /FireRating/ }));
+
+    expect(screen.getByLabelText("Add conditions to")).toHaveAttribute("title", "IfcWall rule");
+  });
+
+  it("deselects the target rule when the user clicks the space around the rule cards", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await user.click(screen.getByRole("button", { name: /FireRating/ }));
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("IfcWall rule");
+    expect(screen.getByText("Adding here")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("main"));
+
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("+ Create a new rule");
+    expect(screen.queryByText("Adding here")).not.toBeInTheDocument();
+  });
+
+  it("deselects the target rule when the user clicks the 'create a new rule' tile, not its Start button", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await user.click(screen.getByRole("button", { name: /FireRating/ }));
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("IfcWall rule");
+
+    await user.click(screen.getByText(/Answer a few questions about what to check/));
+
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("+ Create a new rule");
+
+    // Re-target the existing rule, then confirm the Start button inside the same tile still just
+    // opens the wizard rather than also deselecting.
+    await user.selectOptions(screen.getByLabelText("Add conditions to"), "IfcWall rule");
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(screen.getByRole("heading", { name: "What does this rule apply to?" })).toBeInTheDocument();
+  });
+
   it("selecting a group expands it and re-aims the schema cards at all its types", async () => {
     const user = userEvent.setup();
     renderBuilder([{ fileName: "tower.ifc" }]);
