@@ -584,7 +584,14 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
 
                 {specificationCards()}
 
-                <div className="addtile">
+                <div
+                  className="addtile"
+                  // Not a rule card, so it counts as background too — except the button, which
+                  // has its own job and shouldn't also carry this side effect.
+                  onClick={(event) => {
+                    if (!(event.target as HTMLElement).closest(".go")) setTarget("new");
+                  }}
+                >
                   <span className="plus" aria-hidden="true">
                     +
                   </span>

@@ -274,6 +274,25 @@ describe("RuleBuilderPage", () => {
     expect(screen.queryByText("Adding here")).not.toBeInTheDocument();
   });
 
+  it("deselects the target rule when the user clicks the 'create a new rule' tile, not its Start button", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await user.click(screen.getByRole("button", { name: /FireRating/ }));
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("IfcWall rule");
+
+    await user.click(screen.getByText(/Answer a few questions about what to check/));
+
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("+ Create a new rule");
+
+    // Re-target the existing rule, then confirm the Start button inside the same tile still just
+    // opens the wizard rather than also deselecting.
+    await user.selectOptions(screen.getByLabelText("Add conditions to"), "IfcWall rule");
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(screen.getByRole("heading", { name: "What does this rule apply to?" })).toBeInTheDocument();
+  });
+
   it("selecting a group expands it and re-aims the schema cards at all its types", async () => {
     const user = userEvent.setup();
     renderBuilder([{ fileName: "tower.ifc" }]);
