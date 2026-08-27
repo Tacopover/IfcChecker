@@ -89,7 +89,10 @@ describe("generateBcfReport", () => {
 
     const viewpoint = decode(zip, `${folder}/viewpoint.bcfv`);
     expect(viewpoint).toContain(`IfcGuid="${WALL_1}"`);
-    expect(viewpoint).not.toContain("Camera"); // no geometry data exists to place one
+    // A fixed camera, not a real "frame this element" view — see the comment in bcf-report.ts.
+    // Some receivers (observed: BIMcollab's Navisworks plugin) refuse to open a viewpoint at all
+    // without one, which also blocks Selection from being applied.
+    expect(viewpoint).toContain("<OrthogonalCamera>");
   });
 
   it("satisfies the real BCF-XML 2.1 schemas for every emitted file", async () => {
