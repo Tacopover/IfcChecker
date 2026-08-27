@@ -243,6 +243,37 @@ describe("RuleBuilderPage", () => {
     ]);
   });
 
+  it("shows the target picker before any rule exists, offering only to create one", async () => {
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("+ Create a new rule");
+  });
+
+  it("puts the full rule name in a title attribute, for names too long to read in the narrow rail", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    await user.click(screen.getByRole("button", { name: /FireRating/ }));
+
+    expect(screen.getByLabelText("Add conditions to")).toHaveAttribute("title", "IfcWall rule");
+  });
+
+  it("deselects the target rule when the user clicks the space around the rule cards", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await user.click(screen.getByRole("button", { name: /FireRating/ }));
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("IfcWall rule");
+    expect(screen.getByText("Adding here")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("main"));
+
+    expect(screen.getByLabelText("Add conditions to")).toHaveDisplayValue("+ Create a new rule");
+    expect(screen.queryByText("Adding here")).not.toBeInTheDocument();
+  });
+
   it("selecting a group expands it and re-aims the schema cards at all its types", async () => {
     const user = userEvent.setup();
     renderBuilder([{ fileName: "tower.ifc" }]);

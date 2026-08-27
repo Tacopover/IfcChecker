@@ -506,23 +506,28 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
               </div>
             </section>
 
-            {rules.length > 0 && (
-              <div className="target-strip">
-                <label htmlFor="rule-target" className="micro">
-                  Add conditions to
-                </label>
-                <select id="rule-target" value={target} onChange={(event) => setTarget(event.target.value)}>
-                  <option value="new">+ Create a new rule</option>
+            <div className="target-strip">
+              <label htmlFor="rule-target" className="micro">
+                Add conditions to
+              </label>
+              <select
+                id="rule-target"
+                value={target}
+                title={target === "new" ? "Create a new rule" : (rules.find((rule) => rule.id === target)?.name ?? "")}
+                onChange={(event) => setTarget(event.target.value)}
+              >
+                <option value="new">+ Create a new rule</option>
+                {rules.length > 0 && (
                   <optgroup label="Existing rules">
                     {rules.map((rule) => (
-                      <option key={rule.id} value={rule.id}>
+                      <option key={rule.id} value={rule.id} title={rule.name}>
                         {rule.name}
                       </option>
                     ))}
                   </optgroup>
-                </select>
-              </div>
-            )}
+                )}
+              </select>
+            </div>
 
             <SchemaCards
               source={selectionSource}
@@ -532,7 +537,16 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             />
           </aside>
 
-          <main className="stack">
+          <main
+            className="stack"
+            // A click on the stack's own background — the gaps around and between rule cards,
+            // not a card or anything inside one — reads as "target nothing", the same as picking
+            // "+ Create a new rule" from the picker. Rule cards, and everything else in here, stop
+            // this from firing by simply being what was actually clicked.
+            onClick={(event) => {
+              if (!wizardOpen && event.target === event.currentTarget) setTarget("new");
+            }}
+          >
             {wizardOpen ? (
               <RuleWizard
                 introspection={introspection}
