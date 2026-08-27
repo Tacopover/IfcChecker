@@ -8,7 +8,7 @@ import {
 } from "../local/parseAndValidate.js";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { parseWorkerClient } from "../local/parseWorkerClient.js";
-import { exportResultsAsCsv, exportResultsAsExcel } from "../local/exportResults.js";
+import { exportResultsAsBcf, exportResultsAsCsv, exportResultsAsExcel } from "../local/exportResults.js";
 import { CheckSummary } from "../components/CheckSummary";
 import { ElementDetails } from "../components/ElementDetails";
 import type { IssueRow } from "../components/IssueTable";
@@ -27,6 +27,7 @@ export function IfcCheckerPage() {
   const [isChecking, setIsChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isExportingBcf, setIsExportingBcf] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ParseProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -174,6 +175,19 @@ export function IfcCheckerPage() {
       setExportError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsExportingExcel(false);
+    }
+  }
+
+  async function handleExportBcf() {
+    if (!results || !idsFile) return;
+    setExportError(null);
+    setIsExportingBcf(true);
+    try {
+      await exportResultsAsBcf(results, idsFile.name, engine);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsExportingBcf(false);
     }
   }
 
@@ -427,6 +441,14 @@ export function IfcCheckerPage() {
                 onClick={handleExportExcel}
               >
                 {isExportingExcel ? "Exporting..." : "Export Excel"}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={isExportingBcf}
+                onClick={handleExportBcf}
+              >
+                {isExportingBcf ? "Exporting..." : "Export BCF"}
               </button>
             </div>
             {exportError && <p role="alert">{exportError}</p>}

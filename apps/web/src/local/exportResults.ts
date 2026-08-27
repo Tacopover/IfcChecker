@@ -110,3 +110,22 @@ export async function exportResultsAsExcel(
     downloadFileName(ruleSetName, "xlsx")
   );
 }
+
+export async function exportResultsAsBcf(
+  summaries: SpecificationSummary[],
+  ruleSetName: string,
+  engine: EngineId
+): Promise<void> {
+  const data = buildRunReportData(summaries, ruleSetName, engine);
+  // Loaded on demand, same as the Excel path: fflate and fast-xml-parser have no place in the
+  // main chunk for a visitor who never clicks this button.
+  const { generateBcfReport } = await import("@ifc-qa/report-generator/browser");
+  const zip = generateBcfReport(data);
+  // fflate types zipSync's return as Uint8Array<ArrayBufferLike>, whose backing store isn't
+  // narrowed to plain ArrayBuffer — the same mismatch generateExcelReport's Buffer return hits
+  // against Blob's stricter BlobPart, fixed the same way.
+  downloadBlob(
+    new Blob([new Uint8Array(zip)], { type: "application/zip" }),
+    downloadFileName(ruleSetName, "bcf")
+  );
+}

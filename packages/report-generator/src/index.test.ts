@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generatePdfReport, generateExcelReport } from "./index.js";
+import { generatePdfReport, generateExcelReport, generateBcfReport } from "./index.js";
 import type { RunReportData } from "./index.js";
 
 const fixture: RunReportData = {
@@ -46,5 +46,12 @@ describe("@ifc-qa/report-generator public API", () => {
     const excel = await generateExcelReport(fixture);
     expect(Buffer.isBuffer(excel)).toBe(true);
     expect(excel.length).toBeGreaterThan(0);
+  });
+
+  it("generates a non-empty BCF zip via the package barrel", () => {
+    const bcf = generateBcfReport(fixture);
+    expect(bcf.length).toBeGreaterThan(0);
+    expect(bcf[0]).toBe(0x50); // zip local-file-header magic "PK\x03\x04"
+    expect(bcf[1]).toBe(0x4b);
   });
 });
