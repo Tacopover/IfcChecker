@@ -2169,6 +2169,20 @@ tr.spec-row[data-open="true"] > td {
   vertical-align: 1px;
 }
 
+/* A filter the user set on one specification outlives its table, so the collapsed row wears it. */
+.spec-filtered {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  border-radius: 999px;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
 .spec-status-passed {
   color: var(--pass);
   background: color-mix(in srgb, var(--pass) 12%, transparent);
@@ -2431,6 +2445,52 @@ col.col-message {
   border-radius: 6px;
   background: var(--surface-2);
   font-size: 0.82rem;
+}
+
+/* The filter over every specification, distinguished from the per-table ones it sits above. */
+.global-filters {
+  margin: 0.9rem 0 0.8rem;
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.global-filters input[type="text"],
+.global-filters select {
+  background: var(--surface);
+}
+
+.global-filters .ghost-btn {
+  align-self: end;
+}
+
+/* Both filter bars say what they cover: they look alike and do not reach the same rows. */
+.filters-head {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.filters-head h3,
+.filters-head h4 {
+  margin: 0 0 0.15rem;
+  font-size: 0.85rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.filters-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.filter-line {
+  margin: 0 0 0.8rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .empty-note {

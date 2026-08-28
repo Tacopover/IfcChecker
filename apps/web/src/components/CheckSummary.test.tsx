@@ -297,18 +297,21 @@ describe("CheckSummary", () => {
     expect(lastCall[1].violations).toEqual(second.violations);
   });
 
-  it("drops a specification's filter once its issue table is collapsed again", async () => {
+  it("keeps a specification's filter after its issue table is collapsed, and flags the row", async () => {
     const user = userEvent.setup();
     const onFilteredSummariesChange = vi.fn();
     render(<CheckSummary summaries={[summary()]} onFilteredSummariesChange={onFilteredSummariesChange} />);
 
     await user.type(screen.getByLabelText("Filter by element name or GlobalId"), "no-such-element");
-    expect((onFilteredSummariesChange.mock.calls.at(-1)?.[0] as SpecificationSummary[])[0].violations).toEqual([]);
+    await user.click(screen.getByRole("button", { name: /Hide 0 of 1 issue/ }));
 
-    await user.click(screen.getByRole("button", { name: /Hide 1 issue/ }));
-
+    // Still narrowing what an export would take, from a row with no filter bar left on it —
+    // so the row, and the line above the table, both have to say so.
     const lastCall = onFilteredSummariesChange.mock.calls.at(-1)?.[0] as SpecificationSummary[];
-    expect(lastCall[0].violations).toEqual([violation()]);
+    expect(lastCall[0].violations).toEqual([]);
+    expect(screen.getByText("filtered")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Show 0 of 1 issue for/ })).toBeInTheDocument();
+    expect(screen.getByText(/1 specification also has its own filter active/)).toBeInTheDocument();
   });
 
   it("decides expansion afresh when a new rule set is checked", () => {
@@ -323,5 +326,100 @@ describe("CheckSummary", () => {
 
     expect(screen.queryByText("West Wall")).not.toBeInTheDocument();
     expect(screen.getByText("passed")).toBeInTheDocument();
+  });
+  it("narrows every specification at once from the filters above them", async () => {
+    const user = userEvent.setup();
+    const onFilteredSummariesChange = vi.fn();
+    const first = summary({ name: "First", violations: [violation({ id: "v1" })] });
+    const second = summary({
+      name: "Second",
+      violations: [
+        violation({ id: "v2", elementGlobalId: "g2", elementName: "Main Duct", elementType: "IFCDUCTSEGMENT" }),
+      ],
+    });
+    render(
+      <CheckSummary summaries={[first, second]} onFilteredSummariesChange={onFilteredSummariesChange} />
+    );
+
+    await user.type(screen.getByLabelText("Filter all results by element type"), "IFCDUCT");
+
+    // A specification with nothing left to show is out of the way entirely — the point of
+    // filtering everything at once is not having to open each rule to find out it has no match.
+    expect(screen.queryByText("First")).not.toBeInTheDocument();
+    expect(screen.getByText("Second")).toBeInTheDocument();
+
+    const lastCall = onFilteredSummariesChange.mock.calls.at(-1)?.[0] as SpecificationSummary[];
+    expect(lastCall[0].violations).toEqual([]);
+    expect(lastCall[1].violations).toEqual(second.violations);
+  });
+
+  it("lets a specification's own filter narrow further inside what the global one matched", async () => {
+    const user = userEvent.setup();
+    const onFilteredSummariesChange = vi.fn();
+    const only = summary({
+      name: "Walls are fire rated",
+      violations: [
+        violation({ id: "v1", elementGlobalId: "g1", elementName: "West Wall" }),
+        violation({ id: "v2", elementGlobalId: "g2", elementName: "East Wall" }),
+      ],
+    });
+    render(<CheckSummary summaries={[only]} onFilteredSummariesChange={onFilteredSummariesChange} />);
+
+    await user.type(screen.getByLabelText("Filter all results by element type"), "IFCWALL");
+    expect(
+      (onFilteredSummariesChange.mock.calls.at(-1)?.[0] as SpecificationSummary[])[0].violations
+    ).toHaveLength(2);
+
+    await user.type(screen.getByLabelText("Filter by element name or GlobalId"), "West");
+
+    const lastCall = onFilteredSummariesChange.mock.calls.at(-1)?.[0] as SpecificationSummary[];
+    expect(lastCall[0].violations.map((row) => row.elementName)).toEqual(["West Wall"]);
+  });
+
+  it("says how much the global filter is hiding, and clears it on request", async () => {
+    const user = userEvent.setup();
+    render(
+      <CheckSummary
+        summaries={[
+          summary({ name: "First", violations: [violation({ id: "v1" })] }),
+          summary({
+            name: "Second",
+            violations: [violation({ id: "v2", elementGlobalId: "g2", severity: "warning" })],
+          }),
+        ]}
+      />
+    );
+
+    await user.selectOptions(screen.getByLabelText("Filter all results by severity"), "warning");
+    expect(screen.getByText("Showing 1 of 2 issues in 1 of 2 specifications.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear all filters" }));
+    expect(screen.getByText("First")).toBeInTheDocument();
+    expect(screen.queryByText(/Showing 1 of 2 issues/)).not.toBeInTheDocument();
+  });
+
+  it("clears the per-specification filters as well, wherever they were typed", async () => {
+    const user = userEvent.setup();
+    render(<CheckSummary summaries={[summary()]} />);
+
+    const specFilter = screen.getByLabelText("Filter by element name or GlobalId");
+    await user.type(specFilter, "no-such-element");
+    expect(screen.getByText("filtered")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear all filters" }));
+
+    expect(screen.queryByText("filtered")).not.toBeInTheDocument();
+    expect(screen.getByText("West Wall")).toBeInTheDocument();
+    expect(specFilter).toHaveValue("");
+  });
+
+  it("reports no match rather than an empty specification table when nothing survives the filter", async () => {
+    const user = userEvent.setup();
+    render(<CheckSummary summaries={[summary()]} />);
+
+    await user.type(screen.getByLabelText("Filter all results by element name or GlobalId"), "g-nope");
+
+    expect(screen.getByText("No issues match the current filters.")).toBeInTheDocument();
+    expect(screen.queryByText("Walls are fire rated")).not.toBeInTheDocument();
   });
 });
