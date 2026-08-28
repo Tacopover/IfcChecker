@@ -410,6 +410,14 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
 
   return (
     <div className="builder">
+      <header className="builder-head">
+        <h1>IDS Rule Builder</h1>
+        <p className="lede">
+          Build buildingSMART IDS (Information Delivery Specification) rule sets from a real IFC
+          model — entirely in your browser, with no server and no upload.
+        </p>
+      </header>
+
       <div className="loadbar">
         <div className="loadfile">
           <label htmlFor="builder-model">IFC file (one worked example)</label>
