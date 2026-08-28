@@ -1636,6 +1636,23 @@ pre.xml .v {
   font-size: 0.95rem;
 }
 
+.about-ids {
+  margin: 0.65rem 0 0;
+  max-width: 62ch;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.about-ids summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.about-ids p {
+  margin: 0.4rem 0 0;
+}
+
 /* --- Step panels --- */
 
 .step {

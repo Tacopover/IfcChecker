@@ -7,7 +7,7 @@ describe("App", () => {
   it("starts on the IFC Checker page", () => {
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "IFC Checker" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "IFC IDS Validator" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Validate" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Build rules" })).not.toHaveAttribute("aria-current");
   });
@@ -18,10 +18,10 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Build rules" }));
     expect(screen.getByRole("heading", { name: "Build rules from a real file" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "IFC Checker" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "IFC IDS Validator" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Validate" }));
-    expect(screen.getByRole("heading", { name: "IFC Checker" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "IFC IDS Validator" })).toBeInTheDocument();
   });
 
   it("sends a builder user with no parsed files back to the page that loads them", async () => {
@@ -31,7 +31,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Build rules" }));
     await user.click(screen.getByRole("button", { name: "Load IFC files" }));
 
-    expect(screen.getByRole("heading", { name: "IFC Checker" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "IFC IDS Validator" })).toBeInTheDocument();
     expect(screen.getByLabelText(/IFC files/)).toBeInTheDocument();
   });
 
