@@ -263,6 +263,54 @@ describe("CheckSummary", () => {
     expect(screen.queryByLabelText("Filter by rule id")).not.toBeInTheDocument();
   });
 
+  it("reports the full summaries up front, before any filter is applied", () => {
+    const onFilteredSummariesChange = vi.fn();
+    const summaries = [summary()];
+    render(<CheckSummary summaries={summaries} onFilteredSummariesChange={onFilteredSummariesChange} />);
+
+    expect(onFilteredSummariesChange).toHaveBeenCalledWith(summaries);
+  });
+
+  it("narrows only the specification whose issue table was filtered, leaving the others as-is", async () => {
+    const user = userEvent.setup();
+    const onFilteredSummariesChange = vi.fn();
+    const first = summary({ name: "First", violations: [violation({ id: "v1", elementGlobalId: "g1" })] });
+    const second = summary({
+      name: "Second",
+      applicableCount: 1,
+      passedCount: 0,
+      failedCount: 1,
+      violations: [violation({ id: "v2", elementGlobalId: "g2" })],
+    });
+    render(
+      <CheckSummary summaries={[first, second]} onFilteredSummariesChange={onFilteredSummariesChange} />
+    );
+
+    // Only the first failing specification opens by default.
+    await user.click(screen.getByRole("button", { name: /Show 1 issue for Second/ }));
+
+    const filterInputs = screen.getAllByLabelText("Filter by element name or GlobalId");
+    await user.type(filterInputs[0], "no-such-element");
+
+    const lastCall = onFilteredSummariesChange.mock.calls.at(-1)?.[0] as SpecificationSummary[];
+    expect(lastCall[0].violations).toEqual([]);
+    expect(lastCall[1].violations).toEqual(second.violations);
+  });
+
+  it("drops a specification's filter once its issue table is collapsed again", async () => {
+    const user = userEvent.setup();
+    const onFilteredSummariesChange = vi.fn();
+    render(<CheckSummary summaries={[summary()]} onFilteredSummariesChange={onFilteredSummariesChange} />);
+
+    await user.type(screen.getByLabelText("Filter by element name or GlobalId"), "no-such-element");
+    expect((onFilteredSummariesChange.mock.calls.at(-1)?.[0] as SpecificationSummary[])[0].violations).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: /Hide 1 issue/ }));
+
+    const lastCall = onFilteredSummariesChange.mock.calls.at(-1)?.[0] as SpecificationSummary[];
+    expect(lastCall[0].violations).toEqual([violation()]);
+  });
+
   it("decides expansion afresh when a new rule set is checked", () => {
     const { rerender } = render(<CheckSummary summaries={[summary({ name: "First" })]} />);
     expect(screen.getByText("West Wall")).toBeInTheDocument();

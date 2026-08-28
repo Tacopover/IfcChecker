@@ -138,6 +138,30 @@ describe("IssueTable", () => {
     expect(screen.getByText("Every element this rule applied to passed.")).toBeInTheDocument();
   });
 
+  it("reports the initial unfiltered rows once on mount", () => {
+    const onFilteredRowsChange = vi.fn();
+    render(<IssueTable results={makeManyResults(3)} onFilteredRowsChange={onFilteredRowsChange} />);
+
+    expect(onFilteredRowsChange).toHaveBeenCalledTimes(1);
+    expect(onFilteredRowsChange).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "r0" }),
+        expect.objectContaining({ id: "r1" }),
+        expect.objectContaining({ id: "r2" }),
+      ])
+    );
+  });
+
+  it("reports only the rows that survive a filter, for an export to pick up", async () => {
+    const user = userEvent.setup();
+    const onFilteredRowsChange = vi.fn();
+    render(<IssueTable results={makeManyResults(3)} onFilteredRowsChange={onFilteredRowsChange} />);
+
+    await user.type(screen.getByLabelText("Filter by element name or GlobalId"), "g2");
+
+    expect(onFilteredRowsChange).toHaveBeenLastCalledWith([expect.objectContaining({ id: "r2" })]);
+  });
+
   it("paginates instead of rendering every row when there are more issues than fit on one page", async () => {
     const user = userEvent.setup();
     render(<IssueTable results={makeManyResults(30)} />);

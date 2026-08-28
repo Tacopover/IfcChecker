@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   createColumnHelper,
   flexRender,
@@ -56,6 +56,13 @@ export interface IssueTableProps {
    * placement, the caller owns what goes in it.
    */
   renderDetails?: (row: IssueRow) => ReactNode;
+  /**
+   * Called with the rows that survive the current column filters — after filtering, before
+   * sorting or pagination — whenever that set changes. Lets a caller spread across several of
+   * these tables (one per specification) know what is actually on screen right now, e.g. to
+   * export it.
+   */
+  onFilteredRowsChange?: (rows: IssueRow[]) => void;
 }
 
 export function IssueTable({
@@ -64,6 +71,7 @@ export function IssueTable({
   selectedElementId,
   hideRuleColumn = false,
   renderDetails,
+  onFilteredRowsChange,
 }: IssueTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -131,6 +139,17 @@ export function IssueTable({
   function filterValue(columnId: string): string {
     return (table.getColumn(columnId)?.getFilterValue() as string) ?? "";
   }
+
+  // Read outside the effect's dependency list: react-table memoizes this model by its real
+  // inputs (data, columnFilters), so it's only a new reference when the filtered set actually
+  // changes. Depending on the callback itself instead would refire on every render where the
+  // caller passes a fresh inline function, without the rows having changed.
+  const filteredRowModel = table.getFilteredRowModel();
+  const onFilteredRowsChangeRef = useRef(onFilteredRowsChange);
+  onFilteredRowsChangeRef.current = onFilteredRowsChange;
+  useEffect(() => {
+    onFilteredRowsChangeRef.current?.(filteredRowModel.rows.map((row) => row.original));
+  }, [filteredRowModel]);
 
   const rows = table.getRowModel().rows;
 

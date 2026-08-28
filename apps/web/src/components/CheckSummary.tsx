@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { REQUIRED_CARDINALITY_EMPTY_MESSAGE } from "@ifc-qa/ids-validator";
 import type { SpecificationSummary } from "../local/parseAndValidate.js";
 import { IssueTable, type IssueRow } from "./IssueTable";
@@ -65,6 +65,13 @@ export interface CheckSummaryProps {
   selectedElementId?: string | null;
   /** Handed to the issue table, which opens it under the element it describes. */
   renderDetails?: (row: IssueRow) => ReactNode;
+  /**
+   * Called with `summaries`, each specification's violations swapped for whichever of them
+   * currently survive that specification's own issue-table filters, whenever any of those
+   * filters change. A specification that isn't open right now (so has no filter to apply)
+   * passes its full violation list through unchanged.
+   */
+  onFilteredSummariesChange?: (filtered: SpecificationSummary[]) => void;
 }
 
 export function CheckSummary({
@@ -72,24 +79,56 @@ export function CheckSummary({
   onSelectElement,
   selectedElementId,
   renderDetails,
+  onFilteredSummariesChange,
 }: CheckSummaryProps) {
   const [expanded, setExpanded] = useState<Set<number>>(() => initiallyExpanded(summaries));
   // A fresh check produces a new array; its expansion is decided from scratch rather than
   // inherited from whichever rows the previous rule set happened to have open.
   const [checked, setChecked] = useState(summaries);
+  // Keyed by specification index; holds only the specifications whose issue table is currently
+  // open and filtered. Collapsing a specification drops its entry, so a filter left behind on a
+  // table the user closed doesn't go on silently narrowing what gets exported.
+  const [filteredViolations, setFilteredViolations] = useState<Map<number, IssueRow[]>>(new Map());
   if (checked !== summaries) {
     setChecked(summaries);
     setExpanded(initiallyExpanded(summaries));
+    setFilteredViolations(new Map());
   }
 
   function toggle(index: number) {
     setExpanded((previous) => {
       const next = new Set(previous);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
+      if (next.has(index)) {
+        next.delete(index);
+        setFilteredViolations((prevFiltered) => {
+          if (!prevFiltered.has(index)) return prevFiltered;
+          const nextFiltered = new Map(prevFiltered);
+          nextFiltered.delete(index);
+          return nextFiltered;
+        });
+      } else {
+        next.add(index);
+      }
       return next;
     });
   }
+
+  const filteredSummaries = useMemo(
+    () =>
+      summaries.map((summary, index) => {
+        const override = filteredViolations.get(index);
+        return override ? { ...summary, violations: override } : summary;
+      }),
+    [summaries, filteredViolations]
+  );
+
+  useEffect(() => {
+    onFilteredSummariesChange?.(filteredSummaries);
+    // onFilteredSummariesChange isn't in the dependency list: the caller passes a plain state
+    // setter, but even a stable one shouldn't matter here — this only needs to refire when the
+    // filtered data itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSummaries]);
 
   const failing = summaries.filter((summary) => statusOf(summary) === "failed").length;
   const inert = summaries.filter((summary) => statusOf(summary) === "not-applied").length;
@@ -243,6 +282,13 @@ export function CheckSummary({
                           selectedElementId={selectedElementId}
                           renderDetails={renderDetails}
                           hideRuleColumn
+                          onFilteredRowsChange={(rows) => {
+                            setFilteredViolations((previous) => {
+                              const next = new Map(previous);
+                              next.set(index, rows);
+                              return next;
+                            });
+                          }}
                         />
                       </td>
                     </tr>
