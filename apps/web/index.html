@@ -3,10 +3,60 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>IFC QA Tool</title>
+    <title>IFC IDS Validator — Check IFC Models Against buildingSMART IDS</title>
+    <meta
+      name="description"
+      content="Validate IFC building models against buildingSMART IDS (Information Delivery Specification) rule sets, entirely in your browser. Free IFC IDS checker — no upload, no server, no signup."
+    />
+    <link rel="canonical" href="https://ifc-ids.com/" />
+    <meta name="theme-color" content="#2563eb" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ifc-ids.com/" />
+    <meta property="og:site_name" content="IFC IDS Validator" />
+    <meta property="og:title" content="IFC IDS Validator — Check IFC Models Against buildingSMART IDS" />
+    <meta
+      property="og:description"
+      content="Validate IFC building models against buildingSMART IDS rule sets, entirely in your browser. Free, no upload, no signup."
+    />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="IFC IDS Validator — Check IFC Models Against buildingSMART IDS" />
+    <meta
+      name="twitter:description"
+      content="Validate IFC building models against buildingSMART IDS rule sets, entirely in your browser. Free, no upload, no signup."
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "IFC IDS Validator",
+        "url": "https://ifc-ids.com/",
+        "description": "Validate IFC building models against buildingSMART IDS (Information Delivery Specification) rule sets, entirely in your browser. Free IFC IDS checker — no upload, no server, no signup.",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Any (runs in a web browser)",
+        "browserRequirements": "Requires JavaScript and WebAssembly support",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>IFC IDS Validator</h1>
+      <p>
+        Validate IFC building models against buildingSMART IDS (Information Delivery
+        Specification) rule sets, entirely in your browser. Load an IFC file and an IDS rule
+        set to check whether the model meets its requirements — no upload, no server, no
+        signup. This tool requires JavaScript to run.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

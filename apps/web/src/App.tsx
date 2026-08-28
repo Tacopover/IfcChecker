@@ -1,17 +1,17 @@
-import { useState } from "react";
-import { IfcCheckerPage } from "./routes/IfcCheckerPage";
 import { RuleBuilderPage } from "./builder/RuleBuilderPage";
+import { IfcCheckerPage } from "./routes/IfcCheckerPage";
+import { pathFor, useRoute, type RouteId } from "./routing";
+import { useDocumentMeta } from "./seo";
 import { LoadedModelsProvider } from "./state/loadedModels";
 
-type Tab = "validate" | "builder";
-
-const TABS: Array<{ id: Tab; label: string }> = [
+const TABS: Array<{ id: RouteId; label: string }> = [
   { id: "validate", label: "Validate" },
   { id: "builder", label: "Build rules" },
 ];
 
 export function App() {
-  const [tab, setTab] = useState<Tab>("validate");
+  const [tab, navigate] = useRoute();
+  useDocumentMeta(tab);
 
   return (
     <LoadedModelsProvider>
@@ -19,16 +19,19 @@ export function App() {
         <span className="brand">IFC Checker</span>
         <nav className="tabs" aria-label="Pages">
           {TABS.map((entry) => (
-            <button
+            <a
               key={entry.id}
-              type="button"
+              href={pathFor(entry.id)}
               className="tab"
               data-smoke-route={entry.id}
               aria-current={tab === entry.id ? "page" : undefined}
-              onClick={() => setTab(entry.id)}
+              onClick={(event) => {
+                event.preventDefault();
+                navigate(entry.id);
+              }}
             >
               {entry.label}
-            </button>
+            </a>
           ))}
         </nav>
       </header>
@@ -39,7 +42,7 @@ export function App() {
         <IfcCheckerPage />
       </div>
       <div hidden={tab !== "builder"}>
-        <RuleBuilderPage onGoToFiles={() => setTab("validate")} />
+        <RuleBuilderPage onGoToFiles={() => navigate("validate")} />
       </div>
     </LoadedModelsProvider>
   );
