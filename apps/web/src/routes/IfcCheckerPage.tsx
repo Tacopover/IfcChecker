@@ -11,8 +11,15 @@ import { parseWorkerClient } from "../local/parseWorkerClient.js";
 import { exportResultsAsBcf, exportResultsAsCsv, exportResultsAsExcel } from "../local/exportResults.js";
 import { CheckSummary } from "../components/CheckSummary";
 import { ElementDetails } from "../components/ElementDetails";
+import { ExportScopeDialog } from "../components/ExportScopeDialog";
 import type { IssueRow } from "../components/IssueTable";
 import { ModelStructureTree } from "../components/ModelStructureTree";
+
+type ExportKind = "csv" | "excel" | "bcf";
+
+function countViolations(summaries: SpecificationSummary[] | null): number {
+  return summaries?.reduce((total, summary) => total + summary.violations.length, 0) ?? 0;
+}
 
 export function IfcCheckerPage() {
   const { models, addFiles, applyParseOutcome, removeModel, clearModels } = useLoadedModels();
@@ -21,6 +28,10 @@ export function IfcCheckerPage() {
   const engine: EngineId = "ifc-lite";
   const [idsFile, setIdsFile] = useState<File | null>(null);
   const [results, setResults] = useState<SpecificationSummary[] | null>(null);
+  // Mirrors `results` with each specification's violations narrowed to whatever its issue
+  // table's own filters currently admit — see CheckSummary's onFilteredSummariesChange.
+  const [filteredResults, setFilteredResults] = useState<SpecificationSummary[] | null>(null);
+  const [pendingExport, setPendingExport] = useState<ExportKind | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<IssueRow | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [isParsing, setIsParsing] = useState(false);
@@ -74,6 +85,8 @@ export function IfcCheckerPage() {
   // set makes them a claim about something the user is no longer looking at.
   function dropStaleResults() {
     setResults(null);
+    setFilteredResults(null);
+    setPendingExport(null);
     setSelectedIssue(null);
     setCheckError(null);
     setExportError(null);
@@ -155,40 +168,40 @@ export function IfcCheckerPage() {
     }
   }
 
-  function handleExportCsv() {
-    if (!results || !idsFile) return;
+  async function runExport(kind: ExportKind, target: SpecificationSummary[]) {
+    if (!idsFile) return;
     setExportError(null);
+    if (kind === "excel") setIsExportingExcel(true);
+    if (kind === "bcf") setIsExportingBcf(true);
     try {
-      exportResultsAsCsv(results, idsFile.name, engine);
-    } catch (error) {
-      setExportError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function handleExportExcel() {
-    if (!results || !idsFile) return;
-    setExportError(null);
-    setIsExportingExcel(true);
-    try {
-      await exportResultsAsExcel(results, idsFile.name, engine);
+      if (kind === "csv") exportResultsAsCsv(target, idsFile.name, engine);
+      else if (kind === "excel") await exportResultsAsExcel(target, idsFile.name, engine);
+      else await exportResultsAsBcf(target, idsFile.name, engine);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsExportingExcel(false);
+      setIsExportingBcf(false);
     }
   }
 
-  async function handleExportBcf() {
+  // A filter narrows the issue tables underneath results, not `results` itself — exporting
+  // has to ask which one was meant rather than silently picking either.
+  function requestExport(kind: ExportKind) {
     if (!results || !idsFile) return;
-    setExportError(null);
-    setIsExportingBcf(true);
-    try {
-      await exportResultsAsBcf(results, idsFile.name, engine);
-    } catch (error) {
-      setExportError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsExportingBcf(false);
+    if (filteredResults && countViolations(filteredResults) < countViolations(results)) {
+      setPendingExport(kind);
+      return;
     }
+    void runExport(kind, results);
+  }
+
+  function handleChooseExportScope(scope: "filtered" | "all") {
+    const kind = pendingExport;
+    setPendingExport(null);
+    const target = scope === "filtered" ? filteredResults : results;
+    if (!kind || !target) return;
+    void runExport(kind, target);
   }
 
   function handleReset() {
@@ -431,14 +444,14 @@ export function IfcCheckerPage() {
 
           <div className="step-body">
             <div className="step-actions">
-              <button type="button" className="secondary" onClick={handleExportCsv}>
+              <button type="button" className="secondary" onClick={() => requestExport("csv")}>
                 Export CSV
               </button>
               <button
                 type="button"
                 className="secondary"
                 disabled={isExportingExcel}
-                onClick={handleExportExcel}
+                onClick={() => requestExport("excel")}
               >
                 {isExportingExcel ? "Exporting..." : "Export Excel"}
               </button>
@@ -446,12 +459,20 @@ export function IfcCheckerPage() {
                 type="button"
                 className="secondary"
                 disabled={isExportingBcf}
-                onClick={handleExportBcf}
+                onClick={() => requestExport("bcf")}
               >
                 {isExportingBcf ? "Exporting..." : "Export BCF"}
               </button>
             </div>
             {exportError && <p role="alert">{exportError}</p>}
+
+            <ExportScopeDialog
+              open={pendingExport !== null}
+              filteredCount={countViolations(filteredResults)}
+              totalCount={countViolations(results)}
+              onChoose={handleChooseExportScope}
+              onCancel={() => setPendingExport(null)}
+            />
 
             {/* The panel opens inside the table, under the row that was clicked, so
                 reading an element never costs a trip to the bottom of the page and back. */}
@@ -459,6 +480,7 @@ export function IfcCheckerPage() {
               summaries={results}
               onSelectElement={setSelectedIssue}
               selectedElementId={selectedIssue?.id ?? null}
+              onFilteredSummariesChange={setFilteredResults}
               renderDetails={(row) => (
                 <div ref={detailsRef}>
                   <ElementDetails

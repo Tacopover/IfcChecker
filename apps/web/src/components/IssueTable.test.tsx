@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IssueTable, type IssueRow } from "./IssueTable";
+import { EMPTY_ISSUE_FILTER } from "./issueFilter";
 import { elementResultsFixture } from "../test/mocks/fixtures";
 
 const fixtureRows: IssueRow[] = elementResultsFixture.map((result) => ({
@@ -136,6 +137,37 @@ describe("IssueTable", () => {
     render(<IssueTable results={[]} />);
 
     expect(screen.getByText("Every element this rule applied to passed.")).toBeInTheDocument();
+  });
+
+  // Owned by the caller so it can outlive this table: a collapsed specification is still
+  // filtered, and what it would export has to be countable without the table on screen.
+  it("hands a typed filter to the caller that owns it instead of keeping it", async () => {
+    const user = userEvent.setup();
+    const onFilterChange = vi.fn();
+    render(
+      <IssueTable
+        results={makeManyResults(3)}
+        filter={EMPTY_ISSUE_FILTER}
+        onFilterChange={onFilterChange}
+      />
+    );
+
+    await user.type(screen.getByLabelText("Filter by element name or GlobalId"), "g");
+
+    expect(onFilterChange).toHaveBeenLastCalledWith({ ...EMPTY_ISSUE_FILTER, element: "g" });
+  });
+
+  it("shows only the rows a caller-owned filter admits", () => {
+    render(
+      <IssueTable
+        results={makeManyResults(3)}
+        filter={{ ...EMPTY_ISSUE_FILTER, element: "g2" }}
+        onFilterChange={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText("Wall 0")).not.toBeInTheDocument();
+    expect(screen.getByText("Wall 2")).toBeInTheDocument();
   });
 
   it("paginates instead of rendering every row when there are more issues than fit on one page", async () => {

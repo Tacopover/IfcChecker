@@ -567,6 +567,27 @@ describe("IfcCheckerPage", () => {
       await screen.findByRole("heading", { name: "Results" });
     }
 
+    async function checkTwoFailures(user: ReturnType<typeof userEvent.setup>) {
+      parse.mockResolvedValueOnce({
+        elements: [
+          { globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
+          { globalId: "g2", ifcType: "IFCWALL", predefinedType: null, name: "Wall-2", attributes: {}, propertySets: {} },
+        ],
+        parseMs: 12,
+      });
+      validateBySpecification.mockReturnValueOnce([
+        outcome([
+          violation({ elementGlobalId: "g1", elementName: "Wall-1", message: "First violation" }),
+          violation({ elementGlobalId: "g2", elementName: "Wall-2", message: "Second violation" }),
+        ]),
+      ]);
+
+      await parseFiles(user, makeFile("model-a.ifc"));
+      await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.ids", "<ids/>"));
+      await user.click(screen.getByRole("button", { name: "Check files" }));
+      await screen.findByRole("heading", { name: "Results" });
+    }
+
     it("downloads a CSV named after the rule set once results exist", async () => {
       const user = userEvent.setup();
       const createObjectURL = vi.fn((_blob: Blob) => "blob:csv");
@@ -659,6 +680,84 @@ describe("IfcCheckerPage", () => {
 
       expect(await screen.findByRole("alert")).toHaveTextContent("zip generation failed");
       expect(screen.getByRole("button", { name: "Export BCF" })).toBeEnabled();
+    });
+
+    describe("filtered export scope", () => {
+      function mockCsvDownload(): { text: () => Promise<string> } {
+        let capturedBlob: Blob | null = null;
+        URL.createObjectURL = vi.fn((blob: Blob) => {
+          capturedBlob = blob;
+          return "blob:csv";
+        });
+        URL.revokeObjectURL = vi.fn();
+        vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+        return { text: () => capturedBlob!.text() };
+      }
+
+      it("exports without asking when the results table has no active filter", async () => {
+        const user = userEvent.setup();
+        const download = mockCsvDownload();
+
+        renderPage();
+        await checkTwoFailures(user);
+        await user.click(screen.getByRole("button", { name: "Export CSV" }));
+
+        expect(screen.queryByText(/active filter/i)).not.toBeInTheDocument();
+        const text = await download.text();
+        expect(text).toContain("Wall-1");
+        expect(text).toContain("Wall-2");
+      });
+
+      it("asks which set to export once the issue table is filtered, and exports only the filtered rows on request", async () => {
+        const user = userEvent.setup();
+        const download = mockCsvDownload();
+
+        renderPage();
+        await checkTwoFailures(user);
+        await user.type(screen.getByLabelText("Filter by element name or GlobalId"), "Wall-1");
+
+        await user.click(screen.getByRole("button", { name: "Export CSV" }));
+        expect(await screen.findByText(/active filter/i)).toBeInTheDocument();
+
+        await user.click(screen.getByRole("button", { name: "Export filtered (1)" }));
+
+        const text = await download.text();
+        expect(text).toContain("Wall-1");
+        expect(text).not.toContain("Wall-2");
+      });
+
+      it("exports every row when the user picks \"all\" from the export scope prompt", async () => {
+        const user = userEvent.setup();
+        const download = mockCsvDownload();
+
+        renderPage();
+        await checkTwoFailures(user);
+        await user.type(screen.getByLabelText("Filter by element name or GlobalId"), "Wall-1");
+
+        await user.click(screen.getByRole("button", { name: "Export CSV" }));
+        await user.click(screen.getByRole("button", { name: "Export all (2)" }));
+
+        const text = await download.text();
+        expect(text).toContain("Wall-1");
+        expect(text).toContain("Wall-2");
+      });
+
+      it("exports nothing when the export scope prompt is cancelled", async () => {
+        const user = userEvent.setup();
+        const createObjectURL = vi.fn(() => "blob:csv");
+        URL.createObjectURL = createObjectURL;
+        URL.revokeObjectURL = vi.fn();
+
+        renderPage();
+        await checkTwoFailures(user);
+        await user.type(screen.getByLabelText("Filter by element name or GlobalId"), "Wall-1");
+
+        await user.click(screen.getByRole("button", { name: "Export CSV" }));
+        await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+        expect(screen.queryByText(/active filter/i)).not.toBeInTheDocument();
+        expect(createObjectURL).not.toHaveBeenCalled();
+      });
     });
   });
 });

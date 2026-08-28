@@ -3,14 +3,18 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
-  type ColumnFiltersState,
   type SortingState,
 } from "@tanstack/react-table";
 import type { ElementResult } from "@ifc-qa/shared-types";
+import {
+  elementLabel,
+  EMPTY_ISSUE_FILTER,
+  filterIssueRows,
+  type IssueFilter,
+} from "./issueFilter";
 
 export interface IssueRow extends ElementResult {
   fileName: string;
@@ -20,11 +24,6 @@ export interface IssueRow extends ElementResult {
 }
 
 const columnHelper = createColumnHelper<IssueRow>();
-
-/** Name and GlobalId in one searchable string: a reviewer arrives with one or the other. */
-function elementLabel(row: IssueRow): string {
-  return `${row.elementName ?? ""} ${row.elementGlobalId}`.trim();
-}
 
 // A run can produce thousands of violations across a large batch; rendering
 // every row into the DOM unconditionally risks a slow/janky table at that
@@ -56,6 +55,13 @@ export interface IssueTableProps {
    * placement, the caller owns what goes in it.
    */
   renderDetails?: (row: IssueRow) => ReactNode;
+  /**
+   * The table's own filter, lifted. A caller passes this pair to keep the filter alive while the
+   * table is unmounted — collapsing a specification must not quietly widen what gets exported —
+   * and to be able to clear it from outside. Left out, the table keeps its filter itself.
+   */
+  filter?: IssueFilter;
+  onFilterChange?: (filter: IssueFilter) => void;
 }
 
 export function IssueTable({
@@ -64,11 +70,23 @@ export function IssueTable({
   selectedElementId,
   hideRuleColumn = false,
   renderDetails,
+  filter,
+  onFilterChange,
 }: IssueTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [ownFilter, setOwnFilter] = useState<IssueFilter>(EMPTY_ISSUE_FILTER);
 
-  const data = useMemo(() => results, [results]);
+  const activeFilter = filter ?? ownFilter;
+
+  function setField(field: keyof IssueFilter, value: string) {
+    const next = { ...activeFilter, [field]: value };
+    if (onFilterChange) onFilterChange(next);
+    else setOwnFilter(next);
+  }
+
+  // Filtered here rather than by react-table: the same rows have to be countable by a caller
+  // whose table isn't mounted, so one predicate (see issueFilter.ts) decides it for both.
+  const data = useMemo(() => filterIssueRows(results, activeFilter), [results, activeFilter]);
 
   const columns = useMemo(
     () => [
@@ -118,32 +136,30 @@ export function IssueTable({
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, columnFilters, columnVisibility: { ruleId: !hideRuleColumn } },
+    state: { sorting, columnVisibility: { ruleId: !hideRuleColumn } },
     initialState: { pagination: { pageSize: PAGE_SIZE } },
     onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
-
-  function filterValue(columnId: string): string {
-    return (table.getColumn(columnId)?.getFilterValue() as string) ?? "";
-  }
 
   const rows = table.getRowModel().rows;
 
   return (
     <div className="issue-table">
       <div role="group" aria-label="Issue filters" className="issue-filters">
+        <div className="filters-head">
+          <h4>Filter this specification</h4>
+          <p>Narrows only the issues listed here, on top of the filters above the results.</p>
+        </div>
         <label>
           Element
           <input
             type="text"
             aria-label="Filter by element name or GlobalId"
-            value={filterValue("element")}
-            onChange={(e) => table.getColumn("element")?.setFilterValue(e.target.value)}
+            value={activeFilter.element}
+            onChange={(e) => setField("element", e.target.value)}
           />
         </label>
         <label>
@@ -151,8 +167,8 @@ export function IssueTable({
           <input
             type="text"
             aria-label="Filter by file name"
-            value={filterValue("fileName")}
-            onChange={(e) => table.getColumn("fileName")?.setFilterValue(e.target.value)}
+            value={activeFilter.fileName}
+            onChange={(e) => setField("fileName", e.target.value)}
           />
         </label>
         <label>
@@ -160,8 +176,8 @@ export function IssueTable({
           <input
             type="text"
             aria-label="Filter by element type"
-            value={filterValue("elementType")}
-            onChange={(e) => table.getColumn("elementType")?.setFilterValue(e.target.value)}
+            value={activeFilter.elementType}
+            onChange={(e) => setField("elementType", e.target.value)}
           />
         </label>
         {!hideRuleColumn && (
@@ -170,8 +186,8 @@ export function IssueTable({
             <input
               type="text"
               aria-label="Filter by rule id"
-              value={filterValue("ruleId")}
-              onChange={(e) => table.getColumn("ruleId")?.setFilterValue(e.target.value)}
+              value={activeFilter.ruleId}
+              onChange={(e) => setField("ruleId", e.target.value)}
             />
           </label>
         )}
@@ -179,8 +195,8 @@ export function IssueTable({
           Severity
           <select
             aria-label="Filter by severity"
-            value={filterValue("severity")}
-            onChange={(e) => table.getColumn("severity")?.setFilterValue(e.target.value || undefined)}
+            value={activeFilter.severity}
+            onChange={(e) => setField("severity", e.target.value)}
           >
             <option value="">All</option>
             <option value="error">error</option>
