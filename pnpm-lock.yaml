@@ -16,7 +16,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.10
-        version: 4.1.10(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(vite@8.1.5(@types/node@22.20.1))
+        version: 4.1.10(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(vite@8.1.5(@types/node@22.20.1))
 
   apps/web:
     dependencies:
@@ -65,7 +65,7 @@ importers:
         version: 6.0.3(vite@8.1.5(@types/node@22.20.1))
       jsdom:
         specifier: ^29.1.1
-        version: 29.1.1(@noble/hashes@2.2.0)
+        version: 29.1.1(@noble/hashes@2.4.0)
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
@@ -74,7 +74,7 @@ importers:
         version: 8.1.5(@types/node@22.20.1)
       vitest:
         specifier: ^4.1.10
-        version: 4.1.10(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(vite@8.1.5(@types/node@22.20.1))
+        version: 4.1.10(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(vite@8.1.5(@types/node@22.20.1))
 
   packages/ids-validator:
     dependencies:
@@ -93,7 +93,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^2.1.4
-        version: 2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
+        version: 2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
       xmllint-wasm:
         specifier: ^5.3.0
         version: 5.3.0(@types/node@22.20.1)
@@ -101,11 +101,11 @@ importers:
   packages/parser-adapters:
     dependencies:
       '@ifc-lite/data':
-        specifier: ^2.8.0
-        version: 2.8.0
+        specifier: ^3.5.1
+        version: 3.5.1
       '@ifc-lite/parser':
-        specifier: ^3.10.1
-        version: 3.10.1
+        specifier: ^4.3.2
+        version: 4.3.2
       '@ifc-qa/shared-types':
         specifier: workspace:*
         version: link:../shared-types
@@ -118,7 +118,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^2.1.4
-        version: 2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
+        version: 2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
 
   packages/report-generator:
     dependencies:
@@ -149,7 +149,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^2.1.4
-        version: 2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
+        version: 2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
       xmllint-wasm:
         specifier: ^5.3.0
         version: 5.3.0(@types/node@22.20.1)
@@ -165,7 +165,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^2.1.4
-        version: 2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
+        version: 2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
 
 packages:
 
@@ -401,26 +401,26 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@ifc-lite/data@2.8.0':
-    resolution: {integrity: sha512-HpUJjGReIxRpO3uvN44lT8ul4beo5LGEI1D1J+BejoBSXyVeSv6x9sngrdaEofjFqMkB7QY92ARS73eViDnGNA==}
+  '@ifc-lite/data@3.5.1':
+    resolution: {integrity: sha512-P09Z47hsvVfb9t/i/BJZwGrL/9M5qYnz6/VL6m4st+eUVJdif1CC81ZAfSydI+i4axfdFxjQJUUzDUD4ZaBx0w==}
 
-  '@ifc-lite/encoding@1.14.11':
-    resolution: {integrity: sha512-hGIJOlIjQ2I9SrlnLcM8vuN3sgwOzOotQ+RgSQsG9zT8qKBPF0EQJLugi/Zj87NM4qsJHrF+BhyRXto/UmM7Tg==}
+  '@ifc-lite/encoding@2.1.0':
+    resolution: {integrity: sha512-MyDR0+CPw7z8d19gxAqk/6mv4R+v0uQyNJbrhgMzflPlBt5k88o0KkYE7sCLZLpz2Oy3HWmiCM/3PnRgQ7XT7w==}
 
-  '@ifc-lite/ifcx@2.3.1':
-    resolution: {integrity: sha512-cWuT3WyHUruUHe401NL6jwhy1SwxGK1iFg1PS5dJ0ck1Wg5BHh3CdZKKvGUhStf9jwEcAxXEJ6Lk3H7BGMwE8Q==}
+  '@ifc-lite/ifcx@3.0.1':
+    resolution: {integrity: sha512-V/kogyKIu/8mQtRgwvTyj3TX+bFL+h1rmQgi6pBPTEwoHjPD4CmLySQ77AS1x0DJWIPrGMfLWCCevtFybRcxLA==}
 
-  '@ifc-lite/mutations@1.21.0':
-    resolution: {integrity: sha512-uPExtk0iWs0CQMT9KzmLEkeosxVn2nmprHGRzYEw7T3YpWJpwtPp2I1ULgM5fbzlBQ9uM/m0bhFflOp45W94uA==}
+  '@ifc-lite/mutations@1.27.0':
+    resolution: {integrity: sha512-iw7Sgb+W7Xxa51Z7FDk+H/EZQr3e9QwolJgoUITm7IENNDleH6EqPkD/6CSrPxPRF1IdqgjcJox+VVhS04jzdA==}
 
-  '@ifc-lite/parser@3.10.1':
-    resolution: {integrity: sha512-wFnOiq+R9VARPsOnFe4EsiCpOONYK7hk04nL2WVUbK/z85gmzVOO4DNI+j9x7KjLJcSJYzVIjn/xuRaaIp+RoQ==}
+  '@ifc-lite/parser@4.3.2':
+    resolution: {integrity: sha512-zTN8brA20rg44x7yNgBxwnipMBa71e6AnjRMuEthuB3dSUb7dfT/HzIp71KefBPBINta/lqbFnstB+6GagXwxQ==}
 
-  '@ifc-lite/pointcloud@0.4.0':
-    resolution: {integrity: sha512-CUH+eXzLQhhiLLscw7Z9MOCLkcu6dcJHVruJloE+2Sdzqw/i6neJWPyhYFJku0UhhoPYyu70Y5kR9RSgCt+ogQ==}
+  '@ifc-lite/pointcloud@0.7.1':
+    resolution: {integrity: sha512-j9C8Ss1WHzweIz/dpCoeOb3uU19cEa+7IL7utq4K1GIm+qp2zqoAJ1t0iTPu8AhG1SKEN9Aydrth1qzYYwe5Sw==}
 
-  '@ifc-lite/wasm@4.1.1':
-    resolution: {integrity: sha512-+DJb7SPS6neXhpl7rE1617Re615ot0bKpRYK1/m/noP2Xm6WXP5R8ZLUhxWReBkNfnClWMpLVrgX3k1K0KmyGA==}
+  '@ifc-lite/wasm@6.1.1':
+    resolution: {integrity: sha512-USR/3IxNFaIhYcJIxE22YBdWwJcg/3g7fOsn78h8mCiXAXCgPdgj5onef14PpZwuEfNeLoMRYYxxEnM0ImCeNA==}
 
   '@inquirer/ansi@2.0.7':
     resolution: {integrity: sha512-3eTuUO1vH2cZm2ZKHeQxnOqlTi9EfZDGgIe3BL3I4u+rJHocr9Fz86M4fjYABPvFnQG/gGK551HqDiIcETwU6Q==}
@@ -478,8 +478,8 @@ packages:
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
 
-  '@noble/hashes@2.2.0':
-    resolution: {integrity: sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==}
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
     engines: {node: '>= 20.19.0'}
 
   '@nodable/entities@3.0.0':
@@ -2081,9 +2081,9 @@ snapshots:
   '@esbuild/win32-x64@0.21.5':
     optional: true
 
-  '@exodus/bytes@1.15.1(@noble/hashes@2.2.0)':
+  '@exodus/bytes@1.15.1(@noble/hashes@2.4.0)':
     optionalDependencies:
-      '@noble/hashes': 2.2.0
+      '@noble/hashes': 2.4.0
 
   '@fast-csv/format@4.3.5':
     dependencies:
@@ -2104,35 +2104,38 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@ifc-lite/data@2.8.0': {}
-
-  '@ifc-lite/encoding@1.14.11': {}
-
-  '@ifc-lite/ifcx@2.3.1':
+  '@ifc-lite/data@3.5.1':
     dependencies:
-      '@ifc-lite/data': 2.8.0
-      '@ifc-lite/mutations': 1.21.0
-      '@ifc-lite/pointcloud': 0.4.0
-      '@noble/hashes': 2.2.0
+      '@ifc-lite/encoding': 2.1.0
 
-  '@ifc-lite/mutations@1.21.0':
-    dependencies:
-      '@ifc-lite/data': 2.8.0
-      '@noble/hashes': 2.2.0
+  '@ifc-lite/encoding@2.1.0': {}
 
-  '@ifc-lite/parser@3.10.1':
+  '@ifc-lite/ifcx@3.0.1':
     dependencies:
-      '@ifc-lite/data': 2.8.0
-      '@ifc-lite/encoding': 1.14.11
-      '@ifc-lite/ifcx': 2.3.1
-      '@ifc-lite/wasm': 4.1.1
+      '@ifc-lite/data': 3.5.1
+      '@ifc-lite/mutations': 1.27.0
+      '@ifc-lite/pointcloud': 0.7.1
+      '@noble/hashes': 2.4.0
+
+  '@ifc-lite/mutations@1.27.0':
+    dependencies:
+      '@ifc-lite/data': 3.5.1
+      '@noble/hashes': 2.4.0
+
+  '@ifc-lite/parser@4.3.2':
+    dependencies:
+      '@ifc-lite/data': 3.5.1
+      '@ifc-lite/encoding': 2.1.0
+      '@ifc-lite/ifcx': 3.0.1
+      '@ifc-lite/wasm': 6.1.1
+      fflate: 0.8.3
       jszip: 3.10.1
 
-  '@ifc-lite/pointcloud@0.4.0':
+  '@ifc-lite/pointcloud@0.7.1':
     dependencies:
       laz-perf: 0.0.7
 
-  '@ifc-lite/wasm@4.1.1': {}
+  '@ifc-lite/wasm@6.1.1': {}
 
   '@inquirer/ansi@2.0.7':
     optional: true
@@ -2189,7 +2192,7 @@ snapshots:
 
   '@noble/hashes@1.8.0': {}
 
-  '@noble/hashes@2.2.0': {}
+  '@noble/hashes@2.4.0': {}
 
   '@nodable/entities@3.0.0': {}
 
@@ -2692,10 +2695,10 @@ snapshots:
 
   csstype@3.2.3: {}
 
-  data-urls@7.0.0(@noble/hashes@2.2.0):
+  data-urls@7.0.0(@noble/hashes@2.4.0):
     dependencies:
       whatwg-mimetype: 5.0.0
-      whatwg-url: 16.0.1(@noble/hashes@2.2.0)
+      whatwg-url: 16.0.1(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - '@noble/hashes'
 
@@ -2872,9 +2875,9 @@ snapshots:
       set-cookie-parser: 3.1.2
     optional: true
 
-  html-encoding-sniffer@6.0.0(@noble/hashes@2.2.0):
+  html-encoding-sniffer@6.0.0(@noble/hashes@2.4.0):
     dependencies:
-      '@exodus/bytes': 1.15.1(@noble/hashes@2.2.0)
+      '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - '@noble/hashes'
 
@@ -2907,17 +2910,17 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  jsdom@29.1.1(@noble/hashes@2.2.0):
+  jsdom@29.1.1(@noble/hashes@2.4.0):
     dependencies:
       '@asamuzakjp/css-color': 5.1.11
       '@asamuzakjp/dom-selector': 7.1.1
       '@bramus/specificity': 2.4.2
       '@csstools/css-syntax-patches-for-csstree': 1.1.6(css-tree@3.2.1)
-      '@exodus/bytes': 1.15.1(@noble/hashes@2.2.0)
+      '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
       css-tree: 3.2.1
-      data-urls: 7.0.0(@noble/hashes@2.2.0)
+      data-urls: 7.0.0(@noble/hashes@2.4.0)
       decimal.js: 10.6.0
-      html-encoding-sniffer: 6.0.0(@noble/hashes@2.2.0)
+      html-encoding-sniffer: 6.0.0(@noble/hashes@2.4.0)
       is-potential-custom-element-name: 1.0.1
       lru-cache: 11.5.2
       parse5: 8.0.1
@@ -2928,7 +2931,7 @@ snapshots:
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
-      whatwg-url: 16.0.1(@noble/hashes@2.2.0)
+      whatwg-url: 16.0.1(@noble/hashes@2.4.0)
       xml-name-validator: 5.0.0
     transitivePeerDependencies:
       - '@noble/hashes'
@@ -3452,7 +3455,7 @@ snapshots:
       '@types/node': 22.20.1
       fsevents: 2.3.3
 
-  vitest@2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3)):
+  vitest@2.1.9(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.33.0)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3)):
     dependencies:
       '@vitest/expect': 2.1.9
       '@vitest/mocker': 2.1.9(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(vite@5.4.21(@types/node@22.20.1)(lightningcss@1.33.0))
@@ -3476,7 +3479,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.1
-      jsdom: 29.1.1(@noble/hashes@2.2.0)
+      jsdom: 29.1.1(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - less
       - lightningcss
@@ -3488,7 +3491,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@4.1.10(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(vite@8.1.5(@types/node@22.20.1)):
+  vitest@4.1.10(@types/node@22.20.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(vite@8.1.5(@types/node@22.20.1)):
     dependencies:
       '@vitest/expect': 4.1.10
       '@vitest/mocker': 4.1.10(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(vite@8.1.5(@types/node@22.20.1))
@@ -3512,7 +3515,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.1
-      jsdom: 29.1.1(@noble/hashes@2.2.0)
+      jsdom: 29.1.1(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - msw
 
@@ -3526,9 +3529,9 @@ snapshots:
 
   whatwg-mimetype@5.0.0: {}
 
-  whatwg-url@16.0.1(@noble/hashes@2.2.0):
+  whatwg-url@16.0.1(@noble/hashes@2.4.0):
     dependencies:
-      '@exodus/bytes': 1.15.1(@noble/hashes@2.2.0)
+      '@exodus/bytes': 1.15.1(@noble/hashes@2.4.0)
       tr46: 6.0.0
       webidl-conversions: 8.0.1
     transitivePeerDependencies:

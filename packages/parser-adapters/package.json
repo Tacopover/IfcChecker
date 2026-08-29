@@ -21,8 +21,8 @@
   "dependencies": {
     "@ifc-qa/shared-types": "workspace:*",
     "web-ifc": "^0.0.77",
-    "@ifc-lite/parser": "^3.10.1",
-    "@ifc-lite/data": "^2.8.0"
+    "@ifc-lite/parser": "^4.3.2",
+    "@ifc-lite/data": "^3.5.1"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
