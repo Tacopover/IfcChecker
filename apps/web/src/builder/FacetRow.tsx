@@ -1,6 +1,7 @@
 import type { ApplicabilityFacetDraft, FacetDraft } from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
 import { ConditionRow } from "./ConditionRow.js";
+import { ManualConditionRow } from "./ManualConditionRow.js";
 import { ClassificationRow } from "./ClassificationRow.js";
 import { MaterialRow } from "./MaterialRow.js";
 import { PartOfRow } from "./PartOfRow.js";
@@ -39,11 +40,19 @@ export function RequirementRow({
   onDelete,
 }: RowProps<FacetDraft> & { hits: number; matched: number }) {
   const shared = { source, hits, matched, touched, onTouch, onChange, onDuplicate, onDelete };
+  // Same switch WizardRequirementsStep makes for its own property/attribute row: with nothing in
+  // the loaded file (or no file loaded) to build a field list from, ConditionRow's two <select>s
+  // would offer no options at all.
+  const manual = source.total === 0;
 
   switch (facet.kind) {
     case "attribute":
     case "property":
-      return <ConditionRow condition={facet} {...shared} />;
+      return manual ? (
+        <ManualConditionRow condition={facet} {...shared} />
+      ) : (
+        <ConditionRow condition={facet} {...shared} />
+      );
     case "classification":
       return <ClassificationRow facet={facet} {...shared} />;
     case "material":
@@ -80,11 +89,16 @@ export function ApplicabilityRow({
     onDuplicate,
     onDelete,
   };
+  const manual = source.total === 0;
 
   switch (facet.kind) {
     case "attribute":
     case "property":
-      return <ConditionRow condition={facet} {...shared} />;
+      return manual ? (
+        <ManualConditionRow condition={facet} {...shared} />
+      ) : (
+        <ConditionRow condition={facet} {...shared} />
+      );
     case "classification":
       return <ClassificationRow facet={facet} {...shared} />;
     case "material":

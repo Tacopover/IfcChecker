@@ -17,7 +17,7 @@ describe("App", () => {
     render(<App />);
 
     await user.click(screen.getByRole("link", { name: "Build rules" }));
-    expect(screen.getByRole("heading", { name: "Build rules from a real file" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "IDS Rule Builder" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "IFC IDS Validator" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "Validate" }));

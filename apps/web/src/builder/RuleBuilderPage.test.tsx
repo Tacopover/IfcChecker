@@ -113,17 +113,42 @@ async function createRuleViaWizard(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("RuleBuilderPage", () => {
-  it("sends the user to the validate page when nothing has been parsed yet", async () => {
+  it("still offers the page, and a way back to load files, when nothing has been parsed yet", async () => {
     const onGoToFiles = vi.fn();
     const user = userEvent.setup();
     renderBuilder([], onGoToFiles);
 
-    expect(screen.getByRole("heading", { name: "Build rules from a real file" })).toBeInTheDocument();
     expect(screen.getByLabelText("IFC file (one worked example)")).toBeDisabled();
     expect(screen.getByRole("option", { name: "No parsed files yet" })).toBeInTheDocument();
+    // The rail that reads from a file has nothing to show yet, but the rest of the page (rules,
+    // import, the wizard) does not depend on one, so it renders anyway.
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Import an IDS file")).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Load IFC files" }));
     expect(onGoToFiles).toHaveBeenCalled();
+  });
+
+  it("lets a rule be authored with no IFC file loaded at all, and imports an .ids file the same way", async () => {
+    const user = userEvent.setup();
+    renderBuilder([]);
+
+    expect(
+      screen.getByText(/Load and parse an IFC file to browse its types and fields here/)
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    expect(screen.getByRole("heading", { name: /What does this rule apply to/ })).toBeInTheDocument();
+    // With no file, the picker starts on "show all IFC types" rather than an empty file-only list.
+    await user.type(screen.getByLabelText("Search IFC types"), "IfcWall");
+    await user.click(screen.getByRole("checkbox", { name: "IfcWall not in this file" }));
+    await user.click(screen.getByRole("button", { name: /Next: Narrow it down/ }));
+    await user.click(screen.getByRole("button", { name: /Skip: check all 0/ }));
+    await user.click(screen.getByRole("button", { name: "Next: Review →" }));
+    await user.click(screen.getByRole("button", { name: "Save rule ✓" }));
+
+    expect(screen.getByLabelText("Rule name")).toHaveValue("New rule");
+    expect(screen.getByText(/^1 rule/)).toBeInTheDocument();
   });
 
   it("offers the files already parsed on the validate page, and works from the first one", async () => {

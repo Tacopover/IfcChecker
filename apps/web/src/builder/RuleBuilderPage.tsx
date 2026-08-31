@@ -584,18 +584,12 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
           </span>
         )}
 
-        {/* The rest of the page reads its counts and field lists from a model, so an imported rule
-            has nothing to render against until one is parsed. */}
-        <label
-          className={`btn ghost importbtn${model ? "" : " is-disabled"}`}
-          title={model ? "Open an existing .ids file" : "Parse an IFC file first"}
-        >
+        <label className="btn ghost importbtn" title="Open an existing .ids file">
           Import .ids
           <input
             type="file"
             accept=".ids,.xml,application/xml,text/xml"
             aria-label="Import an IDS file"
-            disabled={!model}
             onChange={handleImport}
           />
         </label>
@@ -607,88 +601,97 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
         </p>
       )}
 
-      {!model || !selectionSource || selectionName === null ? (
-        <div className="empty-state">
-          <h2>Build rules from a real file</h2>
-          <p>
-            Everything offered here (types, property sets, values) comes from one of your own IFC
-            files, so the rules you write are rules it can actually be judged against. Load and parse
-            your files first, then pick one above.
-          </p>
-          {onGoToFiles && (
-            <button type="button" className="btn" onClick={onGoToFiles}>
-              Load IFC files
-            </button>
-          )}
-        </div>
-      ) : (
+      {(() => {
+        const hasSelection = model !== null && selectionSource !== null && selectionName !== null;
+        // Every reader of `model.fileName` below the gate used to be able to assume a model, back
+        // when the whole two-pane layout was hidden without one. It no longer is: a rule can be
+        // authored, and an .ids file imported, before any file is loaded — so those readers now
+        // fall back to this instead.
+        const fileLabel = model?.fileName ?? "your rule set";
+        return (
         <div className="wrap">
           <aside className="explorer">
-            <div className="explorer-intro">
-              <p>
-                Everything here comes from this file. Pick a type or an inherited group, then click a
-                field to add it as a condition.
-              </p>
-            </div>
+            {hasSelection ? (
+              <>
+                <div className="explorer-intro">
+                  <p>
+                    Everything here comes from this file. Pick a type or an inherited group, then
+                    click a field to add it as a condition.
+                  </p>
+                </div>
 
-            <section className="card">
-              <header>
-                <span className="micro">In your model</span>
-                <span className="tally">
-                  {introspection.entityTypes.length} types · {introspection.groups.length} groups
-                </span>
-              </header>
-              <div className="body">
-                <ModelTree
-                  nodes={introspection.tree}
-                  selectedName={selectionName}
-                  expanded={expanded}
-                  onSelect={handleSelect}
-                  onToggle={handleToggle}
+                <section className="card">
+                  <header>
+                    <span className="micro">In your model</span>
+                    <span className="tally">
+                      {introspection.entityTypes.length} types · {introspection.groups.length} groups
+                    </span>
+                  </header>
+                  <div className="body">
+                    <ModelTree
+                      nodes={introspection.tree}
+                      selectedName={selectionName as string}
+                      expanded={expanded}
+                      onSelect={handleSelect}
+                      onToggle={handleToggle}
+                    />
+                  </div>
+                </section>
+
+                <div className="target-strip">
+                  <label htmlFor="rule-target" className="micro">
+                    Add conditions to
+                  </label>
+                  <select
+                    id="rule-target"
+                    value={target}
+                    title={target === "new" ? "Create a new rule" : (rules.find((rule) => rule.id === target)?.name ?? "")}
+                    onChange={(event) => setTarget(event.target.value)}
+                  >
+                    <option value="new">+ Create a new rule</option>
+                    {rules.length > 0 && (
+                      <optgroup label="Existing rules">
+                        {rules.map((rule) => (
+                          <option key={rule.id} value={rule.id} title={rule.name}>
+                            {rule.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+
+                <div className="property-search">
+                  <input
+                    type="text"
+                    aria-label="Search properties"
+                    placeholder="Search properties…"
+                    value={propertySearch}
+                    onChange={(event) => setPropertySearch(event.target.value)}
+                  />
+                </div>
+
+                <SchemaCards
+                  source={selectionSource as FieldsForResult}
+                  selectionName={selectionName as string}
+                  groupTypeCount={selectedGroup ? selectedGroup.types.length : null}
+                  query={propertySearch}
+                  onAddField={handleAddField}
                 />
-              </div>
-            </section>
-
-            <div className="target-strip">
-              <label htmlFor="rule-target" className="micro">
-                Add conditions to
-              </label>
-              <select
-                id="rule-target"
-                value={target}
-                title={target === "new" ? "Create a new rule" : (rules.find((rule) => rule.id === target)?.name ?? "")}
-                onChange={(event) => setTarget(event.target.value)}
-              >
-                <option value="new">+ Create a new rule</option>
-                {rules.length > 0 && (
-                  <optgroup label="Existing rules">
-                    {rules.map((rule) => (
-                      <option key={rule.id} value={rule.id} title={rule.name}>
-                        {rule.name}
-                      </option>
-                    ))}
-                  </optgroup>
+              </>
+            ) : (
+              <div className="explorer-empty">
+                <p>
+                  Load and parse an IFC file to browse its types and fields here. You can still
+                  start a rule from scratch on the right, or import an existing .ids file above.
+                </p>
+                {onGoToFiles && (
+                  <button type="button" className="btn ghost" onClick={onGoToFiles}>
+                    Load IFC files
+                  </button>
                 )}
-              </select>
-            </div>
-
-            <div className="property-search">
-              <input
-                type="text"
-                aria-label="Search properties"
-                placeholder="Search properties…"
-                value={propertySearch}
-                onChange={(event) => setPropertySearch(event.target.value)}
-              />
-            </div>
-
-            <SchemaCards
-              source={selectionSource}
-              selectionName={selectionName}
-              groupTypeCount={selectedGroup ? selectedGroup.types.length : null}
-              query={propertySearch}
-              onAddField={handleAddField}
-            />
+              </div>
+            )}
           </aside>
 
           <main
@@ -705,7 +708,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
               <RuleWizard
                 introspection={introspection}
                 elements={builderElements}
-                fileName={model.fileName}
+                fileName={fileLabel}
                 onFinish={handleWizardFinish}
                 onCancel={() => setWizardOpen(false)}
               />
@@ -723,7 +726,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
 
                 <DocumentInfoPanel
                   info={documentInfo}
-                  titlePlaceholder={model.fileName}
+                  titlePlaceholder={fileLabel}
                   open={infoOpen}
                   onToggle={() => setInfoOpen((wasOpen) => !wasOpen)}
                   onChange={setDocumentInfo}
@@ -752,8 +755,9 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
                   <div>
                     <div className="t">Create a new rule</div>
                     <div className="d">
-                      Answer a few questions about what to check; we'll pull types, fields and
-                      real values straight from {model.fileName} as you go.
+                      {model
+                        ? `Answer a few questions about what to check; we'll pull types, fields and real values straight from ${model.fileName} as you go.`
+                        : "Answer a few questions about what to check; pick from the full IFC schema until a file is loaded."}
                     </div>
                   </div>
                   <button type="button" className="go" onClick={() => setWizardOpen(true)}>
@@ -764,7 +768,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
                 <IdsXmlPreview
                   rules={rules}
                   info={documentInfo}
-                  title={documentInfo.title || model.fileName}
+                  title={documentInfo.title || fileLabel}
                   refused={refused}
                   extraInfo={extraInfo}
                 />
@@ -772,7 +776,8 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             )}
           </main>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

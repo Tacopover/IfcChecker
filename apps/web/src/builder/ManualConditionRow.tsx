@@ -2,11 +2,12 @@ import type { ConditionDraft, ConditionalCardinality } from "@ifc-qa/ids-validat
 import { plainName, plainNameOf } from "@ifc-qa/ids-validator";
 import { CARDINALITIES } from "./ConditionRow.js";
 import { FacetValueEditor } from "./FacetValueEditor.js";
-import { FacetRowFrame, errorIdOf } from "./FacetRowFrame.js";
+import { FacetRowFrame, errorIdOf, rowNoun, type FacetSide } from "./FacetRowFrame.js";
 import { conditionProblem } from "./completeness.js";
 
 export interface ManualConditionRowProps {
   condition: ConditionDraft;
+  side?: FacetSide;
   touched: boolean;
   onTouch: () => void;
   onChange: (next: ConditionDraft) => void;
@@ -16,23 +17,27 @@ export interface ManualConditionRowProps {
 
 /**
  * The property/attribute sentence row for a rule whose whole applies-to selection has zero
- * elements in the loaded file (`WizardRequirementsStep` picks this over `ConditionRow` exactly
- * then). Mirrors `ConditionRow`'s shape but swaps its two `<select>`s — built from file-derived
- * lists, which render zero `<option>`s with nothing to observe — for free-typed text. The value
- * editor itself is unchanged: `FacetValueEditor` already renders a free-text input regardless of
- * whether `observed` holds anything, so it needs no manual variant of its own.
+ * elements in the loaded file — `WizardRequirementsStep` picks this over `RequirementRow` in the
+ * wizard, and `RequirementRow`/`ApplicabilityRow` (see FacetRow.tsx) pick it the same way for a
+ * rule already on the page, including one with no file loaded at all. Mirrors `ConditionRow`'s
+ * shape but swaps its two `<select>`s — built from file-derived lists, which render zero
+ * `<option>`s with nothing to observe — for free-typed text. The value editor itself is
+ * unchanged: `FacetValueEditor` already renders a free-text input regardless of whether
+ * `observed` holds anything, so it needs no manual variant of its own.
  *
  * No "Stored as" data-type picker: with no file there is nothing to declare a type from, and the
  * mockup's manual example omits it for the same reason.
  */
 export function ManualConditionRow({
   condition,
+  side = "requirements",
   touched,
   onTouch,
   onChange,
   onDuplicate,
   onDelete,
 }: ManualConditionRowProps) {
+  const selects = side === "applicability";
   const error = touched ? conditionProblem(condition) : null;
   const errorId = errorIdOf(condition.id);
 
@@ -47,6 +52,7 @@ export function ManualConditionRow({
   return (
     <FacetRowFrame
       id={condition.id}
+      side={side}
       prohibited={condition.cardinality === "prohibited"}
       // Always 0 of 0: this row only ever appears when the rule's whole applies-to selection has
       // no elements in the loaded file (see `WizardRequirementsStep`), so there is nothing to
@@ -55,7 +61,7 @@ export function ManualConditionRow({
       matched={0}
       instructions={condition.instructions}
       error={error}
-      what="condition"
+      what={rowNoun(side, condition.kind)}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
       onTouch={onTouch}
@@ -91,20 +97,24 @@ export function ManualConditionRow({
         onChange={(event) => onChange({ ...condition, name: plainName(event.target.value) })}
       />
 
-      <select
-        aria-label="Cardinality"
-        title="Whether the field has to be there at all"
-        value={condition.cardinality}
-        onChange={(event) =>
-          onChange({ ...condition, cardinality: event.target.value as ConditionalCardinality })
-        }
-      >
-        {CARDINALITIES.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.label}
-          </option>
-        ))}
-      </select>
+      {selects ? (
+        <span className="glue">selects only those where it must</span>
+      ) : (
+        <select
+          aria-label="Cardinality"
+          title="Whether the field has to be there at all"
+          value={condition.cardinality}
+          onChange={(event) =>
+            onChange({ ...condition, cardinality: event.target.value as ConditionalCardinality })
+          }
+        >
+          {CARDINALITIES.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      )}
 
       <FacetValueEditor
         id={condition.id}
