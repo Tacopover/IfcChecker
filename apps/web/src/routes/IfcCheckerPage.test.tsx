@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IfcCheckerPage } from "./IfcCheckerPage";
 import { LoadedModelsProvider } from "../state/loadedModels";
@@ -186,6 +186,37 @@ describe("IfcCheckerPage", () => {
     const table = screen.getByRole("table", { name: "IFC files" });
     expect(within(table).getByText("model-a.ifc")).toBeInTheDocument();
     expect(within(table).getByText("model-b.ifc")).toBeInTheDocument();
+  });
+
+  it("accepts an IFC file dropped onto the IFC dropzone", async () => {
+    renderPage();
+
+    const dropzone = screen.getByLabelText(/IFC files/).closest(".dropzone");
+    if (!dropzone) throw new Error("no dropzone around the IFC file input");
+    fireEvent.drop(dropzone, { dataTransfer: { files: [makeFile("dropped.ifc")] } });
+
+    const table = screen.getByRole("table", { name: "IFC files" });
+    expect(within(table).getByText("dropped.ifc")).toBeInTheDocument();
+  });
+
+  it("ignores a dropped file whose extension the IFC dropzone doesn't accept", async () => {
+    renderPage();
+
+    const dropzone = screen.getByLabelText(/IFC files/).closest(".dropzone");
+    if (!dropzone) throw new Error("no dropzone around the IFC file input");
+    fireEvent.drop(dropzone, { dataTransfer: { files: [makeFile("notes.txt")] } });
+
+    expect(screen.queryByRole("table", { name: "IFC files" })).not.toBeInTheDocument();
+  });
+
+  it("accepts an IDS file dropped onto the IDS dropzone", async () => {
+    renderPage();
+
+    const dropzone = screen.getByLabelText("IDS rule set (.ids or .xml)").closest(".dropzone");
+    if (!dropzone) throw new Error("no dropzone around the IDS file input");
+    fireEvent.drop(dropzone, { dataTransfer: { files: [makeFile("dropped.ids", "<ids/>")] } });
+
+    expect(screen.getByText("dropped.ids")).toBeInTheDocument();
   });
 
   it("resets the files and results back to the empty state", async () => {

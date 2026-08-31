@@ -1880,6 +1880,26 @@ pre.xml .v {
   min-width: 0;
 }
 
+.dropzone {
+  border-radius: 9px;
+  transition: background-color 0.1s ease;
+}
+
+.dropzone[data-dragging="true"] {
+  background: var(--accent-soft);
+}
+
+.dropzone[data-dragging="true"] input[type="file"] {
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+.drop-hint {
+  margin: 0.3rem 0 0;
+  color: var(--faint);
+  font-size: 0.78rem;
+}
+
 .checker input[type="file"] {
   width: 100%;
   max-width: 24rem;

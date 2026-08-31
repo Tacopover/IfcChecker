@@ -1,4 +1,13 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import type { EngineId } from "@ifc-qa/shared-types";
 import {
   parseFile,
@@ -19,6 +28,56 @@ type ExportKind = "csv" | "excel" | "bcf";
 
 function countViolations(summaries: SpecificationSummary[] | null): number {
   return summaries?.reduce((total, summary) => total + summary.violations.length, 0) ?? 0;
+}
+
+function hasExtension(file: File, extensions: string[]): boolean {
+  const name = file.name.toLowerCase();
+  return extensions.some((extension) => name.endsWith(extension));
+}
+
+interface FileDropzoneProps {
+  extensions: string[];
+  onFiles: (files: File[]) => void;
+  children: ReactNode;
+}
+
+/**
+ * Wraps a `.file-field` so the same drop target both opens the OS file picker (via the `<input>`
+ * inside it, unchanged) and accepts a drag-and-drop. Filters dropped files by extension itself —
+ * unlike a picker, a drop is not narrowed by the input's own `accept`.
+ */
+function FileDropzone({ extensions, onFiles, children }: FileDropzoneProps) {
+  const [dragging, setDragging] = useState(false);
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragging(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    // Only once the pointer actually leaves the zone, not when it crosses into a child element.
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setDragging(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragging(false);
+    const dropped = Array.from(event.dataTransfer.files).filter((file) => hasExtension(file, extensions));
+    if (dropped.length > 0) onFiles(dropped);
+  }
+
+  return (
+    <div
+      className="dropzone"
+      data-dragging={dragging}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function IfcCheckerPage() {
@@ -92,12 +151,21 @@ export function IfcCheckerPage() {
     setExportError(null);
   }
 
-  function handleIfcFilesChange(event: ChangeEvent<HTMLInputElement>) {
-    addFiles(Array.from(event.target.files ?? []));
+  function handleIfcFiles(files: File[]) {
+    addFiles(files);
     dropStaleResults();
+  }
+
+  function handleIfcFilesChange(event: ChangeEvent<HTMLInputElement>) {
+    handleIfcFiles(Array.from(event.target.files ?? []));
     // Clear the input so picking files again adds to the list instead of
     // being a no-op (the browser won't fire onChange for a repeat selection).
     event.target.value = "";
+  }
+
+  function handleIdsFile(file: File | null) {
+    setIdsFile(file);
+    dropStaleResults();
   }
 
   function handleRemoveIfcFile(key: string) {
@@ -262,16 +330,19 @@ export function IfcCheckerPage() {
 
         <div className="step-body">
           <div className="control-row">
-            <div className="file-field">
-              <label htmlFor="local-ifc-files">IFC files</label>
-              <input
-                id="local-ifc-files"
-                type="file"
-                multiple
-                accept=".ifc"
-                onChange={handleIfcFilesChange}
-              />
-            </div>
+            <FileDropzone extensions={[".ifc"]} onFiles={handleIfcFiles}>
+              <div className="file-field">
+                <label htmlFor="local-ifc-files">IFC files</label>
+                <input
+                  id="local-ifc-files"
+                  type="file"
+                  multiple
+                  accept=".ifc"
+                  onChange={handleIfcFilesChange}
+                />
+                <p className="drop-hint">or drop .ifc files here</p>
+              </div>
+            </FileDropzone>
           </div>
 
           {models.length > 0 && (
@@ -411,21 +482,21 @@ export function IfcCheckerPage() {
         </header>
 
         <div className="step-body">
-          <div className="file-field">
-            <label htmlFor="local-ids-file">IDS rule set (.ids or .xml)</label>
-            <input
-              key={`ids-${resetKey}`}
-              id="local-ids-file"
-              type="file"
-              // An IDS document is XML, but it is normally saved as .ids — a picker
-              // filtered to .xml alone hides the very files it is asking for.
-              accept=".ids,.xml,application/xml,text/xml"
-              onChange={(e) => {
-                setIdsFile(e.target.files?.[0] ?? null);
-                dropStaleResults();
-              }}
-            />
-          </div>
+          <FileDropzone extensions={[".ids", ".xml"]} onFiles={(files) => handleIdsFile(files[0] ?? null)}>
+            <div className="file-field">
+              <label htmlFor="local-ids-file">IDS rule set (.ids or .xml)</label>
+              <input
+                key={`ids-${resetKey}`}
+                id="local-ids-file"
+                type="file"
+                // An IDS document is XML, but it is normally saved as .ids — a picker
+                // filtered to .xml alone hides the very files it is asking for.
+                accept=".ids,.xml,application/xml,text/xml"
+                onChange={(e) => handleIdsFile(e.target.files?.[0] ?? null)}
+              />
+              <p className="drop-hint">or drop a .ids file here</p>
+            </div>
+          </FileDropzone>
 
           <div className="step-actions">
             <button type="button" disabled={!canCheck} onClick={handleCheck}>
