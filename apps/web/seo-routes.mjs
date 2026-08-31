@@ -17,4 +17,9 @@ export const ROUTES = {
     description:
       "Build buildingSMART IDS (Information Delivery Specification) rule sets from a real IFC model, entirely in your browser. No upload, no server, no signup — export a ready-to-use .ids file.",
   },
+  about: {
+    path: "/about/",
+    title: "About: IFC IDS Validator",
+    description: "What the IFC IDS Validator is, who built it, and where to find the source and MepSketcher.",
+  },
 };
