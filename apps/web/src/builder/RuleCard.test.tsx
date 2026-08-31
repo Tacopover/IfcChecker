@@ -60,12 +60,16 @@ function Harness({
   isActive = true,
   onDuplicate = () => {},
   onDelete = () => {},
+  orGroupSiblingNames = [],
+  onAddOrBranch = () => {},
 }: {
   initial?: RuleDraft;
   isOpen?: boolean;
   isActive?: boolean;
   onDuplicate?: () => void;
   onDelete?: () => void;
+  orGroupSiblingNames?: string[];
+  onAddOrBranch?: () => void;
 }) {
   const [rule, setRule] = useState(initial);
   const [open, setOpen] = useState(isOpen);
@@ -80,6 +84,8 @@ function Harness({
       showFailures={showFailures}
       onChange={setRule}
       onDuplicate={onDuplicate}
+      orGroupSiblingNames={orGroupSiblingNames}
+      onAddOrBranch={onAddOrBranch}
       onDelete={onDelete}
       onActivate={() => {}}
       onToggleOpen={() => setOpen((value) => !value)}
@@ -333,6 +339,23 @@ describe("RuleCard", () => {
     await user.click(screen.getByRole("button", { name: /^Delete rule/ }));
     expect(onDuplicate).toHaveBeenCalledOnce();
     expect(onDelete).toHaveBeenCalledOnce();
+  });
+
+  it("offers to add an OR condition, and shows no OR badge until it is linked to another rule", async () => {
+    const user = userEvent.setup();
+    const onAddOrBranch = vi.fn();
+    render(<Harness onAddOrBranch={onAddOrBranch} />);
+
+    expect(screen.queryByText("OR")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Add OR condition/ }));
+    expect(onAddOrBranch).toHaveBeenCalledOnce();
+  });
+
+  it("shows an OR badge naming its siblings once it is linked to another rule", () => {
+    render(<Harness orGroupSiblingNames={["Has ASML Systeemnaam property"]} />);
+
+    const badge = screen.getByText("OR");
+    expect(badge).toHaveAttribute("title", expect.stringContaining("Has ASML Systeemnaam property"));
   });
 
   it("removes an entity type from the applicability", async () => {

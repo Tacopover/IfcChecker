@@ -6,7 +6,7 @@ import type {
   UnitScales,
 } from "@ifc-qa/shared-types";
 import type { UnsupportedConstruct } from "@ifc-qa/ids-validator";
-import { isEvaluable, parseIdsXml, validateBySpecification } from "@ifc-qa/ids-validator";
+import { validateBySpecificationGrouped } from "@ifc-qa/ids-validator";
 import type { ParseOutcome } from "../state/loadedModels.js";
 import { parseWorkerClient } from "./parseWorkerClient.js";
 
@@ -117,19 +117,21 @@ export function validateParsedModels(
   models: ParsedModel[],
   idsXml: string
 ): SpecificationSummary[] {
-  const specifications = parseIdsXml(idsXml);
-  if (specifications.length === 0) {
+  // An empty-elements pass costs nothing (nothing to iterate) and gives the rule set's own
+  // shape once: how many rows there are, in order, after OR groups collapse — see
+  // `validateBySpecificationGrouped` — and whether each one could be run at all, which is a
+  // property of the rule set, not of any one model.
+  const skeleton = validateBySpecificationGrouped([], idsXml);
+  if (skeleton.length === 0) {
     throw new InvalidIdsRuleSetError();
   }
 
-  // Merged by position, not by name: an IDS may carry two specifications with the same name,
-  // and every model yields these outcomes in document order.
-  // Whether a specification can be run at all is a property of the rule set, not of any one
-  // model, so it is read here once rather than merged out of the per-model outcomes.
-  const summaries = specifications.map<SpecificationSummary>((specification) => ({
-    name: specification.name,
-    checked: isEvaluable(specification),
-    unsupported: specification.unsupported,
+  // Merged by position, not by name: an IDS may carry two rows with the same name, and every
+  // model yields these outcomes in the same order, one row per specification or OR group.
+  const summaries = skeleton.map<SpecificationSummary>((outcome) => ({
+    name: outcome.name,
+    checked: outcome.checked,
+    unsupported: outcome.unsupported,
     applicableCount: 0,
     passedCount: 0,
     failedCount: 0,
@@ -138,7 +140,7 @@ export function validateParsedModels(
   }));
 
   for (const model of models) {
-    validateBySpecification(model.idsScope, idsXml, model.unitScales).forEach((outcome, index) => {
+    validateBySpecificationGrouped(model.idsScope, idsXml, model.unitScales).forEach((outcome, index) => {
       const summary = summaries[index];
       summary.applicableCount += outcome.applicableCount;
       summary.passedCount += outcome.passedCount;

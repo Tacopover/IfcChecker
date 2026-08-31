@@ -59,6 +59,9 @@ export interface RuleCardProps {
   isNew?: boolean;
   onChange: (next: RuleDraft) => void;
   onDuplicate: () => void;
+  /** Names of the other rules this one is OR-linked with — see `orGroupSiblingsOf`. Empty if none. */
+  orGroupSiblingNames: string[];
+  onAddOrBranch: () => void;
   onDelete: () => void;
   onActivate: () => void;
   onToggleOpen: () => void;
@@ -75,6 +78,8 @@ export function RuleCard({
   isNew = false,
   onChange,
   onDuplicate,
+  orGroupSiblingNames,
+  onAddOrBranch,
   onDelete,
   onActivate,
   onToggleOpen,
@@ -242,6 +247,14 @@ export function RuleCard({
             {preserved.length} kept
           </span>
         )}
+        {orGroupSiblingNames.length > 0 && (
+          <span
+            className="badge or-group"
+            title={`Passes if this rule or ${orGroupSiblingNames.join(", ")} passes`}
+          >
+            OR
+          </span>
+        )}
         <fieldset className="version-toggle" aria-label="Schema versions">
           {IFC_VERSIONS.map((version) => (
             <label key={version}>
@@ -305,6 +318,15 @@ export function RuleCard({
           onClick={onDuplicate}
         >
           ⧉
+        </button>
+        <button
+          type="button"
+          className="iconbtn"
+          title="Add an OR condition — passes if this rule or the new one passes"
+          aria-label={`Add OR condition to ${rule.name}`}
+          onClick={onAddOrBranch}
+        >
+          🔀
         </button>
         <button
           type="button"

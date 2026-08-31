@@ -5,10 +5,8 @@ import { IfcCheckerPage } from "./IfcCheckerPage";
 import { LoadedModelsProvider } from "../state/loadedModels";
 
 const { parse, cancel } = vi.hoisted(() => ({ parse: vi.fn(), cancel: vi.fn() }));
-const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => ({
-  validateBySpecification: vi.fn(),
-  parseIdsXml: vi.fn(),
-  isEvaluable: vi.fn(),
+const { validateBySpecificationGrouped } = vi.hoisted(() => ({
+  validateBySpecificationGrouped: vi.fn(),
 }));
 const { exportResultsAsExcel, exportResultsAsBcf } = vi.hoisted(() => ({
   exportResultsAsExcel: vi.fn(),
@@ -17,9 +15,7 @@ const { exportResultsAsExcel, exportResultsAsBcf } = vi.hoisted(() => ({
 
 vi.mock("../local/parseWorkerClient.js", () => ({ parseWorkerClient: { parse, cancel } }));
 vi.mock("@ifc-qa/ids-validator", () => ({
-  validateBySpecification,
-  parseIdsXml,
-  isEvaluable,
+  validateBySpecificationGrouped,
   REQUIRED_CARDINALITY_EMPTY_MESSAGE:
     "This specification requires at least one matching element, and the model has none. It was not checked because there was nothing to check.",
 }));
@@ -91,17 +87,16 @@ async function parseFiles(user: ReturnType<typeof userEvent.setup>, ...files: Fi
 
 beforeEach(() => {
   // resetAllMocks (not clearAllMocks): a test whose IDS file has no
-  // specifications throws before validateBySpecification is ever called (see
-  // "no specifications" test below), leaving its queued
+  // specifications throws before validateBySpecificationGrouped's per-model call is ever
+  // reached (see "no specifications" test below), leaving its queued
   // mockReturnValueOnce unconsumed — clearAllMocks only resets call
   // history, not that queue, so the leftover value would otherwise leak
   // into whichever test runs next and desync its call-by-call mock
   // sequencing.
   vi.resetAllMocks();
-  parseIdsXml.mockReturnValue([
-    { name: "fake-spec", applicability: { entityNames: ["IFCWALL"], facets: [] }, requirements: [], unsupported: [], applicabilityComplete: true },
-  ]);
-  isEvaluable.mockReturnValue(true);
+  // The default response for any call this test doesn't specifically queue a value for —
+  // most often the empty-elements skeleton call `validateParsedModels` makes first.
+  validateBySpecificationGrouped.mockReturnValue([outcome([])]);
 });
 
 describe("IfcCheckerPage", () => {
@@ -195,7 +190,9 @@ describe("IfcCheckerPage", () => {
 
   it("resets the files and results back to the empty state", async () => {
     parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
-    validateBySpecification.mockReturnValueOnce([outcome([], { applicableCount: 0, failedCount: 0 })]);
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome([])]) // the empty-elements skeleton call
+      .mockReturnValueOnce([outcome([], { applicableCount: 0, failedCount: 0 })]);
 
     const user = userEvent.setup();
     renderPage();
@@ -219,7 +216,9 @@ describe("IfcCheckerPage", () => {
       elements: [{ globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} }],
       parseMs: 12,
     });
-    validateBySpecification.mockReturnValueOnce([outcome([violation()])]);
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome([])]) // the empty-elements skeleton call
+      .mockReturnValueOnce([outcome([violation()])]);
 
     const user = userEvent.setup();
     renderPage();
@@ -240,8 +239,10 @@ describe("IfcCheckerPage", () => {
 
   it("checks a second rule set against the files already in memory, without parsing them again", async () => {
     parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
-    validateBySpecification
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome([])]) // the empty-elements skeleton call
       .mockReturnValueOnce([outcome([], { applicableCount: 0, failedCount: 0 })])
+      .mockReturnValueOnce([outcome([])]) // the skeleton call for the second "Check files" click
       .mockReturnValueOnce([
         outcome([violation({ ruleId: "second-set", message: "Fails the newer rules" })], { name: "second-set" }),
       ]);
@@ -263,7 +264,9 @@ describe("IfcCheckerPage", () => {
 
   it("drops results that no longer describe the current file set", async () => {
     parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
-    validateBySpecification.mockReturnValueOnce([outcome([violation()])]);
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome([])]) // the empty-elements skeleton call
+      .mockReturnValueOnce([outcome([violation()])]);
 
     const user = userEvent.setup();
     renderPage();
@@ -294,7 +297,9 @@ describe("IfcCheckerPage", () => {
       ],
       parseMs: 12,
     });
-    validateBySpecification.mockReturnValueOnce([outcome([violation()])]);
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome([])]) // the empty-elements skeleton call
+      .mockReturnValueOnce([outcome([violation()])]);
 
     const user = userEvent.setup();
     renderPage();
@@ -332,7 +337,8 @@ describe("IfcCheckerPage", () => {
     parse
       .mockResolvedValueOnce({ elements: [wallIn("Wall in the first file")], parseMs: 5 })
       .mockResolvedValueOnce({ elements: [wallIn("Wall in the second file")], parseMs: 5 });
-    validateBySpecification
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome([])]) // the empty-elements skeleton call
       .mockReturnValueOnce([outcome([], { applicableCount: 1, passedCount: 1, failedCount: 0 })])
       .mockReturnValueOnce([outcome([violation({ elementName: "Wall in the second file" })])]);
 
@@ -356,9 +362,11 @@ describe("IfcCheckerPage", () => {
 
   it("reports a specification that matched no elements rather than showing a clean result", async () => {
     parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
-    validateBySpecification.mockReturnValueOnce([
-      outcome([], { name: "Walls are fire rated", applicableCount: 0, passedCount: 0, failedCount: 0 }),
-    ]);
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome([], { name: "Walls are fire rated" })]) // the empty-elements skeleton call
+      .mockReturnValueOnce([
+        outcome([], { name: "Walls are fire rated", applicableCount: 0, passedCount: 0, failedCount: 0 }),
+      ]);
 
     const user = userEvent.setup();
     renderPage();
@@ -435,7 +443,7 @@ describe("IfcCheckerPage", () => {
   });
 
   it("shows an error instead of a silent 'no issues' result when the IDS file has no specifications", async () => {
-    parseIdsXml.mockReturnValue([]);
+    validateBySpecificationGrouped.mockReturnValueOnce([]); // the empty-elements skeleton call
     parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
 
     const user = userEvent.setup();
@@ -559,7 +567,9 @@ describe("IfcCheckerPage", () => {
         elements: [{ globalId: "g1", ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} }],
         parseMs: 12,
       });
-      validateBySpecification.mockReturnValueOnce([outcome([violation()])]);
+      validateBySpecificationGrouped
+        .mockReturnValueOnce([outcome([])]) // the empty-elements skeleton call
+        .mockReturnValueOnce([outcome([violation()])]);
 
       await parseFiles(user, makeFile("model-a.ifc"));
       await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.ids", "<ids/>"));
@@ -575,12 +585,14 @@ describe("IfcCheckerPage", () => {
         ],
         parseMs: 12,
       });
-      validateBySpecification.mockReturnValueOnce([
-        outcome([
-          violation({ elementGlobalId: "g1", elementName: "Wall-1", message: "First violation" }),
-          violation({ elementGlobalId: "g2", elementName: "Wall-2", message: "Second violation" }),
-        ]),
-      ]);
+      validateBySpecificationGrouped
+        .mockReturnValueOnce([outcome([])]) // the empty-elements skeleton call
+        .mockReturnValueOnce([
+          outcome([
+            violation({ elementGlobalId: "g1", elementName: "Wall-1", message: "First violation" }),
+            violation({ elementGlobalId: "g2", elementName: "Wall-2", message: "Second violation" }),
+          ]),
+        ]);
 
       await parseFiles(user, makeFile("model-a.ifc"));
       await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.ids", "<ids/>"));

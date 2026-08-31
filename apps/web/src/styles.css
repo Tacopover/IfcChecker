@@ -23,6 +23,8 @@
   --data-soft: #ddf0f2;
   --group: #6b3fa0;
   --group-soft: #efe8f8;
+  --or: #b8397a;
+  --or-soft: #fbe6f0;
   --pass: #15784a;
   --pass-soft: #e5f4ec;
   --fail: #b42318;
@@ -59,6 +61,8 @@
     --data-soft: #0d2b31;
     --group: #b491e8;
     --group-soft: #241b38;
+    --or: #e58cbd;
+    --or-soft: #35192a;
     --pass: #48c686;
     --pass-soft: #132a1e;
     --fail: #f0827a;
@@ -1466,6 +1470,34 @@ caption {
   font-size: 10.5px;
   font-weight: 640;
   white-space: nowrap;
+}
+
+/* Same shape as .badge.kept, in the OR pair — flags this rule as one branch of a linked group,
+   not a warning about anything the builder dropped. */
+.badge.or-group {
+  flex: none;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--or) 35%, transparent);
+  border-radius: 999px;
+  background: var(--or-soft);
+  color: var(--or);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* Wraps the rule cards of one OR group so they read as bounded together — the group's own gap
+   matches `.stack`'s, so nesting it doesn't change the rhythm of the list around it. */
+.or-frame {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.6rem;
+  border: 1.5px dashed var(--or);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--or) 5%, transparent);
 }
 
 /* A specification held in the list but not offered for editing: no accent border, no hover — it

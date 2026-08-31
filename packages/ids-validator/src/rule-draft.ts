@@ -8,7 +8,7 @@ import type {
   ParsedSpecification,
   SpecificationCardinality,
 } from "./parse-ids.js";
-import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
+import { orGroupIdOf, patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
 
 /**
  * The readings of a condition's **value**, and nothing else.
@@ -425,6 +425,45 @@ export function applicabilityEntityNamesOf(rule: RuleDraft): string[] {
   return [...new Set(rule.entityTypes.map((entityType) => entityType.trim().toUpperCase()))];
 }
 
+/**
+ * The other rules `rule` is OR-linked with — same `identifier` group id, per `orGroupIdOf` —
+ * in list order. Empty when `rule` carries no group id, or is the last member left in its group.
+ */
+export function orGroupSiblingsOf(rules: RuleDraft[], rule: RuleDraft): RuleDraft[] {
+  const groupId = orGroupIdOf(rule.identifier);
+  if (!groupId) return [];
+  return rules.filter((entry) => entry.id !== rule.id && orGroupIdOf(entry.identifier) === groupId);
+}
+
+/**
+ * Every OR-group id already carried by `rules` — authored here, or read verbatim off an imported
+ * `identifier` that already used this tool's prefix. A freshly minted group id must avoid this set:
+ * an imported document can carry a group id that collides with the page's own next-counter value
+ * (import never re-keys `identifier`, unlike `id`), and two unrelated groups sharing one id would
+ * silently merge into a single reported outcome — see `validateBySpecificationGrouped`.
+ */
+export function orGroupIdsInUse(rules: RuleDraft[]): Set<string> {
+  const ids = new Set<string>();
+  for (const rule of rules) {
+    const groupId = orGroupIdOf(rule.identifier);
+    if (groupId) ids.add(groupId);
+  }
+  return ids;
+}
+
+/**
+ * A fresh group id for a new OR group among `rules`, drawn by calling `mintCandidate` — the
+ * caller's own id source, redrawn until it lands outside `orGroupIdsInUse(rules)`. Separated from
+ * the id source itself so the redraw-on-collision behavior is testable without needing a real
+ * counter to actually collide.
+ */
+export function nextOrGroupId(rules: RuleDraft[], mintCandidate: () => string): string {
+  const used = orGroupIdsInUse(rules);
+  let candidate = mintCandidate();
+  while (used.has(candidate)) candidate = mintCandidate();
+  return candidate;
+}
+
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -788,5 +827,6 @@ export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
     })),
     // Applicability we could not fully read is refused at import, never turned into a rule.
     applicabilityComplete: true,
+    identifier: rule.identifier ?? null,
   }));
 }

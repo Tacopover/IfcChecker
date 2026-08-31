@@ -348,6 +348,73 @@ describe("RuleBuilderPage", () => {
       .toEqual(["New rule", "New rule (copy)"]);
   });
 
+  it("adds an OR-linked branch off a rule, and shows the badge on both once linked", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+
+    expect(screen.queryByText("OR")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    expect(screen.getAllByLabelText("Rule name").map((input) => (input as HTMLInputElement).value)).toEqual([
+      "New rule",
+      "New rule (2)",
+    ]);
+    expect(screen.getAllByText("OR")).toHaveLength(2);
+  });
+
+  it("writes both OR branches out with the same group identifier, and no others", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
+    const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
+    const identifiers = [...xml.matchAll(/identifier="([^"]+)"/g)].map((match) => match[1]);
+
+    expect(identifiers).toHaveLength(2);
+    expect(new Set(identifiers).size).toBe(1);
+    expect(identifiers[0]).toMatch(/^ifcqa:or:/);
+  });
+
+  it("does not carry the OR link onto a plain duplicate of a linked rule", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    await user.click(screen.getByRole("button", { name: "Duplicate rule New rule" }));
+
+    // Three cards now: the two linked originals plus an independent copy.
+    expect(screen.getAllByLabelText("Rule name")).toHaveLength(3);
+    expect(screen.getAllByText("OR")).toHaveLength(2);
+  });
+
+  it("gives two independently created OR groups distinct identifiers", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    await user.click(screen.getByRole("button", { name: /FireRating/ })); // creates "IfcWall rule"
+    await createRuleViaWizard(user); // creates "New rule"
+
+    await user.click(screen.getByRole("button", { name: "Add OR condition to IfcWall rule" }));
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
+    const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
+    const identifiers = [...xml.matchAll(/identifier="([^"]+)"/g)].map((match) => match[1]);
+
+    // Four branches (two OR pairs), but only two distinct group ids — the two pairs must not merge.
+    expect(identifiers).toHaveLength(4);
+    expect(new Set(identifiers).size).toBe(2);
+  });
+
   it("carries the Prohibited toggle through to the exported XML", async () => {
     const user = userEvent.setup();
     renderBuilder([{ fileName: "tower.ifc" }]);

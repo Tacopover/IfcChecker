@@ -6,7 +6,14 @@ import type {
   RefusedSpecification,
   RuleDraft,
 } from "@ifc-qa/ids-validator";
-import { expandedTypeNamesFor, plainName } from "@ifc-qa/ids-validator";
+import {
+  expandedTypeNamesFor,
+  nextOrGroupId,
+  OR_GROUP_IDENTIFIER_PREFIX,
+  orGroupIdOf,
+  orGroupSiblingsOf,
+  plainName,
+} from "@ifc-qa/ids-validator";
 import { SPATIAL_STRUCTURE_TYPES } from "@ifc-qa/parser-adapters/browser";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
@@ -314,10 +321,49 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             })),
           }
         : {}),
+      // "Duplicate" makes an independent rule, not another OR branch: silently growing the
+      // group here would be a surprising side effect of a button that says nothing about OR.
+      // A non-OR identifier (a third party's own machine id) is left untouched.
+      ...(orGroupIdOf(rule.identifier) ? { identifier: null } : {}),
     };
     const index = rules.indexOf(rule);
     setRules([...rules.slice(0, index + 1), copy, ...rules.slice(index + 1)]);
     openRule(copy.id);
+  }
+
+  /**
+   * Adds a new rule that shares `rule`'s applicability but starts with no conditions of its own,
+   * linked to it (and any of its existing OR siblings) through a fresh or existing group id on
+   * `identifier`. The pair is meant to be read as one rule that passes an element if either
+   * branch does — see `validateBySpecificationGrouped`, which is what actually merges them at
+   * check time. `rule` itself gains the group id here too, the first time it branches.
+   *
+   * A fresh id goes through `nextOrGroupId` rather than a bare `nextDraftId("or")` — an imported
+   * document carries its `identifier` verbatim, never re-keyed onto the page's counter, so the very
+   * next counter value can already name a group the import brought in. Minting straight off the
+   * counter would then silently merge two unrelated OR groups into one at check time.
+   */
+  function handleAddOrBranch(rule: RuleDraft) {
+    const existingGroupId = orGroupIdOf(rule.identifier);
+    const groupId = existingGroupId ?? nextOrGroupId(rules, () => nextDraftId("or"));
+    const siblingCount = orGroupSiblingsOf(rules, rule).length;
+
+    const branch: RuleDraft = {
+      id: nextDraftId("r"),
+      name: `${rule.name} (${siblingCount + 2})`,
+      entityTypes: [...rule.entityTypes],
+      cardinality: rule.cardinality,
+      entityPredefinedType: rule.entityPredefinedType,
+      applicabilityFacets: rule.applicabilityFacets?.map((facet) => ({ ...facet, id: nextDraftId("c") })),
+      conditions: [],
+      ifcVersion: rule.ifcVersion,
+      identifier: `${OR_GROUP_IDENTIFIER_PREFIX}${groupId}`,
+    };
+
+    const index = rules.indexOf(rule);
+    const updatedSource = existingGroupId ? rule : { ...rule, identifier: branch.identifier };
+    setRules([...rules.slice(0, index), updatedSource, branch, ...rules.slice(index + 1)]);
+    openRule(branch.id);
   }
 
   async function handleImport(event: ChangeEvent<HTMLInputElement>) {
@@ -354,13 +400,35 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     setJustAddedRuleId(null);
   }
 
-  /** Rules and refused specifications in the order the imported document put them. */
+  /**
+   * Rules and refused specifications in the order the imported document put them. OR-linked rules
+   * are always adjacent — `handleAddOrBranch` inserts a new branch right beside its source, and
+   * nothing in the builder reorders rules — so consecutive same-group cards are buffered and
+   * wrapped in one `.or-frame` to show they belong together. A group broken up by something else
+   * (an imported document, say) just renders as separate cards instead.
+   */
   function specificationCards(): ReactNode[] {
     const cards: ReactNode[] = [];
+    let groupBuffer: { groupId: string; nodes: ReactNode[] } | null = null;
+
+    function flushGroup() {
+      if (!groupBuffer) return;
+      cards.push(
+        groupBuffer.nodes.length > 1 ? (
+          <div className="or-frame" key={`or-frame-${groupBuffer.groupId}`}>
+            {groupBuffer.nodes}
+          </div>
+        ) : (
+          groupBuffer.nodes[0]
+        )
+      );
+      groupBuffer = null;
+    }
 
     for (let index = 0; index <= rules.length; index += 1) {
       refused.forEach((specification, position) => {
         if (Math.min(specification.passThrough.afterIndex, rules.length) !== index) return;
+        flushGroup();
         cards.push(
           <RefusedSpecificationCard
             key={`refused-${position}`}
@@ -372,7 +440,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
       if (index === rules.length) break;
 
       const rule = rules[index];
-      cards.push(
+      const card = (
         <RuleCard
           key={rule.id}
           rule={rule}
@@ -386,6 +454,8 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             setRules((previous) => previous.map((entry) => (entry.id === rule.id ? next : entry)))
           }
           onDuplicate={() => handleDuplicateRule(rule)}
+          orGroupSiblingNames={orGroupSiblingsOf(rules, rule).map((sibling) => sibling.name)}
+          onAddOrBranch={() => handleAddOrBranch(rule)}
           onDelete={() => {
             setRules(rules.filter((entry) => entry.id !== rule.id));
             setTarget((current) => (current === rule.id ? "new" : current));
@@ -395,7 +465,19 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
           onToggleFailures={() => toggleIn(setFailureRuleIds, rule.id)}
         />
       );
+
+      const groupId = orGroupIdOf(rule.identifier);
+      if (groupId === null) {
+        flushGroup();
+        cards.push(card);
+      } else if (groupBuffer && groupBuffer.groupId === groupId) {
+        groupBuffer.nodes.push(card);
+      } else {
+        flushGroup();
+        groupBuffer = { groupId, nodes: [card] };
+      }
     }
+    flushGroup();
     return cards;
   }
 
