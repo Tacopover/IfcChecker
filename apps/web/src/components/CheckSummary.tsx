@@ -72,6 +72,10 @@ export interface CheckSummaryProps {
   selectedElementId?: string | null;
   /** Handed to the issue table, which opens it under the element it describes. */
   renderDetails?: (row: IssueRow) => ReactNode;
+  /** Renders a per-row "View in 3D" action, handed straight to the issue table. */
+  onViewElementIn3D?: (row: IssueRow) => void;
+  /** Renders a "View in 3D" action on a specification's own header, isolating every failing element it lists. */
+  onViewSpecificationIn3D?: (summary: SpecificationSummary) => void;
   /**
    * Called with `summaries`, each specification's violations swapped for whichever of them
    * currently survive the filters above the results and then that specification's own filter,
@@ -86,6 +90,8 @@ export function CheckSummary({
   onSelectElement,
   selectedElementId,
   renderDetails,
+  onViewElementIn3D,
+  onViewSpecificationIn3D,
   onFilteredSummariesChange,
 }: CheckSummaryProps) {
   const [expanded, setExpanded] = useState<Set<number>>(() => initiallyExpanded(summaries));
@@ -270,21 +276,32 @@ export function CheckSummary({
                       </td>
                       <td className="col-issues">
                         {issueCount > 0 ? (
-                          // The visible label stays short so it can't wrap the column open; the
-                          // specification's name lives in the accessible name, where a screen
-                          // reader still needs it to tell two toggles apart.
-                          <button
-                            type="button"
-                            className="ghost-btn"
-                            aria-expanded={isExpanded}
-                            aria-label={`${isExpanded ? "Hide" : "Show"} ${issueLabel} for ${summary.name}`}
-                            onClick={() => toggle(index)}
-                          >
-                            <span className="caret" data-open={isExpanded} aria-hidden="true">
-                              ▸
-                            </span>
-                            {issueLabel}
-                          </button>
+                          <>
+                            {/* The visible label stays short so it can't wrap the column open; the
+                                specification's name lives in the accessible name, where a screen
+                                reader still needs it to tell two toggles apart. */}
+                            <button
+                              type="button"
+                              className="ghost-btn"
+                              aria-expanded={isExpanded}
+                              aria-label={`${isExpanded ? "Hide" : "Show"} ${issueLabel} for ${summary.name}`}
+                              onClick={() => toggle(index)}
+                            >
+                              <span className="caret" data-open={isExpanded} aria-hidden="true">
+                                ▸
+                              </span>
+                              {issueLabel}
+                            </button>
+                            {onViewSpecificationIn3D && (
+                              <button
+                                type="button"
+                                className="ghost-btn view-in-3d"
+                                onClick={() => onViewSpecificationIn3D(summary)}
+                              >
+                                View in 3D
+                              </button>
+                            )}
+                          </>
                         ) : (
                           <span className="dash">—</span>
                         )}
@@ -367,6 +384,7 @@ export function CheckSummary({
                             results={summary.violations}
                             onSelectElement={onSelectElement}
                             selectedElementId={selectedElementId}
+                            onViewElementIn3D={onViewElementIn3D}
                             renderDetails={renderDetails}
                             hideRuleColumn
                             filter={specFilters.get(index) ?? EMPTY_ISSUE_FILTER}

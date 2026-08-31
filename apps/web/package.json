@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ifc-lite/geometry": "^4.1.0",
     "@ifc-qa/ids-validator": "workspace:*",
     "@ifc-qa/parser-adapters": "workspace:*",
     "@ifc-qa/report-generator": "workspace:*",

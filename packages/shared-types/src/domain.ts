@@ -81,6 +81,11 @@ export type PartOfRelation = z.infer<typeof PartOfRelationSchema>;
 
 export const NormalizedElementSchema = z.object({
   globalId: z.string(),
+  // The STEP line number, which is a property of the file rather than of
+  // whichever engine read it — measured identical across both adapters. It is
+  // what every mesh is keyed by, so it is the only join from an element record
+  // to its geometry.
+  expressId: z.number(),
   ifcType: z.string(),
   predefinedType: z.string().nullable(),
   /**
@@ -131,7 +136,15 @@ export interface ModelStructureNode {
   expressId: number;
   ifcType: string;
   name: string | null;
-  elementCounts: Record<string, number>;
+  /**
+   * Express ids of the physical elements directly contained in this node,
+   * grouped by IFC type and sorted ascending within each group. Counts alone
+   * describe a model but cannot be browsed: a viewer tree has to expand a
+   * storey down to the elements themselves. Sorted because the two engines
+   * discover containment in different orders, and they have to agree
+   * element-for-element rather than merely in aggregate.
+   */
+  elementIdsByType: Record<string, number[]>;
   children: ModelStructureNode[];
 }
 
@@ -140,10 +153,17 @@ export const ModelStructureNodeSchema: z.ZodType<ModelStructureNode> = z.lazy(()
     expressId: z.number(),
     ifcType: z.string(),
     name: z.string().nullable(),
-    elementCounts: z.record(z.string(), z.number()),
+    elementIdsByType: z.record(z.string(), z.array(z.number())),
     children: z.array(ModelStructureNodeSchema),
   })
 );
+
+/** Per-type tallies, the shape this node used to carry directly. */
+export function elementCountsOf(node: ModelStructureNode): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(node.elementIdsByType).map(([ifcType, ids]) => [ifcType, ids.length])
+  );
+}
 
 export const EngineIdSchema = z.enum(["web-ifc", "ifc-lite"]);
 export type EngineId = z.infer<typeof EngineIdSchema>;

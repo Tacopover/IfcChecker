@@ -14,6 +14,7 @@ import { ElementDetails } from "../components/ElementDetails";
 import { ExportScopeDialog } from "../components/ExportScopeDialog";
 import type { IssueRow } from "../components/IssueTable";
 import { ModelStructureTree } from "../components/ModelStructureTree";
+import { buildElementFocusRequest, buildSpecificationFocusRequest, type ViewerFocusRequest } from "../viewer/focusRequest.js";
 
 type ExportKind = "csv" | "excel" | "bcf";
 
@@ -21,7 +22,12 @@ function countViolations(summaries: SpecificationSummary[] | null): number {
   return summaries?.reduce((total, summary) => total + summary.violations.length, 0) ?? 0;
 }
 
-export function IfcCheckerPage() {
+export interface IfcCheckerPageProps {
+  /** Navigates to the viewer, isolated on the given element(s). Absent in tests that don't need it. */
+  onFocusInViewer?: (request: ViewerFocusRequest) => void;
+}
+
+export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
   const { models, addFiles, applyParseOutcome, removeModel, clearModels } = useLoadedModels();
 
   // ifc-lite is faster and more robust than web-ifc, so it's the only engine offered.
@@ -491,6 +497,16 @@ export function IfcCheckerPage() {
               summaries={results}
               onSelectElement={setSelectedIssue}
               selectedElementId={selectedIssue?.id ?? null}
+              onViewElementIn3D={
+                onFocusInViewer && ((row) => onFocusInViewer(buildElementFocusRequest(row)))
+              }
+              onViewSpecificationIn3D={
+                onFocusInViewer &&
+                ((summary) => {
+                  const request = buildSpecificationFocusRequest(summary);
+                  if (request) onFocusInViewer(request);
+                })
+              }
               onFilteredSummariesChange={setFilteredResults}
               renderDetails={(row) => (
                 <div ref={detailsRef}>

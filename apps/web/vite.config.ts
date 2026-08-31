@@ -4,6 +4,10 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   base: "./",
   plugins: [react()],
+  // @ifc-lite/geometry spawns its worker pool with the standard
+  // `new Worker(new URL(...), { type: "module" })` pattern, which Vite's
+  // default iife worker format cannot host.
+  worker: { format: "es" },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],

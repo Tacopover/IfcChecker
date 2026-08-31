@@ -5,6 +5,7 @@ class FakeAdapter implements IfcParserAdapter {
   async parse(filePath: string) {
     const wall = {
       globalId: "g1",
+      expressId: 1,
       ifcType: "IFCWALL",
       predefinedType: null,
       name: filePath,

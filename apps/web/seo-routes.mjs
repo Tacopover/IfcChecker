@@ -17,4 +17,10 @@ export const ROUTES = {
     description:
       "Build buildingSMART IDS (Information Delivery Specification) rule sets from a real IFC model, entirely in your browser. No upload, no server, no signup — export a ready-to-use .ids file.",
   },
+  viewer: {
+    path: "/3d-view/",
+    title: "3D IFC Viewer — Inspect Models and IDS Check Results in 3D",
+    description:
+      "View an IFC model in 3D and jump straight to the elements an IDS check failed, entirely in your browser. No upload, no server, no signup.",
+  },
 };

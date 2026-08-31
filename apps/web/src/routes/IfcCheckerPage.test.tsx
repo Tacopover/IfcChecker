@@ -379,13 +379,13 @@ describe("IfcCheckerPage", () => {
         expressId: 1,
         ifcType: "IFCPROJECT",
         name: "Fixture Project",
-        elementCounts: {},
+        elementIdsByType: {},
         children: [
           {
             expressId: 14,
             ifcType: "IFCBUILDINGSTOREY",
             name: "Level 1",
-            elementCounts: { IFCWALL: 1 },
+            elementIdsByType: { IFCWALL: [201] },
             children: [],
           },
         ],

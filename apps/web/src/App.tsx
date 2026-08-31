@@ -1,17 +1,32 @@
+import { useState } from "react";
 import { RuleBuilderPage } from "./builder/RuleBuilderPage";
 import { IfcCheckerPage } from "./routes/IfcCheckerPage";
 import { pathFor, useRoute, type RouteId } from "./routing";
 import { useDocumentMeta } from "./seo";
 import { LoadedModelsProvider } from "./state/loadedModels";
+import type { ViewerFocusRequest } from "./viewer/focusRequest";
+import { ViewerPage } from "./viewer/ViewerPage";
 
 const TABS: Array<{ id: RouteId; label: string }> = [
   { id: "validate", label: "Validate" },
   { id: "builder", label: "Build rules" },
+  { id: "viewer", label: "3D view" },
 ];
 
 export function App() {
   const [tab, navigate] = useRoute();
   useDocumentMeta(tab);
+
+  // Carries a single "go look at these elements" request from the Validate
+  // page's "View in 3D" affordances to the viewer, consumed once on arrival.
+  // Lifted here (not a context) because it has exactly one producer and one
+  // consumer — see App.tsx's role in goal-link-ids-results-to-viewer.
+  const [pendingViewerFocus, setPendingViewerFocus] = useState<ViewerFocusRequest | null>(null);
+
+  function focusInViewer(request: ViewerFocusRequest) {
+    setPendingViewerFocus(request);
+    navigate("viewer");
+  }
 
   return (
     <LoadedModelsProvider>
@@ -39,11 +54,18 @@ export function App() {
       {/* Both pages stay mounted: switching tabs must not throw away a parsed model or a
           half-written rule set. The files themselves live above both, in LoadedModelsProvider. */}
       <div className="page-narrow" hidden={tab !== "validate"}>
-        <IfcCheckerPage />
+        <IfcCheckerPage onFocusInViewer={focusInViewer} />
       </div>
       <div hidden={tab !== "builder"}>
         <RuleBuilderPage onGoToFiles={() => navigate("validate")} />
       </div>
+
+      {/* The viewer is the exception: it holds mesh buffers and a live WebGL
+          context, and several federated 1.6 GB models cannot all stay resident.
+          Leaving the tab gives the geometry back. */}
+      {tab === "viewer" && (
+        <ViewerPage pendingFocus={pendingViewerFocus} onConsumeFocus={() => setPendingViewerFocus(null)} />
+      )}
     </LoadedModelsProvider>
   );
 }
