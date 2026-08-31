@@ -49,12 +49,19 @@ interface LoadedModelsValue {
   applyParseOutcome: (key: string, outcome: ParseOutcome) => void;
   removeModel: (key: string) => void;
   clearModels: () => void;
+  /**
+   * The IDS rule set chosen on the validate page — shared so the rule builder can pick it up too,
+   * the same way it already picks up a parsed model.
+   */
+  idsFile: File | null;
+  setIdsFile: (file: File | null) => void;
 }
 
 const LoadedModelsContext = createContext<LoadedModelsValue | null>(null);
 
 export function LoadedModelsProvider({ children }: { children: ReactNode }) {
   const [models, setModels] = useState<LoadedModel[]>([]);
+  const [idsFile, setIdsFile] = useState<File | null>(null);
 
   const addFiles = useCallback((files: File[]) => {
     setModels((previous) => {
@@ -91,8 +98,8 @@ export function LoadedModelsProvider({ children }: { children: ReactNode }) {
   const clearModels = useCallback(() => setModels([]), []);
 
   const value = useMemo(
-    () => ({ models, addFiles, applyParseOutcome, removeModel, clearModels }),
-    [models, addFiles, applyParseOutcome, removeModel, clearModels]
+    () => ({ models, addFiles, applyParseOutcome, removeModel, clearModels, idsFile, setIdsFile }),
+    [models, addFiles, applyParseOutcome, removeModel, clearModels, idsFile]
   );
 
   return <LoadedModelsContext.Provider value={value}>{children}</LoadedModelsContext.Provider>;

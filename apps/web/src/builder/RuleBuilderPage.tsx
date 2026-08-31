@@ -23,7 +23,7 @@ import {
   plainName,
 } from "@ifc-qa/ids-validator";
 import { SPATIAL_STRUCTURE_TYPES } from "@ifc-qa/parser-adapters/browser";
-import { useLoadedModels } from "../state/loadedModels.js";
+import { modelKey as fileIdentity, useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
 import { ModelTree } from "./ModelTree.js";
 import { RuleCard } from "./RuleCard.js";
@@ -165,7 +165,7 @@ function SchemaCards({ source, selectionName, groupTypeCount, query, onAddField 
 }
 
 export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = {}) {
-  const { models } = useLoadedModels();
+  const { models, idsFile: sharedIdsFile } = useLoadedModels();
   const [modelKey, setModelKey] = useState<string | null>(null);
 
   // The loadbar is sticky, and the explorer rail below it is too (see .explorer in styles.css) —
@@ -213,6 +213,32 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   const [infoOpen, setInfoOpen] = useState(false);
   const [extraInfo, setExtraInfo] = useState<string[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // The IDS file chosen on the validate page, picked up here the same way a parsed model is —
+  // once per file, and only while the page is still blank, so it never overwrites work already
+  // started here the way a manual re-import (which does ask) would.
+  const autoImportedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sharedIdsFile) return;
+    const identity = fileIdentity(sharedIdsFile);
+    if (autoImportedIdRef.current === identity) return;
+    autoImportedIdRef.current = identity;
+    if (rules.length > 0 || refused.length > 0) return;
+
+    (async () => {
+      const outcome = importIdsText(sharedIdsFile.name, await sharedIdsFile.text());
+      // A newer file arrived while this one was still being read — let that one win instead.
+      if (autoImportedIdRef.current !== identity || !outcome.ok) return;
+      setRules(outcome.result.rules);
+      setRefused(outcome.result.refused);
+      setDocumentInfo({ ...outcome.result.info, title: outcome.result.title ?? undefined });
+      setExtraInfo(outcome.result.extraInfo);
+      setTarget("new");
+      setOpenRuleIds(new Set());
+      setFailureRuleIds(new Set());
+      setJustAddedRuleId(null);
+    })();
+  }, [sharedIdsFile]);
 
   // Only a parsed model can be a worked example — the rest of the page reads its elements.
   const parsedModels = models.filter((entry) => entry.status === "succeeded");

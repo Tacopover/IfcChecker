@@ -81,11 +81,11 @@ function FileDropzone({ extensions, onFiles, children }: FileDropzoneProps) {
 }
 
 export function IfcCheckerPage() {
-  const { models, addFiles, applyParseOutcome, removeModel, clearModels } = useLoadedModels();
+  const { models, addFiles, applyParseOutcome, removeModel, clearModels, idsFile, setIdsFile } =
+    useLoadedModels();
 
   // ifc-lite is faster and more robust than web-ifc, so it's the only engine offered.
   const engine: EngineId = "ifc-lite";
-  const [idsFile, setIdsFile] = useState<File | null>(null);
   const [results, setResults] = useState<SpecificationSummary[] | null>(null);
   // Mirrors `results` with each specification's violations narrowed to whatever its issue
   // table's own filters currently admit — see CheckSummary's onFilteredSummariesChange.

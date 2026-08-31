@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import { RuleBuilderPage, pathToNode } from "./RuleBuilderPage";
@@ -59,8 +59,8 @@ interface SeedModel {
 }
 
 /** Fills the shared store the way the validate page would, so the builder has files to pick from. */
-function Seed({ models, files }: { models: SeedModel[]; files: File[] }) {
-  const { addFiles, applyParseOutcome } = useLoadedModels();
+function Seed({ models, files, idsFile }: { models: SeedModel[]; files: File[]; idsFile?: File }) {
+  const { addFiles, applyParseOutcome, setIdsFile } = useLoadedModels();
   useEffect(() => {
     addFiles(files);
     for (const [index, model] of models.entries()) {
@@ -76,17 +76,18 @@ function Seed({ models, files }: { models: SeedModel[]; files: File[] }) {
         unitScales: {},
       });
     }
+    if (idsFile) setIdsFile(idsFile);
     // Seeding once, on mount: re-running would re-add files the test then works against.
   }, []);
   return null;
 }
 
 /** Returns the store keys by file name — the <option> values the picker is driven by. */
-function renderBuilder(models: SeedModel[] = [], onGoToFiles?: () => void) {
+function renderBuilder(models: SeedModel[] = [], onGoToFiles?: () => void, idsFile?: File) {
   const files = models.map((model) => new File(["ISO-10303-21;"], model.fileName));
   const result = render(
     <LoadedModelsProvider>
-      <Seed models={models} files={files} />
+      <Seed models={models} files={files} idsFile={idsFile} />
       <RuleBuilderPage onGoToFiles={onGoToFiles} />
     </LoadedModelsProvider>
   );
@@ -149,6 +150,49 @@ describe("RuleBuilderPage", () => {
 
     expect(screen.getByLabelText("Rule name")).toHaveValue("New rule");
     expect(screen.getByText(/^1 rule/)).toBeInTheDocument();
+  });
+
+  it("carries over the IDS file already chosen on the validate page, without any action here", async () => {
+    const { container } = renderBuilder([{ fileName: "tower.ifc" }], undefined, idsFile());
+
+    await waitFor(() =>
+      expect(cardTitles(container)).toEqual([
+        "Walls are named",
+        "Everything with a wall-ish class is named",
+        "Doors are named",
+      ])
+    );
+  });
+
+  it("leaves work already started here alone, even once a file is chosen on the validate page", async () => {
+    const user = userEvent.setup();
+    const files = [new File(["ISO-10303-21;"], "tower.ifc")];
+
+    function ChooseIdsLater() {
+      const { setIdsFile } = useLoadedModels();
+      return (
+        <button type="button" onClick={() => setIdsFile(idsFile())}>
+          Choose on validate page
+        </button>
+      );
+    }
+
+    render(
+      <LoadedModelsProvider>
+        <Seed models={[{ fileName: "tower.ifc" }]} files={files} />
+        <ChooseIdsLater />
+        <RuleBuilderPage />
+      </LoadedModelsProvider>
+    );
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+
+    await user.click(screen.getByRole("button", { name: "Choose on validate page" }));
+
+    // Give the auto-import effect a turn to run, then confirm it did not fire.
+    await waitFor(() => expect(screen.getByLabelText("Rule name")).toHaveValue("New rule"));
+    expect(screen.getAllByLabelText("Rule name")).toHaveLength(1);
+    expect(screen.queryByText("Walls are named")).not.toBeInTheDocument();
   });
 
   it("offers the files already parsed on the validate page, and works from the first one", async () => {
