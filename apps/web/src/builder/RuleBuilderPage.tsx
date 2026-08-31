@@ -1,4 +1,12 @@
-import { Fragment, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type {
   ConditionDraft,
@@ -56,21 +64,34 @@ interface SchemaCardsProps {
   source: FieldsForResult;
   selectionName: string;
   groupTypeCount: number | null;
+  query: string;
   onAddField: (field: { kind: ConditionDraft["kind"]; propertySet: string | null; name: string }) => void;
+}
+
+/** Alphabetical, and narrowed to whatever the search box asks for — the panel is for scanning by
+ * name, unlike the value pickers elsewhere, which stay ranked by how common a value is. */
+function sortedAndFiltered(fields: FieldSummary[], query: string): FieldSummary[] {
+  const needle = query.trim().toLowerCase();
+  return fields
+    .filter((field) => needle === "" || field.name.toLowerCase().includes(needle))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function FieldRows({
   fields,
   kind,
+  query,
   onAddField,
 }: {
   fields: FieldSummary[];
   kind: ConditionDraft["kind"];
+  query: string;
   onAddField: SchemaCardsProps["onAddField"];
 }) {
+  const shown = sortedAndFiltered(fields, query);
   return (
     <>
-      {fields.map((field) => (
+      {shown.map((field) => (
         <Fragment key={field.name}>
           <button
             type="button"
@@ -98,12 +119,22 @@ function FieldRows({
           </div>
         </Fragment>
       ))}
-      {fields.length === 0 && <p className="hint">Nothing here for this selection.</p>}
+      {shown.length === 0 && (
+        <p className="hint">
+          {fields.length === 0 ? "Nothing here for this selection." : `No properties match "${query.trim()}".`}
+        </p>
+      )}
     </>
   );
 }
 
-function SchemaCards({ source, selectionName, groupTypeCount, onAddField }: SchemaCardsProps) {
+function SchemaCards({ source, selectionName, groupTypeCount, query, onAddField }: SchemaCardsProps) {
+  const needle = query.trim().toLowerCase();
+  const propertySets = [...source.propertySets]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    // A set with no field matching the search has nothing to show; skip its (otherwise empty) card.
+    .filter((set) => needle === "" || set.fields.some((field) => field.name.toLowerCase().includes(needle)));
+
   return (
     <div className="schema">
       <section className="card">
@@ -115,17 +146,17 @@ function SchemaCards({ source, selectionName, groupTypeCount, onAddField }: Sche
           </span>
         </header>
         <div className="body">
-          <FieldRows fields={source.attributes} kind="attribute" onAddField={onAddField} />
+          <FieldRows fields={source.attributes} kind="attribute" query={query} onAddField={onAddField} />
         </div>
       </section>
-      {source.propertySets.map((set) => (
+      {propertySets.map((set) => (
         <section className="card pset" key={set.name}>
           <header>
             <span className="micro">Pset</span>
             <span className="psname">{set.name}</span>
           </header>
           <div className="body">
-            <FieldRows fields={set.fields} kind="property" onAddField={onAddField} />
+            <FieldRows fields={set.fields} kind="property" query={query} onAddField={onAddField} />
           </div>
         </section>
       ))}
@@ -137,10 +168,31 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   const { models } = useLoadedModels();
   const [modelKey, setModelKey] = useState<string | null>(null);
 
+  // The loadbar is sticky, and the explorer rail below it is too (see .explorer in styles.css) —
+  // its own sticky offset and height have to leave room for whatever the loadbar actually renders
+  // at, which varies as its content wraps, so that space is measured rather than guessed.
+  const builderRef = useRef<HTMLDivElement | null>(null);
+  const loadbarRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const loadbar = loadbarRef.current;
+    const builder = builderRef.current;
+    // Absent in the test environment and in any browser old enough to lack it; the CSS fallback
+    // (see --loadbar-h in styles.css) covers that case, so there is nothing more to do here.
+    if (!loadbar || !builder || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      builder.style.setProperty("--loadbar-h", `${entry.contentRect.height}px`);
+    });
+    observer.observe(loadbar);
+    return () => observer.disconnect();
+  }, []);
+
   const [selection, setSelection] = useState<string | null>(null);
   // null until the user opens or closes something themselves — until then the tree
   // shows whatever it takes to reveal the current selection, for whichever file is picked.
   const [expandedOverride, setExpanded] = useState<ReadonlySet<string> | null>(null);
+  // Narrows the properties panel below the model tree; kept across a type switch (searching
+  // "fire" while browsing several types is a normal way to use it) and cleared on a new file.
+  const [propertySearch, setPropertySearch] = useState("");
 
   const [rules, setRules] = useState<RuleDraft[]>([]);
   // Which rule a field click in the left rail adds a condition to — a rule id, or "new" to start
@@ -212,6 +264,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     // Back to defaults: the new file's first type, and the ancestors that reveal it.
     setSelection(null);
     setExpanded(null);
+    setPropertySearch("");
   }
 
   function handleSelect(node: TreeNode) {
@@ -491,7 +544,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   }
 
   return (
-    <div className="builder">
+    <div className="builder" ref={builderRef}>
       <header className="builder-head">
         <h1>IDS Rule Builder</h1>
         <p className="lede">
@@ -500,7 +553,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
         </p>
       </header>
 
-      <div className="loadbar">
+      <div className="loadbar" ref={loadbarRef}>
         <div className="loadfile">
           <label htmlFor="builder-model">IFC file (one worked example)</label>
           <select
@@ -619,10 +672,21 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
               </select>
             </div>
 
+            <div className="property-search">
+              <input
+                type="text"
+                aria-label="Search properties"
+                placeholder="Search properties…"
+                value={propertySearch}
+                onChange={(event) => setPropertySearch(event.target.value)}
+              />
+            </div>
+
             <SchemaCards
               source={selectionSource}
               selectionName={selectionName}
               groupTypeCount={selectedGroup ? selectedGroup.types.length : null}
+              query={propertySearch}
               onAddField={handleAddField}
             />
           </aside>

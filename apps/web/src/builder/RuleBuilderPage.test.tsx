@@ -188,6 +188,26 @@ describe("RuleBuilderPage", () => {
     expect(screen.getByText("Wall 1")).toBeInTheDocument();
   });
 
+  it("sorts properties alphabetically and narrows them with the search box", async () => {
+    const user = userEvent.setup();
+    const { container } = renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    const fieldNames = () =>
+      Array.from(container.querySelectorAll(".card.pset .field-name")).map((node) => node.textContent);
+    // Status is on every wall (the higher hit count); FireRating only on two of three. Alphabetical
+    // order puts FireRating first regardless, unlike the value pickers' commonest-first ordering.
+    expect(fieldNames()).toEqual(["FireRating", "Status"]);
+
+    await user.type(screen.getByLabelText("Search properties"), "stat");
+    expect(fieldNames()).toEqual(["Status"]);
+    expect(screen.queryByRole("button", { name: /FireRating/ })).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Search properties"));
+    await user.type(screen.getByLabelText("Search properties"), "nonsense");
+    expect(screen.getByText('No properties match "nonsense".')).toBeInTheDocument();
+  });
+
   it("adds a condition — and the selected type — to the active rule when a field is clicked", async () => {
     const user = userEvent.setup();
     renderBuilder([{ fileName: "tower.ifc" }]);
