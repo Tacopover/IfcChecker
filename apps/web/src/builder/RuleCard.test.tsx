@@ -271,7 +271,7 @@ describe("RuleCard", () => {
     // The resulting problem is still reported inside "About this specification", the one place
     // that lists everything blocking export.
     await user.click(screen.getByRole("button", { name: /About this specification/ }));
-    expect(screen.getByText(/Schema version — IDS requires at least one/)).toBeInTheDocument();
+    expect(screen.getByText(/Schema version: IDS requires at least one/)).toBeInTheDocument();
   });
 
   it("toggling Prohibited on flips the score reading, without touching conditions", async () => {
@@ -301,7 +301,7 @@ describe("RuleCard", () => {
 
     await user.click(screen.getByRole("checkbox", { name: "Prohibited" }));
 
-    expect(screen.getByText("None found — this rule is satisfied")).toBeInTheDocument();
+    expect(screen.getByText("None found: this rule is satisfied")).toBeInTheDocument();
     expect(document.querySelector(".rule-foot .score")).toHaveClass("all-pass");
   });
 

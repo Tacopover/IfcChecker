@@ -19,7 +19,7 @@ import { parseWorkerClient } from "./parseWorkerClient.js";
 export class InvalidIdsRuleSetError extends Error {
   constructor() {
     super(
-      "This doesn't look like a valid IDS rule set — no <specification> elements were found. Check that you selected the right file."
+      "This doesn't look like a valid IDS rule set: no <specification> elements were found. Check that you selected the right file."
     );
     this.name = "InvalidIdsRuleSetError";
   }

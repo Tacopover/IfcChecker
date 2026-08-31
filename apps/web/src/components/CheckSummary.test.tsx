@@ -126,7 +126,7 @@ describe("CheckSummary", () => {
     expect(screen.getByText("property")).toBeInTheDocument();
 
     const row = screen.getByText("Walls are fire rated").closest("tr");
-    expect(row).toHaveTextContent("—");
+    expect(row).toHaveTextContent("-");
     expect(row).not.toHaveTextContent("0");
   });
 
@@ -202,7 +202,7 @@ describe("CheckSummary", () => {
     );
 
     const line = screen.getByRole("status");
-    expect(line).toHaveTextContent("2 specifications — none failing, 1 not checked");
+    expect(line).toHaveTextContent("2 specifications: none failing, 1 not checked");
     expect(line).toHaveAttribute("data-tone", "fail");
   });
 
@@ -218,7 +218,7 @@ describe("CheckSummary", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "3 specifications — 1 failing, 1 matched no elements"
+      "3 specifications: 1 failing, 1 matched no elements"
     );
   });
 

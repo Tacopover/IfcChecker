@@ -229,13 +229,13 @@ export function IfcCheckerPage() {
         <h1>IFC IDS Validator</h1>
         <p className="lede">
           Check IFC building models against buildingSMART IDS (Information Delivery
-          Specification) rule sets — entirely in your browser, with no server and no upload.
+          Specification) rule sets: entirely in your browser, with no server and no upload.
         </p>
         <details className="about-ids">
           <summary>What is IDS?</summary>
           <p>
             IDS (Information Delivery Specification) is a buildingSMART standard for writing
-            machine-readable requirements against IFC models — for example, that every door has
+            machine-readable requirements against IFC models, for example, that every door has
             a fire rating, or every space carries a classification code. This tool loads an IDS
             file and reports, element by element, which parts of a model satisfy it and which
             don&apos;t.
@@ -307,12 +307,12 @@ export function IfcCheckerPage() {
                             </span>
                           </td>
                           <td className="num">
-                            {model.parseMs !== null ? `${Math.round(model.parseMs)} ms` : "—"}
+                            {model.parseMs !== null ? `${Math.round(model.parseMs)} ms` : "-"}
                           </td>
                           <td className="num">
                             {model.status === "succeeded"
                               ? model.elements.length.toLocaleString()
-                              : "—"}
+                              : "-"}
                           </td>
                           <td className="col-actions">
                             <div className="row-actions">

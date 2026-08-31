@@ -496,7 +496,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
         <h1>IDS Rule Builder</h1>
         <p className="lede">
           Build buildingSMART IDS (Information Delivery Specification) rule sets from a real IFC
-          model — entirely in your browser, with no server and no upload.
+          model: entirely in your browser, with no server and no upload.
         </p>
       </header>
 
@@ -558,7 +558,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
         <div className="empty-state">
           <h2>Build rules from a real file</h2>
           <p>
-            Everything offered here — types, property sets, values — comes from one of your own IFC
+            Everything offered here (types, property sets, values) comes from one of your own IFC
             files, so the rules you write are rules it can actually be judged against. Load and parse
             your files first, then pick one above.
           </p>
@@ -667,7 +667,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
 
                 {rules.length === 0 && refused.length === 0 && (
                   <p className="hint">
-                    No rules yet — click a field on the left, start one below, or import an
+                    No rules yet: click a field on the left, start one below, or import an
                     existing .ids file.
                   </p>
                 )}
@@ -688,7 +688,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
                   <div>
                     <div className="t">Create a new rule</div>
                     <div className="d">
-                      Answer a few questions about what to check — we'll pull types, fields and
+                      Answer a few questions about what to check; we'll pull types, fields and
                       real values straight from {model.fileName} as you go.
                     </div>
                   </div>

@@ -490,13 +490,13 @@ const DATE_PATTERN = /^-?\d{4}-\d{2}-\d{2}(Z|[+-]\d{2}:\d{2})?$/;
 export function infoProblems(info: IdsDocumentInfo): string[] {
   const problems: string[] = [];
   if (info.title !== undefined && info.title.trim() === "") {
-    problems.push("Title — IDS requires one on every document.");
+    problems.push("Title: IDS requires one on every document.");
   }
   if (info.author && !AUTHOR_PATTERN.test(info.author)) {
-    problems.push(`Author — IDS requires an email address, and "${info.author}" is not one.`);
+    problems.push(`Author: IDS requires an email address, and "${info.author}" is not one.`);
   }
   if (info.date && !DATE_PATTERN.test(info.date)) {
-    problems.push(`Date — IDS requires YYYY-MM-DD, and "${info.date}" is not.`);
+    problems.push(`Date: IDS requires YYYY-MM-DD, and "${info.date}" is not.`);
   }
   return problems;
 }

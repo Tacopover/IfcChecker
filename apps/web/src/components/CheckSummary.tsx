@@ -182,7 +182,7 @@ export function CheckSummary({
     <div className="check-summary">
       {/* A run with unchecked specifications is incomplete, not clean, so it must not read green. */}
       <p role="status" className="summary-line" data-tone={failing + unchecked > 0 ? "fail" : "pass"}>
-        {summaries.length} {summaries.length === 1 ? "specification" : "specifications"} —{" "}
+        {summaries.length} {summaries.length === 1 ? "specification" : "specifications"}:{" "}
         {failing === 0 ? "none failing" : `${failing} failing`}
         {unchecked > 0 && `, ${unchecked} not checked`}
         {inert > 0 && `, ${inert} matched no elements`}
@@ -260,12 +260,12 @@ export function CheckSummary({
                         {specFiltered && <span className="spec-filtered">filtered</span>}
                       </td>
                       {/* Nothing was measured, so a zero here would be a claim we cannot make. */}
-                      <td className="num">{status === "not-checked" ? "—" : summary.applicableCount}</td>
-                      <td className="num">{status === "not-checked" ? "—" : summary.passedCount}</td>
-                      <td className="num">{status === "not-checked" ? "—" : summary.failedCount}</td>
+                      <td className="num">{status === "not-checked" ? "-" : summary.applicableCount}</td>
+                      <td className="num">{status === "not-checked" ? "-" : summary.passedCount}</td>
+                      <td className="num">{status === "not-checked" ? "-" : summary.failedCount}</td>
                       <td className="num">
                         {status === "not-checked" || summary.applicableCount === 0
-                          ? "—"
+                          ? "-"
                           : `${Math.round((summary.passedCount / summary.applicableCount) * 100)}%`}
                       </td>
                       <td className="col-issues">
@@ -286,7 +286,7 @@ export function CheckSummary({
                             {issueLabel}
                           </button>
                         ) : (
-                          <span className="dash">—</span>
+                          <span className="dash">-</span>
                         )}
                       </td>
                     </tr>
@@ -308,7 +308,7 @@ export function CheckSummary({
                               .filter((entry) => entry.section === refusalCause(summary))
                               .map((entry, position) => (
                                 <li key={`${entry.construct}#${position}`}>
-                                  <code>{entry.construct}</code> — {entry.description}
+                                  <code>{entry.construct}</code>: {entry.description}
                                 </li>
                               ))}
                           </ul>
@@ -352,7 +352,7 @@ export function CheckSummary({
                           <ul className="unsupported-list">
                             {droppedRequirements(summary).map((entry, position) => (
                               <li key={`${entry.construct}#${position}`}>
-                                <code>{entry.construct}</code> — {entry.description}
+                                <code>{entry.construct}</code>: {entry.description}
                               </li>
                             ))}
                           </ul>

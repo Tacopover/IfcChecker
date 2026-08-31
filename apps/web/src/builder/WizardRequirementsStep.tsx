@@ -71,12 +71,12 @@ export function WizardRequirementsStep({
     <div className="wizcard">
       <h1>What must be true?</h1>
       <p className="sub">
-        Add one or more checks. Each becomes a sentence like the one below — pick a field, then say
+        Add one or more checks. Each becomes a sentence like the one below; pick a field, then say
         what it must satisfy.
       </p>
 
       <div className="explain">
-        A <b>property</b> lives inside a property set — a named bundle, which is where most domain
+        A <b>property</b> lives inside a property set: a named bundle, which is where most domain
         data lives. An <b>attribute</b> is one of the handful of fields IFC gives every element
         directly, like its Name. Pick whichever this file actually stores the value under; we'll
         show you which one that is

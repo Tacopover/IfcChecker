@@ -42,7 +42,7 @@ export function RefusedSpecificationCard({
         <ul className="unsupported-list">
           {specification.reasons.map((reason) => (
             <li key={`${reason.construct}-${reason.description}`}>
-              <code>{reason.construct}</code> — {reason.description}
+              <code>{reason.construct}</code>: {reason.description}
             </li>
           ))}
         </ul>

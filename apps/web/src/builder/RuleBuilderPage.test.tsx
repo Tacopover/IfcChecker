@@ -107,7 +107,7 @@ async function createRuleViaWizard(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Start" }));
   await user.click(screen.getByRole("checkbox", { name: /IfcBuildingElement/ }));
   await user.click(screen.getByRole("button", { name: /Next: Narrow it down/ }));
-  await user.click(screen.getByRole("button", { name: /Skip — check all 5/ }));
+  await user.click(screen.getByRole("button", { name: /Skip: check all 5/ }));
   await user.click(screen.getByRole("button", { name: "Next: Review →" }));
   await user.click(screen.getByRole("button", { name: "Save rule ✓" }));
 }
@@ -578,8 +578,8 @@ describe("RuleBuilderPage importing an IDS file", () => {
     await user.type(screen.getByLabelText("Author"), "Taco");
     await user.type(screen.getByLabelText("Date"), "16-08-2026");
 
-    expect(screen.getByText(/Author — IDS requires an email address/)).toBeInTheDocument();
-    expect(screen.getByText(/Date — IDS requires YYYY-MM-DD/)).toBeInTheDocument();
+    expect(screen.getByText(/Author: IDS requires an email address/)).toBeInTheDocument();
+    expect(screen.getByText(/Date: IDS requires YYYY-MM-DD/)).toBeInTheDocument();
   });
 
   // An empty box writes no element, which is what `minOccurs="0"` is for — a cleared field must not

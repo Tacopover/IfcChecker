@@ -285,7 +285,7 @@ function cardinalityFailure(
 ): string | null {
   if (specification.cardinality === "prohibited") {
     if (specification.requirements.length > 0) {
-      return "This specification is prohibited — nothing may match it — so it cannot also state requirements. The document is invalid.";
+      return "This specification is prohibited (nothing may match it), so it cannot also state requirements. The document is invalid.";
     }
     return applicableCount > 0
       ? `Nothing may match this specification, but ${applicableCount} element${applicableCount === 1 ? "" : "s"} did.`

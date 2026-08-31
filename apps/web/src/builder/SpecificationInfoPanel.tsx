@@ -14,7 +14,7 @@ const FIELDS: ReadonlyArray<MetadataField<SpecificationField>> = [
   {
     id: "instructions",
     label: "Instructions",
-    hint: "For whoever authors the IFC — a checker may show this to them.",
+    hint: "For whoever authors the IFC; a checker may show this to them.",
     multiline: true,
   },
   {

@@ -152,20 +152,20 @@ export function WizardAppliesToStep({
       <h1>What does this rule apply to?</h1>
       <p className="sub">
         Pick one or more types{showAllTypes ? "" : ` from ${fileName}`}. Everything listed below
-        {showAllTypes ? "" : " is a type your file actually contains — nothing here is hypothetical"}.
+        {showAllTypes ? "" : " is a type your file actually contains; nothing here is hypothetical"}.
       </p>
 
       <div className="explain">
-        A <b>type</b> is an IFC class — the kind of thing an element is, like a wall or a door.
+        A <b>type</b> is an IFC class: the kind of thing an element is, like a wall or a door.
         {exampleGroup ? (
           <>
             {" "}
             Some types are grouped under a broader category, like <b>{exampleGroup.name}</b>{" "}
             below, which covers every kind of {exampleGroup.name.toLowerCase()} this file has (
-            {exampleGroup.types.join(", ")}) — pick the group to cover all of them at once.
+            {exampleGroup.types.join(", ")}); pick the group to cover all of them at once.
           </>
         ) : (
-          <> Some types are grouped under a broader category when this file has more than one kind of it — pick the group to cover all of them at once.</>
+          <> Some types are grouped under a broader category when this file has more than one kind of it; pick the group to cover all of them at once.</>
         )}
       </div>
 

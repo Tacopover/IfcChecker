@@ -45,7 +45,7 @@ const IFC_VERSIONS = ["IFC2X3", "IFC4", "IFC4X3_ADD2"];
 
 const PROHIBITED_HINT =
   "Flips this from a check to a ban: instead of judging elements that match, it fails the " +
-  "moment any element does. A prohibited rule can't also state requirements — remove any " +
+  "moment any element does. A prohibited rule can't also state requirements; remove any " +
   "below, or this rule won't export.";
 
 export interface RuleCardProps {
@@ -205,7 +205,7 @@ export function RuleCard({
   const shownOnly = preserved.length > 0 ? " on the conditions shown" : "";
   const summary = prohibited
     ? matched === 0
-      ? "None found — this rule is satisfied"
+      ? "None found: this rule is satisfied"
       : `${matched} element${matched === 1 ? "" : "s"} found, and none may match this rule`
     : rule.conditions.length === 0
       ? preserved.length > 0
@@ -322,7 +322,7 @@ export function RuleCard({
         <button
           type="button"
           className="iconbtn"
-          title="Add an OR condition — passes if this rule or the new one passes"
+          title="Add an OR condition: passes if this rule or the new one passes"
           aria-label={`Add OR condition to ${rule.name}`}
           onClick={onAddOrBranch}
         >
@@ -382,7 +382,7 @@ export function RuleCard({
                   // even when this file holds none of them, or only one, so `group` never formed.
                   const subtypes = descendantsOf(entityType).filter((name) => !isAbstractIfcType(name));
                   const title = [
-                    abstract ? `${entityType} is abstract — no element can carry it directly` : entityType,
+                    abstract ? `${entityType} is abstract; no element can carry it directly` : entityType,
                     group ? `covers ${group.types.join(", ")} in this file` : null,
                   ]
                     .filter((line): line is string => line !== null)
@@ -458,7 +458,7 @@ export function RuleCard({
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .map((group) => (
                       <option key={group.name} value={group.name}>
-                        {group.name} — {group.types.length} types, {group.count}
+                        {group.name}: {group.types.length} types, {group.count}
                       </option>
                     ))}
                 </optgroup>
@@ -612,7 +612,7 @@ export function RuleCard({
                   {preserved.map((entry) => (
                     <li key={`${entry.construct}-${entry.afterIndex}-${entry.xml}`}>
                       <code>{entry.construct}</code>
-                      {entry.reason ? ` — ${entry.reason}` : null}
+                      {entry.reason ? `: ${entry.reason}` : null}
                     </li>
                   ))}
                 </ul>

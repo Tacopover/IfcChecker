@@ -85,7 +85,7 @@ function groupByRule(results: readonly Violation[]): TopicGroup[] {
     const label = result.elementName ?? result.elementGlobalId;
     group.comments.push({
       guid: crypto.randomUUID(),
-      text: `${result.fileName} — ${result.elementType} "${label}" (${result.elementGlobalId}): ${result.message}`,
+      text: `${result.fileName}: ${result.elementType} "${label}" (${result.elementGlobalId}): ${result.message}`,
     });
   }
 
