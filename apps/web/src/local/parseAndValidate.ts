@@ -106,17 +106,15 @@ export interface SpecificationSummary {
   cardinalityFailure: string | null;
 }
 
-/**
- * Checks models that are already in memory — a second rule set never re-parses a file.
- *
- * Results are grouped by specification rather than flattened, because "no violations" is not
- * an answer on its own: a rule that matched nothing produces the same empty list as one that
- * every element passed, and only the first of those means the model was never checked.
- */
-export function validateParsedModels(
-  models: ParsedModel[],
-  idsXml: string
-): SpecificationSummary[] {
+/** Which file a batch check is on, for the page to report while it runs. */
+export interface CheckProgress {
+  fileName: string;
+  index: number;
+  total: number;
+}
+
+/** The rule set's own shape, as the row list every model is then merged into. */
+function summarySkeleton(idsXml: string): SpecificationSummary[] {
   // An empty-elements pass costs nothing (nothing to iterate) and gives the rule set's own
   // shape once: how many rows there are, in order, after OR groups collapse — see
   // `validateBySpecificationGrouped` — and whether each one could be run at all, which is a
@@ -128,7 +126,7 @@ export function validateParsedModels(
 
   // Merged by position, not by name: an IDS may carry two rows with the same name, and every
   // model yields these outcomes in the same order, one row per specification or OR group.
-  const summaries = skeleton.map<SpecificationSummary>((outcome) => ({
+  return skeleton.map<SpecificationSummary>((outcome) => ({
     name: outcome.name,
     checked: outcome.checked,
     unsupported: outcome.unsupported,
@@ -138,33 +136,69 @@ export function validateParsedModels(
     violations: [],
     cardinalityFailure: null,
   }));
+}
 
-  for (const model of models) {
-    validateBySpecificationGrouped(model.idsScope, idsXml, model.unitScales).forEach((outcome, index) => {
-      const summary = summaries[index];
-      summary.applicableCount += outcome.applicableCount;
-      summary.passedCount += outcome.passedCount;
-      summary.failedCount += outcome.failedCount;
-      summary.cardinalityFailure ??= outcome.cardinalityFailure;
-      summary.violations.push(
-        ...outcome.violations.map<CheckRow>((violation, position) => ({
-          // No real FileJob exists in this client-only path — fileName stands in for
-          // fileJobId, since ElementResult requires one and there's no backend id to use.
-          id: `${model.key}#${index}#${position}`,
-          fileJobId: model.fileName,
-          fileName: model.fileName,
-          modelKey: model.key,
-          elementGlobalId: violation.elementGlobalId,
-          elementType: violation.elementType,
-          elementName: violation.elementName,
-          elementTag: violation.elementTag,
-          ruleId: violation.ruleId,
-          severity: violation.severity,
-          message: violation.message,
-        }))
-      );
-    });
+/** Folds one model's outcomes into the shared row list, in place. */
+function mergeModelInto(summaries: SpecificationSummary[], model: ParsedModel, idsXml: string) {
+  validateBySpecificationGrouped(model.idsScope, idsXml, model.unitScales).forEach((outcome, index) => {
+    const summary = summaries[index];
+    summary.applicableCount += outcome.applicableCount;
+    summary.passedCount += outcome.passedCount;
+    summary.failedCount += outcome.failedCount;
+    summary.cardinalityFailure ??= outcome.cardinalityFailure;
+    summary.violations.push(
+      ...outcome.violations.map<CheckRow>((violation, position) => ({
+        // No real FileJob exists in this client-only path — fileName stands in for
+        // fileJobId, since ElementResult requires one and there's no backend id to use.
+        id: `${model.key}#${index}#${position}`,
+        fileJobId: model.fileName,
+        fileName: model.fileName,
+        modelKey: model.key,
+        elementGlobalId: violation.elementGlobalId,
+        elementType: violation.elementType,
+        elementName: violation.elementName,
+        elementTag: violation.elementTag,
+        ruleId: violation.ruleId,
+        severity: violation.severity,
+        message: violation.message,
+      }))
+    );
+  });
+}
+
+/**
+ * Checks models that are already in memory — a second rule set never re-parses a file.
+ *
+ * Results are grouped by specification rather than flattened, because "no violations" is not
+ * an answer on its own: a rule that matched nothing produces the same empty list as one that
+ * every element passed, and only the first of those means the model was never checked.
+ */
+export function validateParsedModels(
+  models: ParsedModel[],
+  idsXml: string
+): SpecificationSummary[] {
+  const summaries = summarySkeleton(idsXml);
+  for (const model of models) mergeModelInto(summaries, model, idsXml);
+  return summaries;
+}
+
+/**
+ * `validateParsedModels`, one file at a time, handing the event loop a turn before each.
+ *
+ * A batch of large models is seconds of unbroken main-thread work, and a spinner that never gets
+ * a frame to paint in is not a spinner. The yield is a macrotask rather than a microtask for the
+ * same reason: only the former lets the browser render what the last one reported.
+ */
+export async function validateParsedModelsWithProgress(
+  models: ParsedModel[],
+  idsXml: string,
+  onProgress: (progress: CheckProgress) => void
+): Promise<SpecificationSummary[]> {
+  const summaries = summarySkeleton(idsXml);
+  for (const [index, model] of models.entries()) {
+    onProgress({ fileName: model.fileName, index: index + 1, total: models.length });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    mergeModelInto(summaries, model, idsXml);
   }
-
   return summaries;
 }

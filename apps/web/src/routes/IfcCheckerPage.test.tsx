@@ -549,6 +549,34 @@ describe("IfcCheckerPage", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
+  it("names the file being checked while a batch runs, then clears it", async () => {
+    parse.mockResolvedValue({ elements: [], parseMs: 5 });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    await parseFiles(user, makeFile("model-a.ifc"), makeFile("model-b.ifc"));
+    await user.upload(screen.getByLabelText("IDS rule set (.ids or .xml)"), makeFile("rules.xml", "<ids/>"));
+
+    // The check yields between files, so the status line is only on screen mid-batch — read it
+    // from inside each call rather than racing a finished batch from outside.
+    const seen: string[] = [];
+    validateBySpecificationGrouped.mockImplementation(() => {
+      seen.push(document.querySelector('[role="status"]')?.textContent ?? "");
+      return [outcome([])];
+    });
+
+    await user.click(screen.getByRole("button", { name: "Check files" }));
+    await screen.findByRole("heading", { name: "Results" });
+
+    // The first call is the rule set's own skeleton pass, before any file is named.
+    expect(seen[0]).toMatch(/Reading the rule set/);
+    expect(seen[1]).toMatch(/Checking 1 of 2: model-a\.ifc/);
+    expect(seen[2]).toMatch(/Checking 2 of 2: model-b\.ifc/);
+    expect(seen[1]).toMatch(/\d+s elapsed/);
+    expect(screen.queryByText(/Checking \d+ of/)).not.toBeInTheDocument();
+  });
+
   it("only re-parses the files that need it when more are added to an already-parsed set", async () => {
     parse
       .mockResolvedValueOnce({ elements: [], parseMs: 5 })

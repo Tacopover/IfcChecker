@@ -11,7 +11,8 @@ import {
 import type { EngineId } from "@ifc-qa/shared-types";
 import {
   parseFile,
-  validateParsedModels,
+  validateParsedModelsWithProgress,
+  type CheckProgress,
   type ParseProgress,
   type SpecificationSummary,
 } from "../local/parseAndValidate.js";
@@ -125,6 +126,7 @@ export function IfcCheckerPage() {
   const [exampleError, setExampleError] = useState<string | null>(null);
   const [loadingExample, setLoadingExample] = useState<string | null>(null);
   const [progress, setProgress] = useState<ParseProgress | null>(null);
+  const [checkProgress, setCheckProgress] = useState<CheckProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const cancelledRef = useRef(false);
@@ -265,14 +267,21 @@ export function IfcCheckerPage() {
     if (!canCheck) return;
     setIsChecking(true);
     setCheckError(null);
+    setCheckProgress(null);
+    setElapsedSeconds(0);
+    clearInterval(tickIntervalRef.current);
+    tickIntervalRef.current = setInterval(() => setElapsedSeconds((seconds) => seconds + 1), 1000);
     try {
       const idsXml = await idsFile.text();
-      setResults(validateParsedModels(parsed, idsXml));
+      setResults(await validateParsedModelsWithProgress(parsed, idsXml, setCheckProgress));
     } catch (error) {
       setResults(null);
       setCheckError(error instanceof Error ? error.message : String(error));
     } finally {
+      clearInterval(tickIntervalRef.current);
       setIsChecking(false);
+      setCheckProgress(null);
+      setElapsedSeconds(0);
     }
   }
 
@@ -566,6 +575,16 @@ export function IfcCheckerPage() {
               <p className="requirement">To check: {checkRequirements.join(", ")}.</p>
             )}
           </div>
+
+          {isChecking && (
+            <p role="status" className="progress">
+              <span className="spinner" aria-hidden="true" />
+              {checkProgress
+                ? `Checking ${checkProgress.index} of ${checkProgress.total}: ${checkProgress.fileName}`
+                : "Reading the rule set"}
+              … ({elapsedSeconds}s elapsed)
+            </p>
+          )}
 
           {checkError && <p role="alert">{checkError}</p>}
         </div>
