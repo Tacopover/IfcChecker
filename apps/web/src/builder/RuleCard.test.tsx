@@ -8,6 +8,7 @@ import { plainName } from "@ifc-qa/ids-validator";
 import { RuleCard } from "./RuleCard";
 import { introspectModel } from "./introspect";
 import { stating } from "../test/conditions";
+import { pickFromSearch, searchPicker } from "../test/combobox";
 
 function wall(index: number, fireRating: string | null): NormalizedElement {
   return {
@@ -62,6 +63,7 @@ function Harness({
   onDelete = () => {},
   orGroupSiblingNames = [],
   onAddOrBranch = () => {},
+  elements = ELEMENTS,
 }: {
   initial?: RuleDraft;
   isOpen?: boolean;
@@ -70,6 +72,8 @@ function Harness({
   onDelete?: () => void;
   orGroupSiblingNames?: string[];
   onAddOrBranch?: () => void;
+  /** Empty stands for "no IFC loaded" — the builder renders a card either way. */
+  elements?: NormalizedElement[];
 }) {
   const [rule, setRule] = useState(initial);
   const [open, setOpen] = useState(isOpen);
@@ -77,8 +81,8 @@ function Harness({
   return (
     <RuleCard
       rule={rule}
-      elements={ELEMENTS}
-      introspection={INTROSPECTION}
+      elements={elements}
+      introspection={elements === ELEMENTS ? INTROSPECTION : introspectModel(elements)}
       isActive={isActive}
       isOpen={open}
       showFailures={showFailures}
@@ -122,10 +126,7 @@ describe("RuleCard", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.selectOptions(
-      screen.getByLabelText("Add entity type or group"),
-      "IfcBuildingElement"
-    );
+    await pickFromSearch(user, "Add entity type or group", "IfcBuildingElement");
 
     const chip = screen.getByText("IfcBuildingElement").closest(".chip");
     expect(chip).toHaveClass("group");
@@ -133,6 +134,73 @@ describe("RuleCard", () => {
     expect(within(chip as HTMLElement).getByText("31 types · 5")).toBeInTheDocument();
     expect(screen.queryByText("IfcWall")).not.toBeInTheDocument();
     expect(screen.queryByText("IfcDoor")).not.toBeInTheDocument();
+  });
+
+  // The two file-derived groups are empty with no model loaded, which used to leave no way to say
+  // what a rule applies to at all.
+  it("offers every schema type, and marks out the ones this file holds", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...RULE, entityTypes: [] }} />);
+
+    const { headings, rows } = await searchPicker(user, "Add entity type or group");
+    expect(headings).toEqual([
+      "Groups (inherited)",
+      "Entity types in this file",
+      "Also in the IFC schema (not in this file)",
+    ]);
+
+    // A count is what says "this file has these" — the schema rows carry none.
+    expect(rows).toContainEqual({ name: "IfcDoor", note: "2" });
+    expect(rows).toContainEqual({ name: "IfcWall", note: "3" });
+    expect(rows.some((row) => row.note === "")).toBe(true);
+
+    await pickFromSearch(user, "Add entity type or group", "IfcPump");
+    expect(screen.getByText("IfcPump")).toBeInTheDocument();
+  });
+
+  it("still offers types when no IFC file is loaded", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...RULE, entityTypes: [] }} elements={[]} />);
+
+    // Both file-derived groups are empty here, and an empty group is not drawn at all.
+    const { headings, rows } = await searchPicker(user, "Add entity type or group", "wall");
+    expect(headings).toEqual(["Also in the IFC schema (not in this file)"]);
+    expect(rows.map((row) => row.name)).toContain("IfcWall");
+
+    await pickFromSearch(user, "Add entity type or group", "IfcPump");
+    expect(screen.getByText("IfcPump")).toBeInTheDocument();
+  });
+
+  // ~900 schema names is more than a list can usefully show, so the box narrows them. What it holds
+  // is a query and never a value: only a row in the list can say what a rule applies to.
+  it("narrows the type list as it is typed, and shows how much it is not drawing", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={{ ...RULE, entityTypes: [] }} />);
+
+    const whole = await searchPicker(user, "Add entity type or group");
+    expect(whole.rows).toHaveLength(60);
+    expect(whole.footer.join(" ")).toMatch(/\d+ more — keep typing to narrow\./);
+
+    const narrowed = await searchPicker(user, "Add entity type or group", "flowsegment");
+    expect(narrowed.rows.map((row) => row.name)).toContain("IfcFlowSegment");
+    expect(narrowed.rows.every((row) => row.name.toLowerCase().includes("flowsegment"))).toBe(true);
+    expect(narrowed.footer).toEqual([]);
+  });
+
+  it("keeps a search that matches nothing out of the rule", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initial={{ ...RULE, entityTypes: [] }} />);
+
+    const box = screen.getByLabelText("Add entity type or group");
+    await user.type(box, "notatype");
+    expect(
+      screen.getByRole("listbox", { name: "Add entity type or group suggestions" })
+    ).toHaveTextContent("Nothing matches");
+
+    // Tabbing out is the moment the query is abandoned — it was never a name this list offered.
+    await user.tab();
+    expect(box).toHaveValue("");
+    expect(container.querySelectorAll(".chip")).toHaveLength(0);
   });
 
   // The file-scoped `group` styling has one live path left: an imported rule whose author wrote a
@@ -150,10 +218,7 @@ describe("RuleCard", () => {
     const user = userEvent.setup();
     const { container } = render(<Harness />);
 
-    await user.selectOptions(
-      screen.getByLabelText("Add entity type or group"),
-      "IfcBuildingElement"
-    );
+    await pickFromSearch(user, "Add entity type or group", "IfcBuildingElement");
 
     // Doors have no Pset_WallCommon at all, so they join the matched set and fail.
     expect(container.querySelector(".rule-foot .score-text")).toHaveTextContent("3 of 5 fail");

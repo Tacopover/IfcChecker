@@ -84,7 +84,6 @@ export function MaterialRow({
         </>
       )}
       <FacetValueEditor
-        id={facet.id}
         label="Material"
         operatorLabel="Material operator"
         value={facet.value}

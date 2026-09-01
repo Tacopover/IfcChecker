@@ -2,6 +2,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { suggestionsFor } from "../test/combobox";
 import type { EntityFacetDraft } from "@ifc-qa/ids-validator";
 import { EntityRow } from "./EntityRow";
 import type { FieldsForResult } from "./introspect";
@@ -57,14 +58,6 @@ function Harness({
   );
 }
 
-function suggestionsFor(label: string): string[] {
-  const box = screen.getByLabelText(label);
-  const listId = box.getAttribute("list") ?? "";
-  return Array.from(document.getElementById(listId)?.querySelectorAll("option") ?? []).map(
-    (option) => option.getAttribute("value") ?? ""
-  );
-}
-
 describe("EntityRow", () => {
   it("shows the class and the predefined type as two independent values", () => {
     render(<Harness />);
@@ -86,10 +79,11 @@ describe("EntityRow", () => {
 
   // The class is matched exactly and case-sensitively against the file's own spelling, so the row
   // must offer IFCWALL and never the IfcWall the applicability chips use.
-  it("offers the classes as the file spells them, not as the type chips do", () => {
+  it("offers the classes as the file spells them, not as the type chips do", async () => {
+    const user = userEvent.setup();
     render(<Harness />);
 
-    expect(suggestionsFor("Class")).toEqual(["IFCWALL", "IFCDOOR"]);
+    expect(await suggestionsFor(user, "Class")).toEqual(["IFCWALL", "IFCDOOR"]);
   });
 
   it("narrows the predefined types to the class the facet names", async () => {
@@ -97,12 +91,12 @@ describe("EntityRow", () => {
     render(<Harness />);
 
     await user.selectOptions(screen.getByLabelText("Predefined type operator"), "equals");
-    expect(suggestionsFor("Predefined type")).toEqual(["PARTITIONING", "SOLIDWALL"]);
+    expect(await suggestionsFor(user, "Predefined type")).toEqual(["PARTITIONING", "SOLIDWALL"]);
 
     const box = screen.getByLabelText("Class");
     await user.clear(box);
     await user.type(box, "IFCDOOR");
-    expect(suggestionsFor("Predefined type")).toEqual(["DOOR"]);
+    expect(await suggestionsFor(user, "Predefined type")).toEqual(["DOOR"]);
   });
 
   // A pattern names a set of classes, so no single list of predefined types is the right one and
@@ -116,7 +110,7 @@ describe("EntityRow", () => {
     await user.selectOptions(screen.getByLabelText("Predefined type operator"), "equals");
 
     // Merged across every class and ranked by count, so DOOR (3) sits above SOLIDWALL (2).
-    expect(suggestionsFor("Predefined type")).toEqual(["PARTITIONING", "DOOR", "SOLIDWALL"]);
+    expect(await suggestionsFor(user, "Predefined type")).toEqual(["PARTITIONING", "DOOR", "SOLIDWALL"]);
   });
 
   // `<name>` is mandatory, and `compileValue` would turn a stated-nothing name into an empty

@@ -123,7 +123,6 @@ export function ClassificationRow({
         </>
       )}
       <FacetValueEditor
-        id={facet.id}
         label="System"
         operatorLabel="System operator"
         value={facet.system}
@@ -138,7 +137,6 @@ export function ClassificationRow({
 
       <span className="glue">· with a code that must</span>
       <FacetValueEditor
-        id={facet.id}
         label="Code"
         operatorLabel="Code operator"
         value={facet.value}

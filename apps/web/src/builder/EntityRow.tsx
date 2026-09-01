@@ -96,7 +96,6 @@ export function EntityRow({
 
       <span className="glue">must be of a class that must</span>
       <FacetValueEditor
-        id={facet.id}
         label="Class"
         operatorLabel="Class operator"
         value={facet.name}
@@ -110,7 +109,6 @@ export function EntityRow({
 
       <span className="glue">· with a predefined type that must</span>
       <FacetValueEditor
-        id={facet.id}
         label="Predefined type"
         operatorLabel="Predefined type operator"
         value={facet.predefinedType}

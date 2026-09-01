@@ -7,6 +7,7 @@ import { plainName } from "@ifc-qa/ids-validator";
 import { ConditionRow } from "./ConditionRow";
 import type { FieldsForResult } from "./introspect";
 import { stating } from "../test/conditions";
+import { pickFromSearch, searchPicker, suggestionsFor } from "../test/combobox";
 
 const SOURCE: FieldsForResult = {
   total: 10,
@@ -106,6 +107,16 @@ function Harness({
   );
 }
 
+/** The two name fields take free text, so changing one means replacing what it holds. */
+async function retype(
+  user: ReturnType<typeof userEvent.setup>,
+  field: HTMLElement,
+  value: string
+) {
+  await user.clear(field);
+  await user.type(field, value);
+}
+
 describe("ConditionRow", () => {
   it("reads as a sentence and shows its own hit count", () => {
     render(<Harness />);
@@ -121,10 +132,10 @@ describe("ConditionRow", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.selectOptions(screen.getByLabelText("Property set"), "MEP_Data");
+    await retype(user, screen.getByLabelText("Property set"), "MEP_Data");
     expect(screen.getByLabelText("Property set")).toHaveValue("MEP_Data");
-    // Switching set must retarget the field too — FireRating does not live in MEP_Data.
-    expect(screen.getByLabelText("Field name")).toHaveValue("SystemAbbreviation");
+    // The field name is typed, so switching set carries it across rather than overwriting it.
+    expect(screen.getByLabelText("Field name")).toHaveValue("FireRating");
 
     await user.selectOptions(screen.getByLabelText("Operator"), "startsWith");
     expect(screen.getByLabelText("Operator")).toHaveValue("startsWith");
@@ -133,8 +144,76 @@ describe("ConditionRow", () => {
     expect(screen.queryByLabelText("Property set")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Field name")).toHaveValue("Tag");
 
-    await user.selectOptions(screen.getByLabelText("Field name"), "Name");
+    await retype(user, screen.getByLabelText("Field name"), "Name");
     expect(screen.getByLabelText("Field name")).toHaveValue("Name");
+  });
+
+  // A rule set is written to be checked against files other than the one open, so the model's
+  // field lists suggest names rather than limit them.
+  it("takes a property set and field the file has nothing under, and marks them typed", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await retype(user, screen.getByLabelText("Property set"), "Pset_CustomCommon");
+    await retype(user, screen.getByLabelText("Field name"), "AcousticRating");
+
+    expect(screen.getByLabelText("Property set")).toHaveValue("Pset_CustomCommon");
+    expect(screen.getByLabelText("Field name")).toHaveValue("AcousticRating");
+    expect(screen.getByLabelText("Property set")).toHaveClass("typed");
+    expect(screen.getByLabelText("Field name")).toHaveClass("typed");
+  });
+
+  it("offers the file's own names on the dropdown, and does not mark one of those as typed", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    expect(await suggestionsFor(user, "Property set")).toEqual(["MEP_Data", "Pset_WallCommon"]);
+    expect(await suggestionsFor(user, "Field name")).toEqual(["FireRating", "Status"]);
+
+    expect(screen.getByLabelText("Property set")).not.toHaveClass("typed");
+    expect(screen.getByLabelText("Field name")).not.toHaveClass("typed");
+  });
+
+  it("picks a name off the dropdown", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByLabelText("Show Field name suggestions"));
+    await user.click(screen.getByRole("option", { name: "Status" }));
+
+    expect(screen.getByLabelText("Field name")).toHaveValue("Status");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  // The complaint against the browser's own <datalist>: it narrows to what has been typed, so the
+  // moment a name leaves the file's list there is nothing left to pick from.
+  it("closes the dropdown while a name is being typed, and reopens it whole", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByLabelText("Show Field name suggestions"));
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Field name"), "X");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+
+    // Reopened: the whole file list is still there, led by what was typed over it.
+    expect(await suggestionsFor(user, "Field name")).toEqual([
+      "FireRatingX",
+      "FireRating",
+      "Status",
+    ]);
+  });
+
+  it("puts a typed name back after the user has looked through the file's own", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await retype(user, screen.getByLabelText("Field name"), "AcousticRating");
+    await user.click(screen.getByLabelText("Show Field name suggestions"));
+    await user.click(screen.getByRole("option", { name: /AcousticRating/ }));
+
+    expect(screen.getByLabelText("Field name")).toHaveValue("AcousticRating");
   });
 
   it("offers all eight operators in one list, restrictions and cardinality together", () => {
@@ -406,14 +485,19 @@ describe("a name given as a restriction", () => {
 
   // The rail's suggestions come from one field, and there is no one field here. An empty list
   // beats offering the values of whichever field the pattern happened to be typed near.
-  it("declares no stored type and offers no observed values", () => {
+  //
+  // The stored type is the exception: the schema's list is not field-specific, so a pattern-named
+  // field falls back to it the way a hand-typed name does, rather than being left unable to
+  // declare one at all.
+  it("declares no stored type and offers no observed values", async () => {
+    const user = userEvent.setup();
     render(<Harness initial={{ ...CONDITION, name: { kind: "pattern", sources: ["Fire.*"] } }} />);
 
-    const picker = screen.getByLabelText("Stored as");
-    expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
-      "any type",
-      "IFCLABEL (not in file)",
-    ]);
+    const { rows } = await searchPicker(user, "Stored as");
+    expect(rows[0].name).toBe("any type");
+    // The stated IFCLABEL needs no "not in file" note here: the schema list already holds it.
+    expect(rows).toContainEqual({ name: "IFCLABEL", note: "" });
+    expect(rows.map((row) => row.name)).toContain("IFCVOLUMEMEASURE");
   });
 });
 
@@ -421,14 +505,15 @@ describe("the stored-as picker", () => {
   // A declared type the model does not hold fails every element, silently. Declaring IFCLABEL on
   // everything cost 668 passing elements on the reference model, so the type has to come from the
   // file and the user has to be able to see and change it.
-  it("offers the types the model stores the property as, with counts", () => {
+  it("offers the types the model stores the property as, with counts", async () => {
+    const user = userEvent.setup();
     render(<Harness />);
 
-    const picker = screen.getByLabelText("Stored as");
-    expect(picker).toHaveValue("IFCLABEL");
-    expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
-      "any type",
-      "IFCLABEL (8)",
+    expect(screen.getByLabelText("Stored as")).toHaveValue("IFCLABEL");
+    const { rows } = await searchPicker(user, "Stored as");
+    expect(rows).toEqual([
+      { name: "any type", note: "" },
+      { name: "IFCLABEL", note: "8" },
     ]);
   });
 
@@ -436,29 +521,33 @@ describe("the stored-as picker", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.selectOptions(screen.getByLabelText("Stored as"), "");
-    expect(screen.getByLabelText("Stored as")).toHaveValue("");
+    await pickFromSearch(user, "Stored as", "any type");
+    expect(screen.getByLabelText("Stored as")).toHaveValue("any type");
   });
 
   it("declares nothing for a property the model stores two ways", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.selectOptions(screen.getByLabelText("Field name"), "Status");
-    const picker = screen.getByLabelText("Stored as");
-    expect(picker).toHaveValue("");
-    expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
-      "any type",
-      "IFCTEXT (7)",
-      "IFCLABEL (3)",
+    await retype(user, screen.getByLabelText("Field name"), "Status");
+    expect(screen.getByLabelText("Stored as")).toHaveValue("any type");
+    const { rows } = await searchPicker(user, "Stored as");
+    expect(rows).toEqual([
+      { name: "any type", note: "" },
+      { name: "IFCTEXT", note: "7" },
+      { name: "IFCLABEL", note: "3" },
     ]);
   });
 
-  it("follows the property set to the type the new field is stored as", async () => {
+  it("re-derives the type when the property set changes", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.selectOptions(screen.getByLabelText("Property set"), "MEP_Data");
+    // FireRating is carried across, and MEP_Data stores nothing under that name to declare from.
+    await retype(user, screen.getByLabelText("Property set"), "MEP_Data");
+    expect(screen.getByLabelText("Stored as")).toHaveValue("any type");
+
+    await retype(user, screen.getByLabelText("Field name"), "SystemAbbreviation");
     expect(screen.getByLabelText("Stored as")).toHaveValue("IFCIDENTIFIER");
   });
 
@@ -471,14 +560,56 @@ describe("the stored-as picker", () => {
     expect(screen.queryByLabelText("Stored as")).toBeNull();
   });
 
-  it("keeps an imported type selectable when this model holds nothing stored that way", () => {
+  it("keeps an imported type selectable when this model holds nothing stored that way", async () => {
+    const user = userEvent.setup();
     render(<Harness initial={{ ...CONDITION, dataType: "IFCBOOLEAN" }} />);
 
-    const picker = screen.getByLabelText("Stored as");
-    expect(picker).toHaveValue("IFCBOOLEAN");
-    expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toContain(
-      "IFCBOOLEAN (not in file)"
+    expect(screen.getByLabelText("Stored as")).toHaveValue("IFCBOOLEAN");
+    const { rows } = await searchPicker(user, "Stored as");
+    expect(rows).toContainEqual({ name: "IFCBOOLEAN", note: "not in file" });
+  });
+
+  // The usual case is a field picked off the model, where its own storage is the only honest
+  // answer. A field the file says nothing about has no such answer, and offering none would leave
+  // a hand-authored rule unable to state a type at all.
+  it("offers the schema's own list for a property the file says nothing about", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await retype(user, screen.getByLabelText("Field name"), "AcousticRating");
+    expect(screen.getByLabelText("Stored as")).toHaveValue("any type");
+
+    const { rows } = await searchPicker(user, "Stored as");
+    expect(rows[0].name).toBe("any type");
+    const offered = rows.map((row) => row.name);
+    expect(offered).toContain("IFCLABEL");
+    expect(offered).toContain("IFCBOOLEAN");
+    expect(offered).toContain("IFCTHERMALTRANSMITTANCEMEASURE");
+    // Names, no counts: nothing in the file is being reported.
+    expect(rows.every((row) => row.note === "")).toBe(true);
+  });
+
+  // ~110 names is more than a panel can usefully show, and the whole point of the closed list is
+  // that only a name on it can be stated.
+  it("narrows the schema list as it is typed, and keeps a search that matches nothing out", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await retype(user, screen.getByLabelText("Field name"), "AcousticRating");
+
+    const { rows } = await searchPicker(user, "Stored as", "thermal");
+    expect(rows.map((row) => row.name)).toContain("IFCTHERMALTRANSMITTANCEMEASURE");
+    expect(rows.every((row) => row.name.toLowerCase().includes("thermal"))).toBe(true);
+
+    const box = screen.getByLabelText("Stored as");
+    await retype(user, box, "notatype");
+    expect(screen.getByRole("listbox", { name: "Stored as suggestions" })).toHaveTextContent(
+      "Nothing matches"
     );
+
+    // Abandoned on the way out, and the row is left declaring what it declared before.
+    await user.tab();
+    expect(box).toHaveValue("any type");
   });
 });
 
@@ -508,7 +639,7 @@ describe("ConditionRow — an author's annotation", () => {
     expect(screen.getByText("A number, a dot, a number.")).toBeInTheDocument();
 
     // Retargeting the row at another field keeps the restriction, so it keeps the sentence too.
-    await user.selectOptions(screen.getByLabelText("Field name"), "Status");
+    await retype(user, screen.getByLabelText("Field name"), "Status");
     expect(screen.getByText("A number, a dot, a number.")).toBeInTheDocument();
   });
 
@@ -548,7 +679,7 @@ describe("ConditionRow — several patterns on one value", () => {
     const user = userEvent.setup();
     render(<Harness initial={TWO_PATTERNS} />);
 
-    await user.selectOptions(screen.getByLabelText("Field name"), "Status");
+    await retype(user, screen.getByLabelText("Field name"), "Status");
     expect(screen.getByLabelText("Field name")).toHaveValue("Status");
     expect(screen.getByText(/Any of 2 patterns/)).toBeInTheDocument();
   });

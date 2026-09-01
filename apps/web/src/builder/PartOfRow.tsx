@@ -193,7 +193,6 @@ export function PartOfRow({
 
       <span className="glue">a whole whose class must</span>
       <FacetValueEditor
-        id={facet.id}
         label="Class"
         operatorLabel="Class operator"
         value={facet.entityName}
@@ -208,7 +207,6 @@ export function PartOfRow({
 
       <span className="glue">· with a predefined type that must</span>
       <FacetValueEditor
-        id={facet.id}
         label="Predefined type"
         operatorLabel="Predefined type operator"
         value={facet.predefinedType}

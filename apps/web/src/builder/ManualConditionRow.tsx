@@ -1,9 +1,16 @@
 import type { ConditionDraft, ConditionalCardinality } from "@ifc-qa/ids-validator";
 import { plainName, plainNameOf } from "@ifc-qa/ids-validator";
-import { CARDINALITIES } from "./ConditionRow.js";
+import { CARDINALITIES, DATA_TYPE_ROWS, NO_DATA_TYPE, dataTypeGroupsFor } from "./ConditionRow.js";
+import { allIfcDataTypeNames } from "./allIfcDataTypes.js";
 import { FacetValueEditor } from "./FacetValueEditor.js";
 import { FacetRowFrame, errorIdOf, rowNoun, type FacetSide } from "./FacetRowFrame.js";
+import { SearchPicker } from "./SearchPicker.js";
 import { conditionProblem } from "./completeness.js";
+
+/** The schema's whole list, which no file narrows here — built once rather than per row. */
+const SCHEMA_DATA_TYPE_GROUPS = dataTypeGroupsFor(
+  allIfcDataTypeNames().map((value) => ({ value, label: value }))
+);
 
 export interface ManualConditionRowProps {
   condition: ConditionDraft;
@@ -25,8 +32,9 @@ export interface ManualConditionRowProps {
  * unchanged: `FacetValueEditor` already renders a free-text input regardless of whether
  * `observed` holds anything, so it needs no manual variant of its own.
  *
- * No "Stored as" data-type picker: with no file there is nothing to declare a type from, and the
- * mockup's manual example omits it for the same reason.
+ * Its "Stored as" picker offers the schema's own closed list rather than a file's observed types:
+ * with nothing to derive from, the alternative is a hand-authored rule that cannot state a type at
+ * all. `ConditionRow` falls back to the same list for a name its file says nothing about.
  */
 export function ManualConditionRow({
   condition,
@@ -97,6 +105,20 @@ export function ManualConditionRow({
         onChange={(event) => onChange({ ...condition, name: plainName(event.target.value) })}
       />
 
+      {condition.kind === "property" && (
+        <SearchPicker
+          label="Stored as"
+          title="The IFC data type the property must be stored as"
+          inputClassName="tok subtle"
+          value={condition.dataType ?? NO_DATA_TYPE}
+          groups={SCHEMA_DATA_TYPE_GROUPS}
+          maxRows={DATA_TYPE_ROWS}
+          onPick={(picked) =>
+            onChange({ ...condition, dataType: picked === NO_DATA_TYPE ? null : picked })
+          }
+        />
+      )}
+
       {selects ? (
         <span className="glue">selects only those where it must</span>
       ) : (
@@ -117,7 +139,6 @@ export function ManualConditionRow({
       )}
 
       <FacetValueEditor
-        id={condition.id}
         label="Value"
         operatorLabel="Operator"
         value={condition.value}
