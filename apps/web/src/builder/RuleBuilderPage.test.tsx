@@ -484,6 +484,36 @@ describe("RuleBuilderPage", () => {
     expect(screen.getAllByText("OR")).toHaveLength(2);
   });
 
+  it("puts a duplicate of an OR branch below the whole group, not between the branches", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    await user.click(screen.getByRole("button", { name: "Duplicate rule New rule" }));
+
+    expect(screen.getAllByLabelText("Rule name").map((input) => (input as HTMLInputElement).value))
+      .toEqual(["New rule", "New rule (2)", "New rule (copy)"]);
+  });
+
+  it("drops the OR link off the branch left behind when the other one is deleted", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+    expect(screen.getAllByText("OR")).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "Delete rule New rule (2)" }));
+
+    expect(screen.getAllByLabelText("Rule name")).toHaveLength(1);
+    expect(screen.queryByText("OR")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
+    expect(screen.getByLabelText("IDS XML preview").textContent ?? "").not.toContain("ifcqa:or:");
+  });
+
   it("gives two independently created OR groups distinct identifiers", async () => {
     const user = userEvent.setup();
     renderBuilder([{ fileName: "tower.ifc" }]);

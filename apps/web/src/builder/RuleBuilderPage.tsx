@@ -16,11 +16,13 @@ import type {
 } from "@ifc-qa/ids-validator";
 import {
   expandedTypeNamesFor,
+  indexAfterOrGroupOf,
   nextOrGroupId,
   OR_GROUP_IDENTIFIER_PREFIX,
   orGroupIdOf,
   orGroupSiblingsOf,
   plainName,
+  withLoneOrGroupsCleared,
 } from "@ifc-qa/ids-validator";
 import { SPATIAL_STRUCTURE_TYPES } from "@ifc-qa/parser-adapters/browser";
 import { modelKey as fileIdentity, useLoadedModels } from "../state/loadedModels.js";
@@ -405,8 +407,11 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
       // A non-OR identifier (a third party's own machine id) is left untouched.
       ...(orGroupIdOf(rule.identifier) ? { identifier: null } : {}),
     };
-    const index = rules.indexOf(rule);
-    setRules([...rules.slice(0, index + 1), copy, ...rules.slice(index + 1)]);
+    // Past the whole OR group, not just past `rule`: dropped straight below a first branch the
+    // copy would sit inside the group's frame, reading as a branch of it while being linked to
+    // nothing. See `indexAfterOrGroupOf`.
+    const index = indexAfterOrGroupOf(rules, rule);
+    setRules([...rules.slice(0, index), copy, ...rules.slice(index)]);
     openRule(copy.id);
   }
 
@@ -536,7 +541,9 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
           orGroupSiblingNames={orGroupSiblingsOf(rules, rule).map((sibling) => sibling.name)}
           onAddOrBranch={() => handleAddOrBranch(rule)}
           onDelete={() => {
-            setRules(rules.filter((entry) => entry.id !== rule.id));
+            // Cleared, not kept: deleting down to one branch leaves a group of one, whose id
+            // links nothing and only shows up as a stray identifier in the exported document.
+            setRules(withLoneOrGroupsCleared(rules.filter((entry) => entry.id !== rule.id)));
             setTarget((current) => (current === rule.id ? "new" : current));
           }}
           onActivate={() => setTarget(rule.id)}

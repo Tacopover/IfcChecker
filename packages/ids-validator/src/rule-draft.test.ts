@@ -17,12 +17,14 @@ import {
   effectiveCardinalityOf,
   escapeRegExp,
   friendlyReadingOf,
+  indexAfterOrGroupOf,
   nextOrGroupId,
   orGroupIdsInUse,
   orGroupSiblingsOf,
   patternValueDraft,
   plainName,
   valueDraftForOperator,
+  withLoneOrGroupsCleared,
 } from "./rule-draft.js";
 
 /**
@@ -496,6 +498,64 @@ describe("orGroupSiblingsOf", () => {
   it("is empty once every other member of the group is gone", () => {
     const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
     expect(orGroupSiblingsOf([a], a)).toEqual([]);
+  });
+});
+
+describe("indexAfterOrGroupOf", () => {
+  it("is the rule's own index plus one when it carries no group id", () => {
+    const a = rule({ id: "r1" });
+    const b = rule({ id: "r2" });
+    expect(indexAfterOrGroupOf([a, b], a)).toBe(1);
+  });
+
+  it("skips past the branches below a first OR member", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:g1" });
+    const c = rule({ id: "r3", identifier: "ifcqa:or:g1" });
+    const d = rule({ id: "r4" });
+    expect(indexAfterOrGroupOf([a, b, c, d], a)).toBe(3);
+  });
+
+  it("is one past a last member, which has no branches below it", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:g1" });
+    expect(indexAfterOrGroupOf([a, b], b)).toBe(2);
+  });
+
+  it("stops at a different group rather than swallowing it", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:g2" });
+    expect(indexAfterOrGroupOf([a, b], a)).toBe(1);
+  });
+
+  it("appends when the rule is not in the list", () => {
+    const a = rule({ id: "r1" });
+    expect(indexAfterOrGroupOf([rule({ id: "r2" })], a)).toBe(1);
+  });
+});
+
+describe("withLoneOrGroupsCleared", () => {
+  it("clears the identifier of a group left with one member", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    expect(withLoneOrGroupsCleared([a])).toEqual([{ ...a, identifier: null }]);
+  });
+
+  it("leaves a group that still has two members alone", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:g1" });
+    expect(withLoneOrGroupsCleared([a, b])).toEqual([a, b]);
+  });
+
+  it("clears only the emptied group, not a healthy one beside it", () => {
+    const lone = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const a = rule({ id: "r2", identifier: "ifcqa:or:g2" });
+    const b = rule({ id: "r3", identifier: "ifcqa:or:g2" });
+    expect(withLoneOrGroupsCleared([lone, a, b])).toEqual([{ ...lone, identifier: null }, a, b]);
+  });
+
+  it("keeps an identifier that is not this tool's OR prefix", () => {
+    const a = rule({ id: "r1", identifier: "REQ-042" });
+    expect(withLoneOrGroupsCleared([a])).toEqual([a]);
   });
 });
 
