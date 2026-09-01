@@ -29,7 +29,7 @@ function makeManyResults(count: number): IssueRow[] {
 }
 
 describe("IssueTable", () => {
-  it("renders every result row with its file, element type, rule, severity, and message", () => {
+  it("renders every result row with its file, element type, rule and message", () => {
     render(<IssueTable results={fixtureRows} />);
 
     expect(screen.getByText("IFCWALL")).toBeInTheDocument();
@@ -100,16 +100,6 @@ describe("IssueTable", () => {
     render(<IssueTable results={fixtureRows} />);
 
     await user.type(screen.getByLabelText("Filter by element type"), "IFCDOOR");
-
-    expect(screen.queryByText("naming-prefix")).not.toBeInTheDocument();
-    expect(screen.getByText("fire-rating-required")).toBeInTheDocument();
-  });
-
-  it("filters rows by severity", async () => {
-    const user = userEvent.setup();
-    render(<IssueTable results={fixtureRows} />);
-
-    await user.selectOptions(screen.getByLabelText("Filter by severity"), "warning");
 
     expect(screen.queryByText("naming-prefix")).not.toBeInTheDocument();
     expect(screen.getByText("fire-rating-required")).toBeInTheDocument();

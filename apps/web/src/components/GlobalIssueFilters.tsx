@@ -61,18 +61,6 @@ export function GlobalIssueFilters({ value, onChange, onClear, canClear }: Globa
           onChange={(e) => set("ruleId", e.target.value)}
         />
       </label>
-      <label>
-        Severity
-        <select
-          aria-label="Filter all results by severity"
-          value={value.severity}
-          onChange={(e) => set("severity", e.target.value)}
-        >
-          <option value="">All</option>
-          <option value="error">error</option>
-          <option value="warning">warning</option>
-        </select>
-      </label>
       <button type="button" className="ghost-btn" disabled={!canClear} onClick={onClear}>
         Clear all filters
       </button>

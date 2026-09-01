@@ -384,13 +384,13 @@ describe("CheckSummary", () => {
           summary({ name: "First", violations: [violation({ id: "v1" })] }),
           summary({
             name: "Second",
-            violations: [violation({ id: "v2", elementGlobalId: "g2", severity: "warning" })],
+            violations: [violation({ id: "v2", elementGlobalId: "g2", elementName: "East Wall" })],
           }),
         ]}
       />
     );
 
-    await user.selectOptions(screen.getByLabelText("Filter all results by severity"), "warning");
+    await user.type(screen.getByLabelText("Filter all results by element name or GlobalId"), "East");
     expect(screen.getByText("Showing 1 of 2 issues in 1 of 2 specifications.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Clear all filters" }));
