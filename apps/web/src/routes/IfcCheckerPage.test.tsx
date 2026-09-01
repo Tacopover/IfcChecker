@@ -219,6 +219,45 @@ describe("IfcCheckerPage", () => {
     expect(screen.getByText("dropped.ids")).toBeInTheDocument();
   });
 
+  it("offers the bundled example IDS files without any file having been chosen", () => {
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Example IDS" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Load-bearing IDS" })).toBeInTheDocument();
+  });
+
+  it("loads a bundled example as the active IDS file the same way a real upload would", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, blob: () => Promise.resolve(new Blob(["<ids/>"])) });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      renderPage();
+
+      await user.click(screen.getByRole("button", { name: "Example IDS" }));
+
+      expect(fetchMock).toHaveBeenCalledWith("/examples/ids/Example-IDS.ids");
+      expect(await screen.findByText("Example-IDS.ids")).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports a bundled example it cannot fetch instead of silently doing nothing", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    try {
+      renderPage();
+
+      await user.click(screen.getByRole("button", { name: "Example IDS" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Example IDS");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("resets the files and results back to the empty state", async () => {
     parse.mockResolvedValueOnce({ elements: [], parseMs: 5 });
     validateBySpecificationGrouped

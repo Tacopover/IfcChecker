@@ -26,6 +26,29 @@ import { ModelStructureTree } from "../components/ModelStructureTree";
 
 type ExportKind = "csv" | "excel" | "bcf";
 
+interface ExampleIds {
+  fileName: string;
+  label: string;
+  description: string;
+}
+
+// Bundled by scripts/copy-example-ids.mjs from fixtures/ids/ at the repo root into
+// public/examples/ids/, so a user can try the app without sourcing their own IDS file first.
+const EXAMPLE_IDS_FILES: ExampleIds[] = [
+  {
+    fileName: "Example-IDS.ids",
+    label: "Example IDS",
+    description:
+      "Starter checks: storey naming, site name, material presence, NL-SfB classification codes, required properties, and system membership.",
+  },
+  {
+    fileName: "Load_bearing-IDS.ids",
+    label: "Load-bearing IDS",
+    description:
+      "The example checks above, plus load-bearing property checks for walls, slabs, and beams.",
+  },
+];
+
 function countViolations(summaries: SpecificationSummary[] | null): number {
   return summaries?.reduce((total, summary) => total + summary.violations.length, 0) ?? 0;
 }
@@ -99,6 +122,8 @@ export function IfcCheckerPage() {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isExportingBcf, setIsExportingBcf] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exampleError, setExampleError] = useState<string | null>(null);
+  const [loadingExample, setLoadingExample] = useState<string | null>(null);
   const [progress, setProgress] = useState<ParseProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -166,6 +191,21 @@ export function IfcCheckerPage() {
   function handleIdsFile(file: File | null) {
     setIdsFile(file);
     dropStaleResults();
+  }
+
+  async function handleLoadExample(example: ExampleIds) {
+    setExampleError(null);
+    setLoadingExample(example.fileName);
+    try {
+      const response = await fetch(`/examples/ids/${example.fileName}`);
+      if (!response.ok) throw new Error(`Could not load ${example.label} (${response.status}).`);
+      const blob = await response.blob();
+      handleIdsFile(new File([blob], example.fileName, { type: "application/xml" }));
+    } catch (error) {
+      setExampleError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingExample(null);
+    }
   }
 
   function handleRemoveIfcFile(key: string) {
@@ -497,6 +537,25 @@ export function IfcCheckerPage() {
               <p className="drop-hint">or drop a .ids file here</p>
             </div>
           </FileDropzone>
+
+          <div className="example-ids">
+            <p className="example-ids-label">Try an example</p>
+            <div className="example-ids-row">
+              {EXAMPLE_IDS_FILES.map((example) => (
+                <button
+                  key={example.fileName}
+                  type="button"
+                  className="btn ghost"
+                  title={example.description}
+                  disabled={loadingExample !== null}
+                  onClick={() => void handleLoadExample(example)}
+                >
+                  {loadingExample === example.fileName ? "Loading..." : example.label}
+                </button>
+              ))}
+            </div>
+            {exampleError && <p role="alert">{exampleError}</p>}
+          </div>
 
           <div className="step-actions">
             <button type="button" disabled={!canCheck} onClick={handleCheck}>

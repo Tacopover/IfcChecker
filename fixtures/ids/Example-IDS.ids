@@ -1,0 +1,423 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ids xmlns="http://standards.buildingsmart.org/IDS"
+     xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <info>
+    <title>Example IDS</title>
+    <date>2026-08-21</date>
+  </info>
+  <specifications>
+    <specification name="IfcBuildingElementProxy forbidden" ifcVersion="IFC2X3 IFC4">
+      <applicability minOccurs="0" maxOccurs="0">
+        <entity><name><simpleValue>IFCBUILDINGELEMENTPROXY</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+      </requirements>
+    </specification>
+    <specification name="Level check" ifcVersion="IFC2X3 IFC4" description="Check if building storeys start with 2 numeric values">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCBUILDINGSTOREY</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+      <attribute>
+        <name><simpleValue>Name</simpleValue></name>
+        <value>
+          <xs:restriction base="xs:string">
+            <xs:pattern value="^\d{2}" />
+          </xs:restriction>
+        </value>
+      </attribute>
+      </requirements>
+    </specification>
+    <specification name="Site name is correct" ifcVersion="IFC2X3 IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCSITE</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+      <attribute>
+        <name><simpleValue>Name</simpleValue></name>
+        <value><simpleValue>Fill in Site Name here</simpleValue></value>
+      </attribute>
+      </requirements>
+    </specification>
+    <specification name="Material must exist" ifcVersion="IFC2X3 IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity>
+          <name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCBUILDINGELEMENTPROXY" />
+              <xs:enumeration value="IFCFLOWFITTING" />
+              <xs:enumeration value="IFCFLOWSEGMENT" />
+              <xs:enumeration value="IFCFLOWTERMINAL" />
+              <xs:enumeration value="IFCMECHANICALFASTENER" />
+              <xs:enumeration value="IFCFLOWMOVINGDEVICE" />
+            </xs:restriction>
+          </name>
+        </entity>
+      </applicability>
+      <requirements>
+      <material>
+      </material>
+      </requirements>
+    </specification>
+    <specification name="NL-Sfb check" ifcVersion="IFC2X3 IFC4" description="Checks if syntax is 2 numeric values, a dot and then another 2 numeric values. Also may not end with &apos;00&apos;">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity>
+          <name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCBUILDINGELEMENTPROXY" />
+              <xs:enumeration value="IFCFLOWFITTING" />
+              <xs:enumeration value="IFCFLOWSEGMENT" />
+              <xs:enumeration value="IFCFLOWTERMINAL" />
+              <xs:enumeration value="IFCMECHANICALFASTENER" />
+              <xs:enumeration value="IFCFLOWMOVINGDEVICE" />
+              <xs:enumeration value="IFCFOOTING" />
+              <xs:enumeration value="IFCPILE" />
+              <xs:enumeration value="IFCBEAM" />
+              <xs:enumeration value="IFCBEAMSTANDARDCASE" />
+              <xs:enumeration value="IFCCHIMNEY" />
+              <xs:enumeration value="IFCCOLUMN" />
+              <xs:enumeration value="IFCCOLUMNSTANDARDCASE" />
+              <xs:enumeration value="IFCCOVERING" />
+              <xs:enumeration value="IFCCURTAINWALL" />
+              <xs:enumeration value="IFCDOOR" />
+              <xs:enumeration value="IFCDOORSTANDARDCASE" />
+              <xs:enumeration value="IFCMEMBER" />
+              <xs:enumeration value="IFCMEMBERSTANDARDCASE" />
+              <xs:enumeration value="IFCPLATE" />
+              <xs:enumeration value="IFCPLATESTANDARDCASE" />
+              <xs:enumeration value="IFCRAILING" />
+              <xs:enumeration value="IFCRAMP" />
+              <xs:enumeration value="IFCRAMPFLIGHT" />
+              <xs:enumeration value="IFCROOF" />
+              <xs:enumeration value="IFCSHADINGDEVICE" />
+              <xs:enumeration value="IFCSLAB" />
+              <xs:enumeration value="IFCSLABELEMENTEDCASE" />
+              <xs:enumeration value="IFCSLABSTANDARDCASE" />
+              <xs:enumeration value="IFCSTAIR" />
+              <xs:enumeration value="IFCSTAIRFLIGHT" />
+              <xs:enumeration value="IFCWALL" />
+              <xs:enumeration value="IFCWALLELEMENTEDCASE" />
+              <xs:enumeration value="IFCWALLSTANDARDCASE" />
+              <xs:enumeration value="IFCWINDOW" />
+              <xs:enumeration value="IFCWINDOWSTANDARDCASE" />
+              <xs:enumeration value="IFCREINFORCINGBAR" />
+              <xs:enumeration value="IFCREINFORCINGMESH" />
+              <xs:enumeration value="IFCTENDON" />
+              <xs:enumeration value="IFCTENDONANCHOR" />
+              <xs:enumeration value="IFCBUILDINGELEMENTPART" />
+              <xs:enumeration value="IFCDISCRETEACCESSORY" />
+              <xs:enumeration value="IFCFASTENER" />
+              <xs:enumeration value="IFCVIBRATIONISOLATOR" />
+              <xs:enumeration value="IFCSURFACEFEATURE" />
+              <xs:enumeration value="IFCVOIDINGFEATURE" />
+              <xs:enumeration value="IFCOPENINGELEMENT" />
+              <xs:enumeration value="IFCOPENINGSTANDARDCASE" />
+              <xs:enumeration value="IFCPROJECTIONELEMENT" />
+              <xs:enumeration value="IFCFURNISHINGELEMENT" />
+              <xs:enumeration value="IFCFURNITURE" />
+              <xs:enumeration value="IFCSYSTEMFURNITUREELEMENT" />
+              <xs:enumeration value="IFCDISTRIBUTIONELEMENT" />
+              <xs:enumeration value="IFCDISTRIBUTIONFLOWELEMENT" />
+              <xs:enumeration value="IFCDISTRIBUTIONCHAMBERELEMENT" />
+              <xs:enumeration value="IFCENERGYCONVERSIONDEVICE" />
+              <xs:enumeration value="IFCAIRTOAIRHEATRECOVERY" />
+              <xs:enumeration value="IFCBOILER" />
+              <xs:enumeration value="IFCBURNER" />
+              <xs:enumeration value="IFCCHILLER" />
+              <xs:enumeration value="IFCCOIL" />
+              <xs:enumeration value="IFCCONDENSER" />
+              <xs:enumeration value="IFCCOOLEDBEAM" />
+              <xs:enumeration value="IFCCOOLINGTOWER" />
+              <xs:enumeration value="IFCENGINE" />
+              <xs:enumeration value="IFCEVAPORATIVECOOLER" />
+              <xs:enumeration value="IFCEVAPORATOR" />
+              <xs:enumeration value="IFCHEATEXCHANGER" />
+              <xs:enumeration value="IFCHUMIDIFIER" />
+              <xs:enumeration value="IFCTUBEBUNDLE" />
+              <xs:enumeration value="IFCUNITARYEQUIPMENT" />
+              <xs:enumeration value="IFCELECTRICGENERATOR" />
+              <xs:enumeration value="IFCELECTRICMOTOR" />
+              <xs:enumeration value="IFCMOTORCONNECTION" />
+              <xs:enumeration value="IFCSOLARDEVICE" />
+              <xs:enumeration value="IFCTRANSFORMER" />
+              <xs:enumeration value="IFCFLOWCONTROLLER" />
+              <xs:enumeration value="IFCAIRTERMINALBOX" />
+              <xs:enumeration value="IFCDAMPER" />
+              <xs:enumeration value="IFCFLOWMETER" />
+              <xs:enumeration value="IFCVALVE" />
+              <xs:enumeration value="IFCELECTRICDISTRIBUTIONBOARD" />
+              <xs:enumeration value="IFCELECTRICTIMECONTROL" />
+              <xs:enumeration value="IFCPROTECTIVEDEVICE" />
+              <xs:enumeration value="IFCSWITCHINGDEVICE" />
+              <xs:enumeration value="IFCDUCTFITTING" />
+              <xs:enumeration value="IFCPIPEFITTING" />
+              <xs:enumeration value="IFCCABLECARRIERFITTING" />
+              <xs:enumeration value="IFCCABLEFITTING" />
+              <xs:enumeration value="IFCJUNCTIONBOX" />
+              <xs:enumeration value="IFCCOMPRESSOR" />
+              <xs:enumeration value="IFCFAN" />
+              <xs:enumeration value="IFCPUMP" />
+              <xs:enumeration value="IFCDUCTSEGMENT" />
+              <xs:enumeration value="IFCPIPESEGMENT" />
+              <xs:enumeration value="IFCCABLECARRIERSEGMENT" />
+              <xs:enumeration value="IFCCABLESEGMENT" />
+              <xs:enumeration value="IFCFLOWSTORAGEDEVICE" />
+              <xs:enumeration value="IFCTANK" />
+              <xs:enumeration value="IFCELECTRICFLOWSTORAGEDEVICE" />
+              <xs:enumeration value="IFCFIRESUPPRESSIONTERMINAL" />
+              <xs:enumeration value="IFCSANITARYTERMINAL" />
+              <xs:enumeration value="IFCSTACKTERMINAL" />
+              <xs:enumeration value="IFCWASTETERMINAL" />
+              <xs:enumeration value="IFCAIRTERMINAL" />
+              <xs:enumeration value="IFCMEDICALDEVICE" />
+              <xs:enumeration value="IFCSPACEHEATER" />
+              <xs:enumeration value="IFCAUDIOVISUALAPPLIANCE" />
+              <xs:enumeration value="IFCCOMMUNICATIONSAPPLIANCE" />
+              <xs:enumeration value="IFCELECTRICAPPLIANCE" />
+              <xs:enumeration value="IFCLAMP" />
+              <xs:enumeration value="IFCLIGHTFIXTURE" />
+              <xs:enumeration value="IFCOUTLET" />
+              <xs:enumeration value="IFCFLOWTREATMENTDEVICE" />
+              <xs:enumeration value="IFCINTERCEPTOR" />
+              <xs:enumeration value="IFCDUCTSILENCER" />
+              <xs:enumeration value="IFCFILTER" />
+              <xs:enumeration value="IFCDISTRIBUTIONCONTROLELEMENT" />
+              <xs:enumeration value="IFCPROTECTIVEDEVICETRIPPINGUNIT" />
+              <xs:enumeration value="IFCACTUATOR" />
+              <xs:enumeration value="IFCALARM" />
+              <xs:enumeration value="IFCCONTROLLER" />
+              <xs:enumeration value="IFCFLOWINSTRUMENT" />
+              <xs:enumeration value="IFCSENSOR" />
+              <xs:enumeration value="IFCUNITARYCONTROLELEMENT" />
+              <xs:enumeration value="IFCCIVILELEMENT" />
+              <xs:enumeration value="IFCELEMENTASSEMBLY" />
+              <xs:enumeration value="IFCGEOGRAPHICELEMENT" />
+              <xs:enumeration value="IFCTRANSPORTELEMENT" />
+              <xs:enumeration value="IFCVIRTUALELEMENT" />
+              <xs:enumeration value="IFCCHAMFEREDGEFEATURE" />
+              <xs:enumeration value="IFCROUNDEDEDGEFEATURE" />
+              <xs:enumeration value="IFCELECTRICALELEMENT" />
+              <xs:enumeration value="IFCEQUIPMENTELEMENT" />
+              <xs:enumeration value="IFCELECTRICDISTRIBUTIONPOINT" />
+            </xs:restriction>
+          </name>
+        </entity>
+      </applicability>
+      <requirements>
+      <classification>
+        <value>
+          <xs:restriction base="xs:string">
+            <xs:pattern value="^\d{2}\.(?!00)\d{2}$" />
+          </xs:restriction>
+        </value>
+        <system>
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="Uniformat" />
+            <xs:enumeration value="Default Classification" />
+            <xs:enumeration value="NL-SfB" />
+          </xs:restriction>
+        </system>
+      </classification>
+      </requirements>
+    </specification>
+    <specification name="Property must be filled in" ifcVersion="IFC2X3 IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity>
+          <name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCFLOWFITTING" />
+              <xs:enumeration value="IFCFLOWSEGMENT" />
+              <xs:enumeration value="IFCCOVERING" />
+              <xs:enumeration value="IFCFLOWCONTROLLER" />
+              <xs:enumeration value="IFCDISTRIBUTIONCONTROLELEMENT" />
+              <xs:enumeration value="IFCFLOWTERMINAL" />
+              <xs:enumeration value="IFCENERGYCONVERSIONDEVICE" />
+              <xs:enumeration value="IFCBUILDINGELEMENTPROXY" />
+            </xs:restriction>
+          </name>
+        </entity>
+      </applicability>
+      <requirements>
+      <property dataType="IFCIDENTIFIER">
+        <propertySet><simpleValue>Pset_QuantityTakeOff</simpleValue></propertySet>
+        <baseName><simpleValue>Reference</simpleValue></baseName>
+      </property>
+      </requirements>
+    </specification>
+    <specification name="DistributionFlowElement Must be part of System" ifcVersion="IFC2X3 IFC4" identifier="ifcqa:or:or47">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity>
+          <name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCFLOWFITTING" />
+              <xs:enumeration value="IFCFLOWSEGMENT" />
+              <xs:enumeration value="IFCFLOWCONTROLLER" />
+              <xs:enumeration value="IFCFLOWTERMINAL" />
+              <xs:enumeration value="IFCDISTRIBUTIONFLOWELEMENT" />
+              <xs:enumeration value="IFCDISTRIBUTIONCHAMBERELEMENT" />
+              <xs:enumeration value="IFCENERGYCONVERSIONDEVICE" />
+              <xs:enumeration value="IFCAIRTOAIRHEATRECOVERY" />
+              <xs:enumeration value="IFCBOILER" />
+              <xs:enumeration value="IFCBURNER" />
+              <xs:enumeration value="IFCCHILLER" />
+              <xs:enumeration value="IFCCOIL" />
+              <xs:enumeration value="IFCCONDENSER" />
+              <xs:enumeration value="IFCCOOLEDBEAM" />
+              <xs:enumeration value="IFCCOOLINGTOWER" />
+              <xs:enumeration value="IFCENGINE" />
+              <xs:enumeration value="IFCEVAPORATIVECOOLER" />
+              <xs:enumeration value="IFCEVAPORATOR" />
+              <xs:enumeration value="IFCHEATEXCHANGER" />
+              <xs:enumeration value="IFCHUMIDIFIER" />
+              <xs:enumeration value="IFCTUBEBUNDLE" />
+              <xs:enumeration value="IFCUNITARYEQUIPMENT" />
+              <xs:enumeration value="IFCELECTRICGENERATOR" />
+              <xs:enumeration value="IFCELECTRICMOTOR" />
+              <xs:enumeration value="IFCMOTORCONNECTION" />
+              <xs:enumeration value="IFCSOLARDEVICE" />
+              <xs:enumeration value="IFCTRANSFORMER" />
+              <xs:enumeration value="IFCAIRTERMINALBOX" />
+              <xs:enumeration value="IFCDAMPER" />
+              <xs:enumeration value="IFCFLOWMETER" />
+              <xs:enumeration value="IFCVALVE" />
+              <xs:enumeration value="IFCELECTRICDISTRIBUTIONBOARD" />
+              <xs:enumeration value="IFCELECTRICTIMECONTROL" />
+              <xs:enumeration value="IFCPROTECTIVEDEVICE" />
+              <xs:enumeration value="IFCSWITCHINGDEVICE" />
+              <xs:enumeration value="IFCDUCTFITTING" />
+              <xs:enumeration value="IFCPIPEFITTING" />
+              <xs:enumeration value="IFCCABLECARRIERFITTING" />
+              <xs:enumeration value="IFCCABLEFITTING" />
+              <xs:enumeration value="IFCJUNCTIONBOX" />
+              <xs:enumeration value="IFCFLOWMOVINGDEVICE" />
+              <xs:enumeration value="IFCCOMPRESSOR" />
+              <xs:enumeration value="IFCFAN" />
+              <xs:enumeration value="IFCPUMP" />
+              <xs:enumeration value="IFCDUCTSEGMENT" />
+              <xs:enumeration value="IFCPIPESEGMENT" />
+              <xs:enumeration value="IFCCABLECARRIERSEGMENT" />
+              <xs:enumeration value="IFCCABLESEGMENT" />
+              <xs:enumeration value="IFCFLOWSTORAGEDEVICE" />
+              <xs:enumeration value="IFCTANK" />
+              <xs:enumeration value="IFCELECTRICFLOWSTORAGEDEVICE" />
+              <xs:enumeration value="IFCFIRESUPPRESSIONTERMINAL" />
+              <xs:enumeration value="IFCSANITARYTERMINAL" />
+              <xs:enumeration value="IFCSTACKTERMINAL" />
+              <xs:enumeration value="IFCWASTETERMINAL" />
+              <xs:enumeration value="IFCAIRTERMINAL" />
+              <xs:enumeration value="IFCMEDICALDEVICE" />
+              <xs:enumeration value="IFCSPACEHEATER" />
+              <xs:enumeration value="IFCAUDIOVISUALAPPLIANCE" />
+              <xs:enumeration value="IFCCOMMUNICATIONSAPPLIANCE" />
+              <xs:enumeration value="IFCELECTRICAPPLIANCE" />
+              <xs:enumeration value="IFCLAMP" />
+              <xs:enumeration value="IFCLIGHTFIXTURE" />
+              <xs:enumeration value="IFCOUTLET" />
+              <xs:enumeration value="IFCFLOWTREATMENTDEVICE" />
+              <xs:enumeration value="IFCINTERCEPTOR" />
+              <xs:enumeration value="IFCDUCTSILENCER" />
+              <xs:enumeration value="IFCFILTER" />
+              <xs:enumeration value="IFCELECTRICDISTRIBUTIONPOINT" />
+            </xs:restriction>
+          </name>
+        </entity>
+      </applicability>
+      <requirements>
+      <partOf>
+        <entity>
+          <name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCSYSTEM" />
+            </xs:restriction>
+          </name>
+        </entity>
+      </partOf>
+      </requirements>
+    </specification>
+    <specification name="DistributionFlowElement Must be part of System (2)" ifcVersion="IFC2X3 IFC4" identifier="ifcqa:or:or47">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity>
+          <name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCFLOWFITTING" />
+              <xs:enumeration value="IFCFLOWSEGMENT" />
+              <xs:enumeration value="IFCFLOWCONTROLLER" />
+              <xs:enumeration value="IFCFLOWTERMINAL" />
+              <xs:enumeration value="IFCDISTRIBUTIONFLOWELEMENT" />
+              <xs:enumeration value="IFCDISTRIBUTIONCHAMBERELEMENT" />
+              <xs:enumeration value="IFCENERGYCONVERSIONDEVICE" />
+              <xs:enumeration value="IFCAIRTOAIRHEATRECOVERY" />
+              <xs:enumeration value="IFCBOILER" />
+              <xs:enumeration value="IFCBURNER" />
+              <xs:enumeration value="IFCCHILLER" />
+              <xs:enumeration value="IFCCOIL" />
+              <xs:enumeration value="IFCCONDENSER" />
+              <xs:enumeration value="IFCCOOLEDBEAM" />
+              <xs:enumeration value="IFCCOOLINGTOWER" />
+              <xs:enumeration value="IFCENGINE" />
+              <xs:enumeration value="IFCEVAPORATIVECOOLER" />
+              <xs:enumeration value="IFCEVAPORATOR" />
+              <xs:enumeration value="IFCHEATEXCHANGER" />
+              <xs:enumeration value="IFCHUMIDIFIER" />
+              <xs:enumeration value="IFCTUBEBUNDLE" />
+              <xs:enumeration value="IFCUNITARYEQUIPMENT" />
+              <xs:enumeration value="IFCELECTRICGENERATOR" />
+              <xs:enumeration value="IFCELECTRICMOTOR" />
+              <xs:enumeration value="IFCMOTORCONNECTION" />
+              <xs:enumeration value="IFCSOLARDEVICE" />
+              <xs:enumeration value="IFCTRANSFORMER" />
+              <xs:enumeration value="IFCAIRTERMINALBOX" />
+              <xs:enumeration value="IFCDAMPER" />
+              <xs:enumeration value="IFCFLOWMETER" />
+              <xs:enumeration value="IFCVALVE" />
+              <xs:enumeration value="IFCELECTRICDISTRIBUTIONBOARD" />
+              <xs:enumeration value="IFCELECTRICTIMECONTROL" />
+              <xs:enumeration value="IFCPROTECTIVEDEVICE" />
+              <xs:enumeration value="IFCSWITCHINGDEVICE" />
+              <xs:enumeration value="IFCDUCTFITTING" />
+              <xs:enumeration value="IFCPIPEFITTING" />
+              <xs:enumeration value="IFCCABLECARRIERFITTING" />
+              <xs:enumeration value="IFCCABLEFITTING" />
+              <xs:enumeration value="IFCJUNCTIONBOX" />
+              <xs:enumeration value="IFCFLOWMOVINGDEVICE" />
+              <xs:enumeration value="IFCCOMPRESSOR" />
+              <xs:enumeration value="IFCFAN" />
+              <xs:enumeration value="IFCPUMP" />
+              <xs:enumeration value="IFCDUCTSEGMENT" />
+              <xs:enumeration value="IFCPIPESEGMENT" />
+              <xs:enumeration value="IFCCABLECARRIERSEGMENT" />
+              <xs:enumeration value="IFCCABLESEGMENT" />
+              <xs:enumeration value="IFCFLOWSTORAGEDEVICE" />
+              <xs:enumeration value="IFCTANK" />
+              <xs:enumeration value="IFCELECTRICFLOWSTORAGEDEVICE" />
+              <xs:enumeration value="IFCFIRESUPPRESSIONTERMINAL" />
+              <xs:enumeration value="IFCSANITARYTERMINAL" />
+              <xs:enumeration value="IFCSTACKTERMINAL" />
+              <xs:enumeration value="IFCWASTETERMINAL" />
+              <xs:enumeration value="IFCAIRTERMINAL" />
+              <xs:enumeration value="IFCMEDICALDEVICE" />
+              <xs:enumeration value="IFCSPACEHEATER" />
+              <xs:enumeration value="IFCAUDIOVISUALAPPLIANCE" />
+              <xs:enumeration value="IFCCOMMUNICATIONSAPPLIANCE" />
+              <xs:enumeration value="IFCELECTRICAPPLIANCE" />
+              <xs:enumeration value="IFCLAMP" />
+              <xs:enumeration value="IFCLIGHTFIXTURE" />
+              <xs:enumeration value="IFCOUTLET" />
+              <xs:enumeration value="IFCFLOWTREATMENTDEVICE" />
+              <xs:enumeration value="IFCINTERCEPTOR" />
+              <xs:enumeration value="IFCDUCTSILENCER" />
+              <xs:enumeration value="IFCFILTER" />
+              <xs:enumeration value="IFCELECTRICDISTRIBUTIONPOINT" />
+            </xs:restriction>
+          </name>
+        </entity>
+      </applicability>
+      <requirements>
+      <property dataType="IFCIDENTIFIER">
+        <propertySet><simpleValue>Pset_DistributionFlowElementCommon</simpleValue></propertySet>
+        <baseName><simpleValue>Reference</simpleValue></baseName>
+      </property>
+      </requirements>
+    </specification>
+  </specifications>
+</ids>

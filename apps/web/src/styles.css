@@ -1897,6 +1897,25 @@ pre.xml .v {
   font-size: 0.78rem;
 }
 
+.example-ids {
+  margin-top: 0.9rem;
+}
+
+.example-ids-label {
+  margin: 0 0 0.35rem;
+  color: var(--faint);
+  font-size: var(--micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.example-ids-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .checker input[type="file"] {
   width: 100%;
   max-width: 24rem;
