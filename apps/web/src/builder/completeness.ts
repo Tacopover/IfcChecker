@@ -100,13 +100,13 @@ export function conditionProblem(facet: FacetDraft): string | null {
 export function valueProblem(value: ValueDraft | null): string | null {
   if (value === null) return null;
   if (value.kind === "enum" && value.values.length === 0) {
-    return "Tick at least one value — with none, the exported rule accepts anything.";
+    return "Tick at least one value: with none, the exported rule accepts anything.";
   }
   if (statesNoText(value)) {
-    return "Enter a value — this condition can never pass while it is empty.";
+    return "Enter a value: this condition can never pass while it is empty.";
   }
   const pattern = patternErrorIn(value);
-  if (pattern !== null) return `Invalid pattern — it can never match: ${pattern}`;
+  if (pattern !== null) return `Invalid pattern; it can never match: ${pattern}`;
   return null;
 }
 
@@ -147,9 +147,9 @@ export function ruleProblems(rule: RuleDraft): RuleProblems {
 
   return {
     applicability: selectsNothing
-      ? "No element types — IDS needs at least one, and this rule would apply to nothing."
+      ? "No element types: IDS needs at least one, and this rule would apply to nothing."
       : narrowsNothing
-        ? "A predefined type narrows the element types, and this rule names none — add a type or remove it."
+        ? "A predefined type narrows the element types, and this rule names none; add a type or remove it."
         : valueProblem(rule.entityPredefinedType ?? null),
     conditions:
       effectiveCardinalityOf(rule) === "prohibited"
@@ -158,15 +158,15 @@ export function ruleProblems(rule: RuleDraft): RuleProblems {
           // Reads the effective cardinality, not the bare field: an imported rule can be prohibited
           // through its own source's occurs attributes without the builder ever stating one.
           rule.conditions.length > 0
-          ? "A prohibited rule may not also state requirements — the elements it selects are the failure, so there is nothing left to check on them."
+          ? "A prohibited rule may not also state requirements: the elements it selects are the failure, so there is nothing left to check on them."
           : null
         : checksNothing && !applicabilityOnly
-          ? "No conditions — there is nothing for this rule to check."
+          ? "No conditions: there is nothing for this rule to check."
           : null,
     // `undefined` is a rule that has never stated one, which the exporter defaults; `""` is one the
     // user cleared, and `ids.xsd` makes the attribute required. The exporter still writes the
-    // default either way, so the file stays valid — this is what stops it being written silently.
-    metadata: rule.ifcVersion === "" ? "Schema version — IDS requires at least one." : null,
+    // default either way, so the file stays valid; this is what stops it being written silently.
+    metadata: rule.ifcVersion === "" ? "Schema version: IDS requires at least one." : null,
   };
 }
 
@@ -201,7 +201,7 @@ export function isRuleComplete(rule: RuleDraft): boolean {
  */
 export function exportBlockers(rules: RuleDraft[], preservedCount = 0): string[] {
   if (rules.length === 0 && preservedCount === 0) {
-    return ["No rules yet — there is nothing to export."];
+    return ["No rules yet: there is nothing to export."];
   }
 
   const blockers: string[] = [];
@@ -209,7 +209,7 @@ export function exportBlockers(rules: RuleDraft[], preservedCount = 0): string[]
     const reasons = ruleProblemList(rule);
     for (const facet of facetsOf(rule)) {
       const problem = conditionProblem(facet);
-      if (problem !== null) reasons.push(`${labelOf(facet)} — ${problem}`);
+      if (problem !== null) reasons.push(`${labelOf(facet)}: ${problem}`);
     }
     if (reasons.length) blockers.push(`"${rule.name || "Untitled rule"}": ${reasons.join(" ")}`);
   }

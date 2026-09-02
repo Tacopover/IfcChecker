@@ -45,8 +45,8 @@ function TreeItem({ node, depth, selectedName, expanded, onSelect, onToggle }: T
           data-selected={isSelected}
           title={
             isGroup
-              ? `${node.name} — covers ${node.typeCount} types, ${node.count} elements`
-              : `${node.name} — ${node.count} elements`
+              ? `${node.name}: covers ${node.typeCount} types, ${node.count} elements`
+              : `${node.name}: ${node.count} elements`
           }
           onClick={() => onSelect(node)}
         >

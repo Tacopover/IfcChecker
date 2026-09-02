@@ -23,6 +23,8 @@
   --data-soft: #ddf0f2;
   --group: #6b3fa0;
   --group-soft: #efe8f8;
+  --or: #b8397a;
+  --or-soft: #fbe6f0;
   --pass: #15784a;
   --pass-soft: #e5f4ec;
   --fail: #b42318;
@@ -59,6 +61,8 @@
     --data-soft: #0d2b31;
     --group: #b491e8;
     --group-soft: #241b38;
+    --or: #e58cbd;
+    --or-soft: #35192a;
     --pass: #48c686;
     --pass-soft: #132a1e;
     --fail: #f0827a;
@@ -467,6 +471,11 @@ caption {
   padding: 0.7rem 1.3rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  /* Stays reachable while the page scrolls underneath it, right below the already-sticky .topbar
+     (46px tall, z-index 30). .explorer stacks below it in turn — see its own comment. */
+  position: sticky;
+  top: 46px;
+  z-index: 20;
 }
 
 .loadbar fieldset,
@@ -512,23 +521,20 @@ caption {
   color: var(--faint);
 }
 
-.empty-state {
-  padding: 2.5rem 1.3rem;
-  max-width: 46rem;
+/* Fills the explorer rail while no model is loaded: the rest of the page (rules, wizard, .ids
+   import) stays usable, so this only explains the one thing the rail itself can't do yet. */
+.explorer-empty {
+  padding: 0.5rem 0.2rem;
 }
 
-.empty-state h2 {
-  margin: 0 0 0.4rem;
-  font-size: 1.05rem;
-}
-
-.empty-state p {
+.explorer-empty p {
   margin: 0;
   color: var(--muted);
+  font-size: 0.85rem;
 }
 
-.empty-state .btn {
-  margin-top: 1rem;
+.explorer-empty .btn {
+  margin-top: 0.85rem;
 }
 
 .wrap {
@@ -541,8 +547,10 @@ caption {
 
 .explorer {
   position: sticky;
-  top: 46px;
-  height: calc(100dvh - 46px);
+  /* Stacks below the sticky .loadbar, whose real rendered height RuleBuilderPage measures into
+     --loadbar-h (see its ResizeObserver) — the fallback matches the loadbar's usual one-line size. */
+  top: calc(46px + var(--loadbar-h, 3.4rem));
+  height: calc(100dvh - 46px - var(--loadbar-h, 3.4rem));
   overflow-y: auto;
   background: var(--panel);
   border-right: 2px solid var(--panel-line);
@@ -579,6 +587,12 @@ caption {
 
 /* Names, in words, which rule a field click in the schema cards below will add to — the border
    tint on the targeted .rule card is a second, redundant cue, not the only one. */
+.property-search input {
+  margin: 0;
+  font-size: 12.5px;
+  padding: 0.4rem 0.5rem;
+}
+
 .target-strip {
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -1201,6 +1215,135 @@ caption {
   font-size: 11.5px;
 }
 
+/* A name the loaded file has nothing under: still a legitimate rule, and marked as the user's
+   own word rather than the model's — the same marking `ManualConditionRow` gives every name. */
+.cond input.typed {
+  border-style: dashed;
+  border-color: var(--group);
+  background: var(--group-soft);
+}
+
+.combo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cond .combo input[type="text"] {
+  padding-right: 1.15rem;
+  width: 11rem;
+  max-width: none;
+}
+
+.combo-toggle {
+  position: absolute;
+  right: 0.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.combo-toggle:hover {
+  color: var(--text);
+}
+
+.combo-list {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  max-width: 18rem;
+  max-height: 13rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.2rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 18%);
+}
+
+.combo-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.22rem 0.4rem;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.combo-option:hover,
+.combo-option.active {
+  background: var(--surface-2);
+}
+
+.combo-option[aria-selected="true"] .combo-name {
+  font-weight: 700;
+}
+
+.combo-note {
+  font-family: inherit;
+  font-size: 10.5px;
+  color: var(--group);
+}
+
+.combo-empty {
+  padding: 0.22rem 0.4rem;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+/* The search box stands where the "+ type…" select it replaces did, so it keeps that dashed,
+   accent-coloured affordance rather than reading as a field waiting to be filled in. */
+.searchpick input[type="text"] {
+  width: 9rem;
+  padding-right: 1.15rem;
+  font-family: var(--mono);
+}
+
+/* Inside a sentence row the box is a word in it, sized to what it holds rather than to the
+   affordance it replaces. */
+.cond .searchpick input[type="text"] {
+  width: 10.5rem;
+  padding-right: 1.15rem;
+}
+
+.searchpick .combo-list {
+  max-width: 22rem;
+}
+
+.combo-group {
+  padding: 0.3rem 0.4rem 0.15rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.combo-group:first-child {
+  padding-top: 0.1rem;
+}
+
+.combo-count {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
 .cond .glue {
   color: var(--faint);
   font-size: 11.5px;
@@ -1466,6 +1609,34 @@ caption {
   font-size: 10.5px;
   font-weight: 640;
   white-space: nowrap;
+}
+
+/* Same shape as .badge.kept, in the OR pair — flags this rule as one branch of a linked group,
+   not a warning about anything the builder dropped. */
+.badge.or-group {
+  flex: none;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--or) 35%, transparent);
+  border-radius: 999px;
+  background: var(--or-soft);
+  color: var(--or);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* Wraps the rule cards of one OR group so they read as bounded together — the group's own gap
+   matches `.stack`'s, so nesting it doesn't change the rhythm of the list around it. */
+.or-frame {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.6rem;
+  border: 1.5px dashed var(--or);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--or) 5%, transparent);
 }
 
 /* A specification held in the list but not offered for editing: no accent border, no hover — it
@@ -1835,6 +2006,45 @@ pre.xml .v {
   min-width: 0;
 }
 
+.dropzone {
+  border-radius: 9px;
+  transition: background-color 0.1s ease;
+}
+
+.dropzone[data-dragging="true"] {
+  background: var(--accent-soft);
+}
+
+.dropzone[data-dragging="true"] input[type="file"] {
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+.drop-hint {
+  margin: 0.3rem 0 0;
+  color: var(--faint);
+  font-size: 0.78rem;
+}
+
+.example-ids {
+  margin-top: 0.9rem;
+}
+
+.example-ids-label {
+  margin: 0 0 0.35rem;
+  color: var(--faint);
+  font-size: var(--micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.example-ids-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .checker input[type="file"] {
   width: 100%;
   max-width: 24rem;
@@ -2053,15 +2263,9 @@ tr.drawer-row > td {
   background: color-mix(in srgb, var(--pass) 12%, transparent);
 }
 
-.pill[data-status="failed"],
-.pill[data-severity="error"] {
+.pill[data-status="failed"] {
   color: var(--fail);
   background: var(--fail-soft);
-}
-
-.pill[data-severity="warning"] {
-  color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 
 .mono-tag {
@@ -2316,13 +2520,9 @@ col.col-rule {
   width: 13%;
 }
 
-col.col-severity {
-  width: 12%;
-}
-
 /* The reason a run gets read at all, so it gets the room a sentence needs. */
 col.col-message {
-  width: 38%;
+  width: 50%;
 }
 
 .issue-table td.col-message {
@@ -3822,4 +4022,31 @@ col.col-message {
   .viewer-canvas {
     min-height: 24rem;
   }
+}
+
+/* ==========================================================================
+   About page
+   ========================================================================== */
+
+.about-page .step-title h2 {
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+  font-size: 1.02rem;
+  letter-spacing: -0.012em;
+}
+
+.about-page .step-body p {
+  margin: 0 0 0.8rem;
+  max-width: 70ch;
+}
+
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.about-links .btn.ghost {
+  border: 1px solid var(--accent);
 }

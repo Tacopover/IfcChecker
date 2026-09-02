@@ -2,6 +2,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { suggestionsFor } from "../test/combobox";
 import type { PartOfFacetDraft } from "@ifc-qa/ids-validator";
 import { PartOfRow } from "./PartOfRow";
 import type { FieldsForResult } from "./introspect";
@@ -66,14 +67,6 @@ function Harness({
       onDuplicate={() => {}}
       onDelete={() => {}}
     />
-  );
-}
-
-function suggestionsFor(label: string): string[] {
-  const box = screen.getByLabelText(label);
-  const listId = box.getAttribute("list") ?? "";
-  return Array.from(document.getElementById(listId)?.querySelectorAll("option") ?? []).map(
-    (option) => option.getAttribute("value") ?? ""
   );
 }
 
@@ -148,10 +141,13 @@ describe("PartOfRow", () => {
     render(<Harness />);
 
     // Any relation: every whole in the file, commonest first.
-    expect(suggestionsFor("Class")).toEqual(["IFCBUILDINGSTOREY", "IFCBUILDING"]);
+    expect(await suggestionsFor(user, "Class")).toEqual(["IFCBUILDINGSTOREY", "IFCBUILDING"]);
 
+    // Narrowing the relation leaves IFCBUILDINGSTOREY off the file's list, and the box still
+    // holds it — so it leads the dropdown rather than vanishing from it, and reads as typed.
     await user.selectOptions(screen.getByLabelText("Relationship"), "IFCRELAGGREGATES");
-    expect(suggestionsFor("Class")).toEqual(["IFCBUILDING"]);
+    expect(await suggestionsFor(user, "Class")).toEqual(["IFCBUILDINGSTOREY", "IFCBUILDING"]);
+    expect(screen.getByLabelText("Class")).toHaveClass("typed");
   });
 
   // The predefined types offered are the ones seen on wholes of the class the facet names, so a
@@ -162,10 +158,10 @@ describe("PartOfRow", () => {
 
     await user.selectOptions(screen.getByLabelText("Predefined type operator"), "equals");
     // IFCBUILDINGSTOREY is reached two ways here, so both its predefined types are offered.
-    expect(suggestionsFor("Predefined type")).toEqual(["ELEMENT", "COMPLEX"]);
+    expect(await suggestionsFor(user, "Predefined type")).toEqual(["ELEMENT", "COMPLEX"]);
 
     await user.selectOptions(screen.getByLabelText("Relationship"), "IFCRELNESTS");
-    expect(suggestionsFor("Predefined type")).toEqual(["COMPLEX"]);
+    expect(await suggestionsFor(user, "Predefined type")).toEqual(["COMPLEX"]);
   });
 
   it("reports an empty enumeration, which XSD would read as accepting anything", async () => {

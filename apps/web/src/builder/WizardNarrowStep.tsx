@@ -68,12 +68,12 @@ export function WizardNarrowStep({ draft, source, elements, onChange, onNext, on
       </h1>
       <p className="sub">
         Right now this rule checks all {source.total} element{source.total === 1 ? "" : "s"}. You
-        can narrow that to a smaller set — for example only fire-rated walls, or only one
+        can narrow that to a smaller set, for example only fire-rated walls, or only one
         classification.
       </p>
 
       <div className="explain">
-        <b>Predefined type</b> narrows by an element's own IFC sub-type — the row IFC gives every
+        <b>Predefined type</b> narrows by an element's own IFC sub-type: the row IFC gives every
         element directly. Classification, if this file uses one, is often a more useful filter for
         elements this file already sorts a different way.
       </div>
@@ -154,7 +154,7 @@ export function WizardNarrowStep({ draft, source, elements, onChange, onNext, on
         <span className="spacer" />
         {facets.length === 0 && predefinedType === null && (
           <button type="button" className="btn ghost" onClick={onNext}>
-            Skip — check all {source.total}
+            Skip: check all {source.total}
           </button>
         )}
         <button type="button" className="btn" onClick={onNext}>

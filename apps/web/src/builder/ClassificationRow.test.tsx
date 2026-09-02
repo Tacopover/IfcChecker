@@ -2,6 +2,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { suggestionsFor } from "../test/combobox";
 import type { ClassificationFacetDraft } from "@ifc-qa/ids-validator";
 import { ClassificationRow } from "./ClassificationRow";
 import type { FieldsForResult } from "./introspect";
@@ -94,11 +95,7 @@ describe("ClassificationRow", () => {
     await user.type(box, "B2010");
 
     expect(box).toHaveValue("B2010");
-    const listId = box.getAttribute("list") ?? "";
-    const suggestions = Array.from(
-      document.getElementById(listId)?.querySelectorAll("option") ?? []
-    ).map((option) => option.getAttribute("value"));
-    expect(suggestions).toEqual(["B2010", "B20"]);
+    expect(await suggestionsFor(user, "Code")).toEqual(["B2010", "B20"]);
   });
 
   // The rail's promise: everything offered comes from the user's own file. A system the file does
@@ -123,11 +120,7 @@ describe("ClassificationRow", () => {
 
     await user.selectOptions(screen.getByLabelText("System operator"), "matches");
 
-    const listId = screen.getByLabelText("Code").getAttribute("list") ?? "";
-    const suggestions = Array.from(
-      document.getElementById(listId)?.querySelectorAll("option") ?? []
-    ).map((option) => option.getAttribute("value"));
-    expect(suggestions).toEqual(["B2010", "21.22", "B20", "99"]);
+    expect(await suggestionsFor(user, "Code")).toEqual(["B2010", "21.22", "B20", "99"]);
   });
 
   it("states cardinality, so an optional or prohibited classification is reachable", async () => {

@@ -23,6 +23,8 @@ import { FailingElementsTable } from "./FailingElementsTable.js";
 import { ApplicabilityRow, RequirementRow } from "./FacetRow.js";
 import { FacetValueEditor } from "./FacetValueEditor.js";
 import { predefinedTypeOptions } from "./EntityRow.js";
+import { allIfcTypeNames } from "./allIfcTypes.js";
+import { SearchPicker } from "./SearchPicker.js";
 import { SpecificationInfoPanel } from "./SpecificationInfoPanel.js";
 import { nextDraftId } from "./draftIds.js";
 
@@ -45,7 +47,7 @@ const IFC_VERSIONS = ["IFC2X3", "IFC4", "IFC4X3_ADD2"];
 
 const PROHIBITED_HINT =
   "Flips this from a check to a ban: instead of judging elements that match, it fails the " +
-  "moment any element does. A prohibited rule can't also state requirements — remove any " +
+  "moment any element does. A prohibited rule can't also state requirements; remove any " +
   "below, or this rule won't export.";
 
 export interface RuleCardProps {
@@ -59,6 +61,9 @@ export interface RuleCardProps {
   isNew?: boolean;
   onChange: (next: RuleDraft) => void;
   onDuplicate: () => void;
+  /** Names of the other rules this one is OR-linked with — see `orGroupSiblingsOf`. Empty if none. */
+  orGroupSiblingNames: string[];
+  onAddOrBranch: () => void;
   onDelete: () => void;
   onActivate: () => void;
   onToggleOpen: () => void;
@@ -75,6 +80,8 @@ export function RuleCard({
   isNew = false,
   onChange,
   onDuplicate,
+  orGroupSiblingNames,
+  onAddOrBranch,
   onDelete,
   onActivate,
   onToggleOpen,
@@ -140,6 +147,47 @@ export function RuleCard({
   const groupByName = new Map(introspection.groups.map((group) => [group.name, group]));
   const countByType = new Map(introspection.entityTypes.map((entry) => [entry.name, entry.count]));
   const usedTypes = new Set(rule.entityTypes);
+  // Compared upper-case: the file spells its types IFCWALL and the schema table spells them
+  // IfcWall, and a rule may hold either — the wizard's schema picker adds the latter.
+  const schemaOnlyTypeNames = useMemo(() => {
+    const known = new Set([
+      ...introspection.entityTypes.map((entry) => entry.name.toUpperCase()),
+      ...rule.entityTypes.map((name) => name.toUpperCase()),
+    ]);
+    return allIfcTypeNames().filter((name) => !known.has(name.toUpperCase()));
+  }, [introspection.entityTypes, rule.entityTypes]);
+
+  // A rule is written to be checked against files other than the one open, and with no file open at
+  // all the first two groups are empty — which used to leave no way to say what a rule applies to.
+  // The file's own names keep their place at the top and carry a count; the schema's carry none,
+  // which is the distinction between "this file has these" and "the schema defines these".
+  const typeGroups = useMemo(
+    () => [
+      {
+        label: "Groups (inherited)",
+        options: introspection.groups
+          .filter((group) => !usedTypes.has(group.name))
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((group) => ({
+            value: group.name,
+            label: group.name,
+            note: `${group.types.length} types · ${group.count}`,
+          })),
+      },
+      {
+        label: "Entity types in this file",
+        options: introspection.entityTypes
+          .filter((entry) => !usedTypes.has(entry.name))
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((entry) => ({ value: entry.name, label: entry.name, note: String(entry.count) })),
+      },
+      {
+        label: "Also in the IFC schema (not in this file)",
+        options: schemaOnlyTypeNames.map((name) => ({ value: name, label: name })),
+      },
+    ],
+    [introspection.groups, introspection.entityTypes, schemaOnlyTypeNames, rule.entityTypes]
+  );
 
   // Schema-scoped, unlike `groupByName` above: a literal chip run that exactly matches a known
   // ancestor's full expansion collapses into one summary chip, regardless of which file is open.
@@ -200,7 +248,7 @@ export function RuleCard({
   const shownOnly = preserved.length > 0 ? " on the conditions shown" : "";
   const summary = prohibited
     ? matched === 0
-      ? "None found — this rule is satisfied"
+      ? "None found: this rule is satisfied"
       : `${matched} element${matched === 1 ? "" : "s"} found, and none may match this rule`
     : rule.conditions.length === 0
       ? preserved.length > 0
@@ -240,6 +288,14 @@ export function RuleCard({
         {preserved.length > 0 && (
           <span className="badge kept" title={preserved.map((entry) => entry.construct).join(", ")}>
             {preserved.length} kept
+          </span>
+        )}
+        {orGroupSiblingNames.length > 0 && (
+          <span
+            className="badge or-group"
+            title={`Passes if this rule or ${orGroupSiblingNames.join(", ")} passes`}
+          >
+            OR
           </span>
         )}
         <fieldset className="version-toggle" aria-label="Schema versions">
@@ -308,6 +364,15 @@ export function RuleCard({
         </button>
         <button
           type="button"
+          className="iconbtn"
+          title="Add an OR condition: passes if this rule or the new one passes"
+          aria-label={`Add OR condition to ${rule.name}`}
+          onClick={onAddOrBranch}
+        >
+          🔀
+        </button>
+        <button
+          type="button"
           className="iconbtn danger"
           title="Delete rule"
           aria-label={`Delete rule ${rule.name}`}
@@ -360,7 +425,7 @@ export function RuleCard({
                   // even when this file holds none of them, or only one, so `group` never formed.
                   const subtypes = descendantsOf(entityType).filter((name) => !isAbstractIfcType(name));
                   const title = [
-                    abstract ? `${entityType} is abstract — no element can carry it directly` : entityType,
+                    abstract ? `${entityType} is abstract; no element can carry it directly` : entityType,
                     group ? `covers ${group.types.join(", ")} in this file` : null,
                   ]
                     .filter((line): line is string => line !== null)
@@ -417,40 +482,17 @@ export function RuleCard({
                     </span>
                   );
                 })}
-              <select
-                className="linkbtn"
-                aria-label="Add entity type or group"
-                value=""
-                onChange={(event) => {
-                  if (!event.target.value) return;
+              <SearchPicker
+                label="Add entity type or group"
+                placeholder="+ type…"
+                groups={typeGroups}
+                onPick={(name) =>
                   onChange({
                     ...rule,
-                    entityTypes: [...new Set([...rule.entityTypes, ...expandedTypeNamesFor(event.target.value)])],
-                  });
-                }}
-              >
-                <option value="">+ type…</option>
-                <optgroup label="Groups (inherited)">
-                  {introspection.groups
-                    .filter((group) => !usedTypes.has(group.name))
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((group) => (
-                      <option key={group.name} value={group.name}>
-                        {group.name} — {group.types.length} types, {group.count}
-                      </option>
-                    ))}
-                </optgroup>
-                <optgroup label="Entity types in this file">
-                  {introspection.entityTypes
-                    .filter((entry) => !usedTypes.has(entry.name))
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((entry) => (
-                      <option key={entry.name} value={entry.name}>
-                        {entry.name} ({entry.count})
-                      </option>
-                    ))}
-                </optgroup>
-              </select>
+                    entityTypes: [...new Set([...rule.entityTypes, ...expandedTypeNamesFor(name)])],
+                  })
+                }
+              />
             </div>
             {/* Not a facet, so not a `FacetRowFrame`: it narrows the type chips above rather than
                 standing beside them, and there is nothing sensible to duplicate. Shown only when
@@ -460,7 +502,6 @@ export function RuleCard({
                 <span className="tok">Predefined type</span>
                 <span className="glue">selects only those whose predefined type must</span>
                 <FacetValueEditor
-                  id={rule.id}
                   label="Predefined type"
                   operatorLabel="Predefined type operator"
                   value={predefinedType}
@@ -590,7 +631,7 @@ export function RuleCard({
                   {preserved.map((entry) => (
                     <li key={`${entry.construct}-${entry.afterIndex}-${entry.xml}`}>
                       <code>{entry.construct}</code>
-                      {entry.reason ? ` — ${entry.reason}` : null}
+                      {entry.reason ? `: ${entry.reason}` : null}
                     </li>
                   ))}
                 </ul>

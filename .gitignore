@@ -4,6 +4,7 @@ dist/
 .env
 docker/pgdata/
 apps/web/public/wasm/
+apps/web/public/examples/
 .verify-output/
 .conformance/
 .conformance-clone/

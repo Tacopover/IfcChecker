@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
-import { validateBySpecification, validateElements } from "./validate-elements.js";
+import {
+  REQUIRED_CARDINALITY_EMPTY_MESSAGE,
+  validateBySpecification,
+  validateBySpecificationGrouped,
+  validateElements,
+} from "./validate-elements.js";
 
 const IDS_XML = `<?xml version="1.0" encoding="utf-8"?>
 <ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd" xmlns="http://standards.buildingsmart.org/IDS">
@@ -468,5 +473,133 @@ describe("validateBySpecification", () => {
     );
 
     expect(validateElements(elements, TWO_SPEC_IDS_XML)).toEqual(flattened);
+  });
+});
+
+const OR_GROUP_IDS_XML = `<?xml version="1.0" encoding="utf-8"?>
+<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://standards.buildingsmart.org/IDS">
+  <info>
+    <title>OR group</title>
+  </info>
+  <specifications>
+    <specification name="Named W-###" ifcVersion="IFC4" identifier="ifcqa:or:g1">
+      <applicability maxOccurs="unbounded">
+        <entity>
+          <name><simpleValue>IFCWALL</simpleValue></name>
+        </entity>
+      </applicability>
+      <requirements>
+        <attribute>
+          <name><simpleValue>Name</simpleValue></name>
+          <value>
+            <xs:restriction base="xs:string">
+              <xs:pattern value="W-\\d+" />
+            </xs:restriction>
+          </value>
+        </attribute>
+      </requirements>
+    </specification>
+    <specification name="Has FireRating" ifcVersion="IFC4" identifier="ifcqa:or:g1">
+      <applicability maxOccurs="unbounded">
+        <entity>
+          <name><simpleValue>IFCWALL</simpleValue></name>
+        </entity>
+      </applicability>
+      <requirements>
+        <property dataType="IFCLABEL">
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName><simpleValue>FireRating</simpleValue></baseName>
+        </property>
+      </requirements>
+    </specification>
+  </specifications>
+</ids>`;
+
+describe("validateBySpecificationGrouped", () => {
+  const makeWall = (globalId: string, overrides: Partial<NormalizedElement> = {}) =>
+    makeElement({ globalId, ifcType: "IFCWALL", ...overrides });
+
+  const compliantWall = makeWall("wall-1", {
+    name: "W-007",
+    propertySets: { Pset_WallCommon: { FireRating: { value: "REI90" } } },
+  });
+  const failingWall = makeWall("wall-2", { name: "West Wall" });
+  const door = makeElement({ globalId: "door-1", ifcType: "IFCDOOR" });
+
+  it("passes through specifications with no identifier exactly as validateBySpecification does", () => {
+    const elements = [compliantWall, failingWall, door];
+    expect(validateBySpecificationGrouped(elements, TWO_SPEC_IDS_XML)).toEqual(
+      validateBySpecification(elements, TWO_SPEC_IDS_XML)
+    );
+  });
+
+  it("merges an OR group into one outcome under the joined branch names", () => {
+    // Passes branch 1 only (named right, no FireRating).
+    const nameOnly = makeWall("wall-a", { name: "W-007" });
+    // Passes branch 2 only (wrong name, has FireRating).
+    const ratingOnly = makeWall("wall-b", {
+      name: "West Wall",
+      propertySets: { Pset_WallCommon: { FireRating: { value: "REI90" } } },
+    });
+    // Fails both.
+    const neither = makeWall("wall-c", { name: "West Wall" });
+    // Passes both.
+    const both = makeWall("wall-d", {
+      name: "W-009",
+      propertySets: { Pset_WallCommon: { FireRating: { value: "REI90" } } },
+    });
+
+    const [outcome] = validateBySpecificationGrouped(
+      [nameOnly, ratingOnly, neither, both],
+      OR_GROUP_IDS_XML
+    );
+
+    expect(outcome).toMatchObject({
+      name: "Named W-### OR Has FireRating",
+      checked: true,
+      applicableCount: 4,
+      passedCount: 3,
+      failedCount: 1,
+      cardinalityFailure: null,
+    });
+    // The group has one row for wall-c, so it carries exactly one violation, not one per branch
+    // that rejected it.
+    expect(outcome.violations).toHaveLength(1);
+    expect(outcome.violations[0].elementGlobalId).toBe("wall-c");
+    expect(outcome.violations[0].ruleId).toBe("Named W-###");
+  });
+
+  it("reports a required-empty group the same way an ungrouped required specification would", () => {
+    const [outcome] = validateBySpecificationGrouped([door], OR_GROUP_IDS_XML);
+    expect(outcome.applicableCount).toBe(0);
+    expect(outcome.cardinalityFailure).toBe(REQUIRED_CARDINALITY_EMPTY_MESSAGE);
+  });
+
+  it("degrades a group of one surviving member to an ordinary specification", () => {
+    // A group id with only one specification left carrying it — the shape a builder rule is in
+    // right after its last OR sibling was deleted.
+    const soloGroupXml = `<?xml version="1.0" encoding="utf-8"?>
+<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://standards.buildingsmart.org/IDS">
+  <info><title>Solo</title></info>
+  <specifications>
+    <specification name="Named W-###" ifcVersion="IFC4" identifier="ifcqa:or:g1">
+      <applicability maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+        <attribute><name><simpleValue>Name</simpleValue></name></attribute>
+      </requirements>
+    </specification>
+  </specifications>
+</ids>`;
+    const [outcome] = validateBySpecificationGrouped([compliantWall], soloGroupXml);
+    expect(outcome.name).toBe("Named W-###");
+    expect(outcome.applicableCount).toBe(1);
+    expect(outcome.passedCount).toBe(1);
+  });
+
+  it("does not merge specifications sharing a third party's own identifier scheme", () => {
+    const thirdPartyXml = OR_GROUP_IDS_XML.replaceAll(`identifier="ifcqa:or:g1"`, `identifier="REQ-1"`);
+    expect(validateBySpecificationGrouped([compliantWall], thirdPartyXml)).toHaveLength(2);
   });
 });

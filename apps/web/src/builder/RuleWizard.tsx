@@ -49,7 +49,9 @@ function emptyDraft(): RuleDraft {
 export function RuleWizard({ introspection, elements, fileName, onFinish, onCancel }: RuleWizardProps) {
   const [draft, setDraft] = useState<RuleDraft>(emptyDraft);
   const [stepIndex, setStepIndex] = useState(0);
-  const [showAllTypes, setShowAllTypes] = useState(false);
+  // With no file loaded (or none of its types making it into the tree), the file's own picklist
+  // is empty anyway — start the schema search open rather than showing that instead of a hint.
+  const [showAllTypes, setShowAllTypes] = useState(() => introspection.entityTypes.length === 0);
 
   const source = useMemo(
     () => introspection.fieldsFor(draft.entityTypes),

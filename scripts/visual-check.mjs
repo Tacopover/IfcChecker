@@ -226,7 +226,7 @@ const SCENARIOS = {
     // A rule that selects by property value used to be refused whole. It runs now, and this
     // fixture states no LoadBearing anywhere — so it selects nothing and reads the same
     // friendly way as the curtain wall rule above, rather than as a failure. Real counts
-    // rather than the em-dashes an unchecked rule shows is the whole difference.
+    // rather than the placeholder dash an unchecked rule shows is the whole difference.
     var selective = specRow("Load-bearing walls are named");
     if (selective.applied !== "0" || selective.failed !== "0") {
       throw new Error("an applicability property did not run as expected: " + JSON.stringify(selective));
@@ -241,7 +241,7 @@ const SCENARIOS = {
     var refusedRow = refusedName.closest("tr");
     var refusedCells = Array.prototype.slice.call(refusedRow.querySelectorAll("td"));
     var refused = { applied: refusedCells[1].textContent, passed: refusedCells[2].textContent, failed: refusedCells[3].textContent };
-    if (refused.applied !== "\\u2014" || refused.passed !== "\\u2014" || refused.failed !== "\\u2014") {
+    if (refused.applied !== "-" || refused.passed !== "-" || refused.failed !== "-") {
       throw new Error("an unchecked rule reported counts: " + JSON.stringify(refused));
     }
     var refusedNotice = refusedRow.nextElementSibling;

@@ -72,7 +72,7 @@ describe("WizardNarrowStep", () => {
     const onNext = vi.fn();
     render(<Harness onNext={onNext} />);
 
-    const skip = screen.getByRole("button", { name: /Skip — check all 3/ });
+    const skip = screen.getByRole("button", { name: /Skip: check all 3/ });
     await user.click(skip);
     expect(onNext).toHaveBeenCalledOnce();
   });
@@ -96,7 +96,7 @@ describe("WizardNarrowStep", () => {
     await user.click(screen.getByRole("button", { name: /Remove the classification this rule selects by/ }));
 
     expect(matchlineText()).toMatch(/3 of 3 elements will be checked/);
-    expect(screen.getByRole("button", { name: /Skip — check all 3/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Skip: check all 3/ })).toBeInTheDocument();
   });
 
   it("calls onBack and always offers Next regardless of Skip", async () => {

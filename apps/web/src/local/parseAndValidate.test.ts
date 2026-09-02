@@ -2,14 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InvalidIdsRuleSetError, parseFile, validateParsedModels } from "./parseAndValidate.js";
 
 const { parse } = vi.hoisted(() => ({ parse: vi.fn() }));
-const { validateBySpecification, parseIdsXml, isEvaluable } = vi.hoisted(() => ({
-  validateBySpecification: vi.fn(),
-  parseIdsXml: vi.fn(),
-  isEvaluable: vi.fn(),
+const { validateBySpecificationGrouped } = vi.hoisted(() => ({
+  validateBySpecificationGrouped: vi.fn(),
 }));
 
 vi.mock("./parseWorkerClient.js", () => ({ parseWorkerClient: { parse } }));
-vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecification, parseIdsXml, isEvaluable }));
+vi.mock("@ifc-qa/ids-validator", () => ({ validateBySpecificationGrouped }));
 
 function outcome(overrides: Record<string, unknown> = {}) {
   return {
@@ -28,15 +26,12 @@ function makeFile(name: string, content = "ISO-10303-21;") {
   return new File([content], name);
 }
 
-// Every test below passes a real (if trivial) rule set through idsXml, so
-// parseIdsXml's pre-check should see at least one specification unless a test
+// Every test below passes a real (if trivial) rule set through idsXml, so the empty-elements
+// skeleton call `validateParsedModels` makes should see at least one row unless a test
 // deliberately overrides it to assert the empty-rule-set path.
 beforeEach(() => {
   vi.clearAllMocks();
-  parseIdsXml.mockReturnValue([
-    { name: "fake-spec", applicability: { entityNames: ["IFCWALL"], facets: [] }, requirements: [], unsupported: [], applicabilityComplete: true },
-  ]);
-  isEvaluable.mockReturnValue(true);
+  validateBySpecificationGrouped.mockReturnValue([outcome({ name: "fake-spec" })]);
 });
 
 describe("parseFile", () => {
@@ -67,8 +62,7 @@ describe("parseFile", () => {
       unitScales: {},
       modelStructure,
     });
-    expect(validateBySpecification).not.toHaveBeenCalled();
-    expect(parseIdsXml).not.toHaveBeenCalled();
+    expect(validateBySpecificationGrouped).not.toHaveBeenCalled();
   });
 
   it("routes through the parse worker client and normalises a missing model structure to null", async () => {
@@ -96,23 +90,25 @@ describe("parseFile", () => {
 
 describe("validateParsedModels", () => {
   it("maps violations to rows tagged with the file and the model key they came from", () => {
-    validateBySpecification.mockReturnValueOnce([
-      outcome({
-        name: "naming-prefix",
-        applicableCount: 1,
-        failedCount: 1,
-        violations: [
-          {
-            elementGlobalId: "g1",
-            elementType: "IFCWALL",
-            elementName: "Wall-1",
-            ruleId: "naming-prefix",
-            severity: "error",
-            message: "Name must start with 'W-'",
-          },
-        ],
-      }),
-    ]);
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome({ name: "naming-prefix" })]) // the empty-elements skeleton call
+      .mockReturnValueOnce([
+        outcome({
+          name: "naming-prefix",
+          applicableCount: 1,
+          failedCount: 1,
+          violations: [
+            {
+              elementGlobalId: "g1",
+              elementType: "IFCWALL",
+              elementName: "Wall-1",
+              ruleId: "naming-prefix",
+              severity: "error",
+              message: "Name must start with 'W-'",
+            },
+          ],
+        }),
+      ]);
 
     const elements = [
       { globalId: "g1", expressId: 1, ifcType: "IFCWALL", predefinedType: null, name: "Wall-1", attributes: {}, propertySets: {} },
@@ -122,7 +118,7 @@ describe("validateParsedModels", () => {
       "<ids/>"
     );
 
-    expect(validateBySpecification).toHaveBeenCalledWith(elements, "<ids/>", {});
+    expect(validateBySpecificationGrouped).toHaveBeenCalledWith(elements, "<ids/>", {});
     expect(summaries[0].violations).toEqual([
       expect.objectContaining({
         fileName: "model-a.ifc",
@@ -147,7 +143,8 @@ describe("validateParsedModels", () => {
       severity: "error",
       message: "no",
     };
-    validateBySpecification
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome()]) // the empty-elements skeleton call
       .mockReturnValueOnce([outcome({ applicableCount: 1, failedCount: 1, violations: [violation] })])
       .mockReturnValueOnce([outcome({ applicableCount: 1, failedCount: 1, violations: [violation] })]);
 
@@ -164,7 +161,8 @@ describe("validateParsedModels", () => {
   });
 
   it("sums each specification's counts across every model, never re-reading the files", () => {
-    validateBySpecification
+    validateBySpecificationGrouped
+      .mockReturnValueOnce([outcome()]) // the empty-elements skeleton call
       .mockReturnValueOnce([outcome({ applicableCount: 3, passedCount: 2, failedCount: 1 })])
       .mockReturnValueOnce([outcome({ applicableCount: 4, passedCount: 4, failedCount: 0 })]);
 
@@ -181,10 +179,7 @@ describe("validateParsedModels", () => {
   });
 
   it("reports a specification that matched nothing, rather than returning an empty result set", () => {
-    parseIdsXml.mockReturnValue([
-      { name: "Walls are fire rated", applicability: { entityNames: ["IFCWALL"], facets: [] }, requirements: [], unsupported: [], applicabilityComplete: true },
-    ]);
-    validateBySpecification.mockReturnValueOnce([outcome({ name: "Walls are fire rated" })]);
+    validateBySpecificationGrouped.mockReturnValue([outcome({ name: "Walls are fire rated" })]);
 
     const summaries = validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [], unitScales: {} }], "<ids/>");
 
@@ -201,11 +196,7 @@ describe("validateParsedModels", () => {
     const unsupported = [
       { section: "applicability", construct: "property", description: "Selects elements by <property>, which cannot be represented." },
     ];
-    parseIdsXml.mockReturnValue([
-      { name: "Load-bearing walls", applicability: { entityNames: ["IFCWALL"], facets: [] }, requirements: [], unsupported, applicabilityComplete: false },
-    ]);
-    isEvaluable.mockReturnValue(false);
-    validateBySpecification.mockReturnValueOnce([
+    validateBySpecificationGrouped.mockReturnValue([
       outcome({ name: "Load-bearing walls", checked: false, unsupported }),
     ]);
 
@@ -218,11 +209,13 @@ describe("validateParsedModels", () => {
   });
 
   it("throws InvalidIdsRuleSetError instead of silently reporting zero issues when the IDS file has no specifications", () => {
-    parseIdsXml.mockReturnValue([]);
+    validateBySpecificationGrouped.mockReturnValueOnce([]); // the empty-elements skeleton call
 
     expect(() =>
       validateParsedModels([{ key: "a", fileName: "a.ifc", idsScope: [], unitScales: {} }], "<not-really-ids/>")
     ).toThrow(InvalidIdsRuleSetError);
-    expect(validateBySpecification).not.toHaveBeenCalled();
+    // The skeleton call happens and comes back empty, but the throw stops it short of ever
+    // validating a model — a second call would mean it kept going after that.
+    expect(validateBySpecificationGrouped).toHaveBeenCalledTimes(1);
   });
 });

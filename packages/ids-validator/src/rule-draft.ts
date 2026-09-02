@@ -8,7 +8,7 @@ import type {
   ParsedSpecification,
   SpecificationCardinality,
 } from "./parse-ids.js";
-import { patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
+import { orGroupIdOf, patternRestriction, specificationCardinalityOf } from "./parse-ids.js";
 
 /**
  * The readings of a condition's **value**, and nothing else.
@@ -425,6 +425,88 @@ export function applicabilityEntityNamesOf(rule: RuleDraft): string[] {
   return [...new Set(rule.entityTypes.map((entityType) => entityType.trim().toUpperCase()))];
 }
 
+/**
+ * The other rules `rule` is OR-linked with — same `identifier` group id, per `orGroupIdOf` —
+ * in list order. Empty when `rule` carries no group id, or is the last member left in its group.
+ */
+export function orGroupSiblingsOf(rules: RuleDraft[], rule: RuleDraft): RuleDraft[] {
+  const groupId = orGroupIdOf(rule.identifier);
+  if (!groupId) return [];
+  return rules.filter((entry) => entry.id !== rule.id && orGroupIdOf(entry.identifier) === groupId);
+}
+
+/**
+ * Where an independent rule can be inserted just after `rule` without landing inside an OR group.
+ *
+ * The members of a group are drawn as one framed block, and a rule slipped between two of them
+ * would split that block on screen and read as a branch of a rule it has nothing to do with. So
+ * the answer is one past the end of the run of members `rule` sits in, not one past `rule`. A rule
+ * with no group id, or the last member of its run, just gets its own index plus one.
+ *
+ * The run, not every member in the list: an imported document can scatter members of one group
+ * across the file, and only the contiguous run is what gets framed together.
+ */
+export function indexAfterOrGroupOf(rules: RuleDraft[], rule: RuleDraft): number {
+  const own = rules.indexOf(rule);
+  if (own < 0) return rules.length;
+  const groupId = orGroupIdOf(rule.identifier);
+  if (groupId === null) return own + 1;
+  let end = own + 1;
+  while (end < rules.length && orGroupIdOf(rules[end].identifier) === groupId) end += 1;
+  return end;
+}
+
+/**
+ * `rules` with the OR-group identifier dropped from every group down to a single member — what
+ * deleting the other branches leaves behind.
+ *
+ * A group of one already evaluates as an ordinary specification (see `orGroupIdOf`), so this
+ * changes no verdict; it stops the exported document carrying a group id that links nothing, and
+ * stops that id being handed back out to a later branch of the surviving rule. Identifiers that
+ * are not this tool's own (a third party's machine id) are left alone.
+ */
+export function withLoneOrGroupsCleared(rules: RuleDraft[]): RuleDraft[] {
+  const memberCounts = new Map<string, number>();
+  for (const rule of rules) {
+    const groupId = orGroupIdOf(rule.identifier);
+    if (groupId) memberCounts.set(groupId, (memberCounts.get(groupId) ?? 0) + 1);
+  }
+
+  return rules.map((rule) => {
+    const groupId = orGroupIdOf(rule.identifier);
+    return groupId && memberCounts.get(groupId) === 1 ? { ...rule, identifier: null } : rule;
+  });
+}
+
+/**
+ * Every OR-group id already carried by `rules` — authored here, or read verbatim off an imported
+ * `identifier` that already used this tool's prefix. A freshly minted group id must avoid this set:
+ * an imported document can carry a group id that collides with the page's own next-counter value
+ * (import never re-keys `identifier`, unlike `id`), and two unrelated groups sharing one id would
+ * silently merge into a single reported outcome — see `validateBySpecificationGrouped`.
+ */
+export function orGroupIdsInUse(rules: RuleDraft[]): Set<string> {
+  const ids = new Set<string>();
+  for (const rule of rules) {
+    const groupId = orGroupIdOf(rule.identifier);
+    if (groupId) ids.add(groupId);
+  }
+  return ids;
+}
+
+/**
+ * A fresh group id for a new OR group among `rules`, drawn by calling `mintCandidate` — the
+ * caller's own id source, redrawn until it lands outside `orGroupIdsInUse(rules)`. Separated from
+ * the id source itself so the redraw-on-collision behavior is testable without needing a real
+ * counter to actually collide.
+ */
+export function nextOrGroupId(rules: RuleDraft[], mintCandidate: () => string): string {
+  const used = orGroupIdsInUse(rules);
+  let candidate = mintCandidate();
+  while (used.has(candidate)) candidate = mintCandidate();
+  return candidate;
+}
+
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -788,5 +870,6 @@ export function compileDraft(rules: RuleDraft[]): ParsedSpecification[] {
     })),
     // Applicability we could not fully read is refused at import, never turned into a rule.
     applicabilityComplete: true,
+    identifier: rule.identifier ?? null,
   }));
 }

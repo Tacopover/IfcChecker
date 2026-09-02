@@ -6,7 +6,7 @@ import type {
   UnitScales,
 } from "@ifc-qa/shared-types";
 import type { UnsupportedConstruct } from "@ifc-qa/ids-validator";
-import { isEvaluable, parseIdsXml, validateBySpecification } from "@ifc-qa/ids-validator";
+import { validateBySpecificationGrouped } from "@ifc-qa/ids-validator";
 import type { ParseOutcome } from "../state/loadedModels.js";
 import { parseWorkerClient } from "./parseWorkerClient.js";
 
@@ -19,7 +19,7 @@ import { parseWorkerClient } from "./parseWorkerClient.js";
 export class InvalidIdsRuleSetError extends Error {
   constructor() {
     super(
-      "This doesn't look like a valid IDS rule set — no <specification> elements were found. Check that you selected the right file."
+      "This doesn't look like a valid IDS rule set: no <specification> elements were found. Check that you selected the right file."
     );
     this.name = "InvalidIdsRuleSetError";
   }
@@ -106,6 +106,66 @@ export interface SpecificationSummary {
   cardinalityFailure: string | null;
 }
 
+/** Which file a batch check is on, for the page to report while it runs. */
+export interface CheckProgress {
+  fileName: string;
+  index: number;
+  total: number;
+}
+
+/** The rule set's own shape, as the row list every model is then merged into. */
+function summarySkeleton(idsXml: string): SpecificationSummary[] {
+  // An empty-elements pass costs nothing (nothing to iterate) and gives the rule set's own
+  // shape once: how many rows there are, in order, after OR groups collapse — see
+  // `validateBySpecificationGrouped` — and whether each one could be run at all, which is a
+  // property of the rule set, not of any one model.
+  const skeleton = validateBySpecificationGrouped([], idsXml);
+  if (skeleton.length === 0) {
+    throw new InvalidIdsRuleSetError();
+  }
+
+  // Merged by position, not by name: an IDS may carry two rows with the same name, and every
+  // model yields these outcomes in the same order, one row per specification or OR group.
+  return skeleton.map<SpecificationSummary>((outcome) => ({
+    name: outcome.name,
+    checked: outcome.checked,
+    unsupported: outcome.unsupported,
+    applicableCount: 0,
+    passedCount: 0,
+    failedCount: 0,
+    violations: [],
+    cardinalityFailure: null,
+  }));
+}
+
+/** Folds one model's outcomes into the shared row list, in place. */
+function mergeModelInto(summaries: SpecificationSummary[], model: ParsedModel, idsXml: string) {
+  validateBySpecificationGrouped(model.idsScope, idsXml, model.unitScales).forEach((outcome, index) => {
+    const summary = summaries[index];
+    summary.applicableCount += outcome.applicableCount;
+    summary.passedCount += outcome.passedCount;
+    summary.failedCount += outcome.failedCount;
+    summary.cardinalityFailure ??= outcome.cardinalityFailure;
+    summary.violations.push(
+      ...outcome.violations.map<CheckRow>((violation, position) => ({
+        // No real FileJob exists in this client-only path — fileName stands in for
+        // fileJobId, since ElementResult requires one and there's no backend id to use.
+        id: `${model.key}#${index}#${position}`,
+        fileJobId: model.fileName,
+        fileName: model.fileName,
+        modelKey: model.key,
+        elementGlobalId: violation.elementGlobalId,
+        elementType: violation.elementType,
+        elementName: violation.elementName,
+        elementTag: violation.elementTag,
+        ruleId: violation.ruleId,
+        severity: violation.severity,
+        message: violation.message,
+      }))
+    );
+  });
+}
+
 /**
  * Checks models that are already in memory — a second rule set never re-parses a file.
  *
@@ -117,52 +177,28 @@ export function validateParsedModels(
   models: ParsedModel[],
   idsXml: string
 ): SpecificationSummary[] {
-  const specifications = parseIdsXml(idsXml);
-  if (specifications.length === 0) {
-    throw new InvalidIdsRuleSetError();
+  const summaries = summarySkeleton(idsXml);
+  for (const model of models) mergeModelInto(summaries, model, idsXml);
+  return summaries;
+}
+
+/**
+ * `validateParsedModels`, one file at a time, handing the event loop a turn before each.
+ *
+ * A batch of large models is seconds of unbroken main-thread work, and a spinner that never gets
+ * a frame to paint in is not a spinner. The yield is a macrotask rather than a microtask for the
+ * same reason: only the former lets the browser render what the last one reported.
+ */
+export async function validateParsedModelsWithProgress(
+  models: ParsedModel[],
+  idsXml: string,
+  onProgress: (progress: CheckProgress) => void
+): Promise<SpecificationSummary[]> {
+  const summaries = summarySkeleton(idsXml);
+  for (const [index, model] of models.entries()) {
+    onProgress({ fileName: model.fileName, index: index + 1, total: models.length });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    mergeModelInto(summaries, model, idsXml);
   }
-
-  // Merged by position, not by name: an IDS may carry two specifications with the same name,
-  // and every model yields these outcomes in document order.
-  // Whether a specification can be run at all is a property of the rule set, not of any one
-  // model, so it is read here once rather than merged out of the per-model outcomes.
-  const summaries = specifications.map<SpecificationSummary>((specification) => ({
-    name: specification.name,
-    checked: isEvaluable(specification),
-    unsupported: specification.unsupported,
-    applicableCount: 0,
-    passedCount: 0,
-    failedCount: 0,
-    violations: [],
-    cardinalityFailure: null,
-  }));
-
-  for (const model of models) {
-    validateBySpecification(model.idsScope, idsXml, model.unitScales).forEach((outcome, index) => {
-      const summary = summaries[index];
-      summary.applicableCount += outcome.applicableCount;
-      summary.passedCount += outcome.passedCount;
-      summary.failedCount += outcome.failedCount;
-      summary.cardinalityFailure ??= outcome.cardinalityFailure;
-      summary.violations.push(
-        ...outcome.violations.map<CheckRow>((violation, position) => ({
-          // No real FileJob exists in this client-only path — fileName stands in for
-          // fileJobId, since ElementResult requires one and there's no backend id to use.
-          id: `${model.key}#${index}#${position}`,
-          fileJobId: model.fileName,
-          fileName: model.fileName,
-          modelKey: model.key,
-          elementGlobalId: violation.elementGlobalId,
-          elementType: violation.elementType,
-          elementName: violation.elementName,
-          elementTag: violation.elementTag,
-          ruleId: violation.ruleId,
-          severity: violation.severity,
-          message: violation.message,
-        }))
-      );
-    });
-  }
-
   return summaries;
 }

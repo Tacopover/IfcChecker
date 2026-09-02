@@ -210,6 +210,31 @@ export interface ParsedSpecification {
   unsupported: UnsupportedConstruct[];
   /** True when nothing deciding *which* elements are selected was dropped. */
   applicabilityComplete: boolean;
+  /** `<specification identifier>`, `ids.xsd`'s free-form machine-readable attribute. See `orGroupIdOf`. */
+  identifier: string | null;
+}
+
+/**
+ * Prefix that marks a `<specification identifier>` value as this tool's own OR-group link,
+ * rather than a third party's own machine identifier. `ids.xsd` documents `identifier` as
+ * free-form and not guaranteed unique, so a value is only ever read as a group key when it
+ * carries this exact prefix — every other identifier, including a plain one this tool wrote
+ * before this feature existed, is left alone.
+ */
+export const OR_GROUP_IDENTIFIER_PREFIX = "ifcqa:or:";
+
+/**
+ * The OR-group id an `identifier` states, or `null` when it does not state one.
+ *
+ * Two or more specifications that return the same id here are meant to be read as one rule
+ * that passes an element if any member does — see `validateBySpecificationGrouped`. A group
+ * of one (the id's only remaining member, after the others were deleted) is not an error: it
+ * is read as an ordinary, ungrouped specification.
+ */
+export function orGroupIdOf(identifier: string | null | undefined): string | null {
+  if (!identifier || !identifier.startsWith(OR_GROUP_IDENTIFIER_PREFIX)) return null;
+  const id = identifier.slice(OR_GROUP_IDENTIFIER_PREFIX.length).trim();
+  return id.length > 0 ? id : null;
 }
 
 /**
@@ -507,6 +532,7 @@ function parseSpecification(specNode: OrderedNode): ParsedSpecification {
   const applicabilityNode = specChildren.find((node) => tagOf(node) === "applicability");
   const applicability = readApplicability(descend(specChildren, "applicability"), unsupported);
   const requirements = readRequirements(descend(specChildren, "requirements"), unsupported);
+  const identifierRaw = attributesOf(specNode)["@_identifier"];
 
   return {
     name,
@@ -515,6 +541,7 @@ function parseSpecification(specNode: OrderedNode): ParsedSpecification {
     requirements,
     unsupported,
     applicabilityComplete: !unsupported.some((entry) => entry.section === "applicability"),
+    identifier: identifierRaw == null ? null : String(identifierRaw),
   };
 }
 

@@ -44,7 +44,7 @@ describe("RuleWizard", () => {
 
     // Step 2 — Narrow it down, skipped.
     expect(screen.getByRole("heading", { name: /Narrow it down/ })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Skip — check all 3/ }));
+    await user.click(screen.getByRole("button", { name: /Skip: check all 3/ }));
 
     // Step 3 — Requirements: add a property check.
     expect(screen.getByRole("heading", { name: "What must be true?" })).toBeInTheDocument();

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/copy-web-ifc-wasm.mjs && vite",
-    "build": "node scripts/copy-web-ifc-wasm.mjs && tsc --noEmit && vite build && node scripts/prerender-routes.mjs",
+    "dev": "node scripts/copy-web-ifc-wasm.mjs && node scripts/copy-example-ids.mjs && vite",
+    "build": "node scripts/copy-web-ifc-wasm.mjs && node scripts/copy-example-ids.mjs && tsc --noEmit && vite build && node scripts/prerender-routes.mjs",
     "preview": "vite preview",
     "test": "vitest run"
   },

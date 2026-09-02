@@ -2,6 +2,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { suggestionsFor } from "../test/combobox";
 import type { MaterialFacetDraft } from "@ifc-qa/ids-validator";
 import { MaterialRow } from "./MaterialRow";
 import type { FieldsForResult } from "./introspect";
@@ -62,11 +63,9 @@ describe("MaterialRow", () => {
     await user.type(box, "Steel");
     expect(box).toHaveValue("Steel");
 
-    const listId = box.getAttribute("list") ?? "";
-    const suggestions = Array.from(
-      document.getElementById(listId)?.querySelectorAll("option") ?? []
-    ).map((option) => option.getAttribute("value"));
-    expect(suggestions).toEqual(["Concrete", "Cast in situ"]);
+    // "Steel" leads the list: the file has nothing under it, and it is the one entry the
+    // dropdown can put back after the user has looked through the model's own.
+    expect(await suggestionsFor(user, "Material")).toEqual(["Steel", "Concrete", "Cast in situ"]);
   });
 
   // The asymmetry with a classification's system, which `ids.xsd` makes mandatory. A material

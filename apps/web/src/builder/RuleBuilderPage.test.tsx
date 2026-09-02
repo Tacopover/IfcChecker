@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import { RuleBuilderPage, pathToNode } from "./RuleBuilderPage";
@@ -62,8 +62,8 @@ interface SeedModel {
 }
 
 /** Fills the shared store the way the validate page would, so the builder has files to pick from. */
-function Seed({ models, files }: { models: SeedModel[]; files: File[] }) {
-  const { addFiles, applyParseOutcome } = useLoadedModels();
+function Seed({ models, files, idsFile }: { models: SeedModel[]; files: File[]; idsFile?: File }) {
+  const { addFiles, applyParseOutcome, setIdsFile } = useLoadedModels();
   useEffect(() => {
     addFiles(files);
     for (const [index, model] of models.entries()) {
@@ -79,17 +79,18 @@ function Seed({ models, files }: { models: SeedModel[]; files: File[] }) {
         unitScales: {},
       });
     }
+    if (idsFile) setIdsFile(idsFile);
     // Seeding once, on mount: re-running would re-add files the test then works against.
   }, []);
   return null;
 }
 
 /** Returns the store keys by file name — the <option> values the picker is driven by. */
-function renderBuilder(models: SeedModel[] = [], onGoToFiles?: () => void) {
+function renderBuilder(models: SeedModel[] = [], onGoToFiles?: () => void, idsFile?: File) {
   const files = models.map((model) => new File(["ISO-10303-21;"], model.fileName));
   const result = render(
     <LoadedModelsProvider>
-      <Seed models={models} files={files} />
+      <Seed models={models} files={files} idsFile={idsFile} />
       <RuleBuilderPage onGoToFiles={onGoToFiles} />
     </LoadedModelsProvider>
   );
@@ -110,23 +111,91 @@ async function createRuleViaWizard(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Start" }));
   await user.click(screen.getByRole("checkbox", { name: /IfcBuildingElement/ }));
   await user.click(screen.getByRole("button", { name: /Next: Narrow it down/ }));
-  await user.click(screen.getByRole("button", { name: /Skip — check all 5/ }));
+  await user.click(screen.getByRole("button", { name: /Skip: check all 5/ }));
   await user.click(screen.getByRole("button", { name: "Next: Review →" }));
   await user.click(screen.getByRole("button", { name: "Save rule ✓" }));
 }
 
 describe("RuleBuilderPage", () => {
-  it("sends the user to the validate page when nothing has been parsed yet", async () => {
+  it("still offers the page, and a way back to load files, when nothing has been parsed yet", async () => {
     const onGoToFiles = vi.fn();
     const user = userEvent.setup();
     renderBuilder([], onGoToFiles);
 
-    expect(screen.getByRole("heading", { name: "Build rules from a real file" })).toBeInTheDocument();
     expect(screen.getByLabelText("IFC file (one worked example)")).toBeDisabled();
     expect(screen.getByRole("option", { name: "No parsed files yet" })).toBeInTheDocument();
+    // The rail that reads from a file has nothing to show yet, but the rest of the page (rules,
+    // import, the wizard) does not depend on one, so it renders anyway.
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Import an IDS file")).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Load IFC files" }));
     expect(onGoToFiles).toHaveBeenCalled();
+  });
+
+  it("lets a rule be authored with no IFC file loaded at all, and imports an .ids file the same way", async () => {
+    const user = userEvent.setup();
+    renderBuilder([]);
+
+    expect(
+      screen.getByText(/Load and parse an IFC file to browse its types and fields here/)
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    expect(screen.getByRole("heading", { name: /What does this rule apply to/ })).toBeInTheDocument();
+    // With no file, the picker starts on "show all IFC types" rather than an empty file-only list.
+    await user.type(screen.getByLabelText("Search IFC types"), "IfcWall");
+    await user.click(screen.getByRole("checkbox", { name: "IfcWall not in this file" }));
+    await user.click(screen.getByRole("button", { name: /Next: Narrow it down/ }));
+    await user.click(screen.getByRole("button", { name: /Skip: check all 0/ }));
+    await user.click(screen.getByRole("button", { name: "Next: Review →" }));
+    await user.click(screen.getByRole("button", { name: "Save rule ✓" }));
+
+    expect(screen.getByLabelText("Rule name")).toHaveValue("New rule");
+    expect(screen.getByText(/^1 rule/)).toBeInTheDocument();
+  });
+
+  it("carries over the IDS file already chosen on the validate page, without any action here", async () => {
+    const { container } = renderBuilder([{ fileName: "tower.ifc" }], undefined, idsFile());
+
+    await waitFor(() =>
+      expect(cardTitles(container)).toEqual([
+        "Walls are named",
+        "Everything with a wall-ish class is named",
+        "Doors are named",
+      ])
+    );
+  });
+
+  it("leaves work already started here alone, even once a file is chosen on the validate page", async () => {
+    const user = userEvent.setup();
+    const files = [new File(["ISO-10303-21;"], "tower.ifc")];
+
+    function ChooseIdsLater() {
+      const { setIdsFile } = useLoadedModels();
+      return (
+        <button type="button" onClick={() => setIdsFile(idsFile())}>
+          Choose on validate page
+        </button>
+      );
+    }
+
+    render(
+      <LoadedModelsProvider>
+        <Seed models={[{ fileName: "tower.ifc" }]} files={files} />
+        <ChooseIdsLater />
+        <RuleBuilderPage />
+      </LoadedModelsProvider>
+    );
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+
+    await user.click(screen.getByRole("button", { name: "Choose on validate page" }));
+
+    // Give the auto-import effect a turn to run, then confirm it did not fire.
+    await waitFor(() => expect(screen.getByLabelText("Rule name")).toHaveValue("New rule"));
+    expect(screen.getAllByLabelText("Rule name")).toHaveLength(1);
+    expect(screen.queryByText("Walls are named")).not.toBeInTheDocument();
   });
 
   it("offers the files already parsed on the validate page, and works from the first one", async () => {
@@ -189,6 +258,26 @@ describe("RuleBuilderPage", () => {
     expect(within(fireRating).getByText("67%")).toHaveAttribute("data-low", "1");
     expect(container.querySelector(".card.pset .psname")).toHaveTextContent("Pset_WallCommon");
     expect(screen.getByText("Wall 1")).toBeInTheDocument();
+  });
+
+  it("sorts properties alphabetically and narrows them with the search box", async () => {
+    const user = userEvent.setup();
+    const { container } = renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    const fieldNames = () =>
+      Array.from(container.querySelectorAll(".card.pset .field-name")).map((node) => node.textContent);
+    // Status is on every wall (the higher hit count); FireRating only on two of three. Alphabetical
+    // order puts FireRating first regardless, unlike the value pickers' commonest-first ordering.
+    expect(fieldNames()).toEqual(["FireRating", "Status"]);
+
+    await user.type(screen.getByLabelText("Search properties"), "stat");
+    expect(fieldNames()).toEqual(["Status"]);
+    expect(screen.queryByRole("button", { name: /FireRating/ })).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Search properties"));
+    await user.type(screen.getByLabelText("Search properties"), "nonsense");
+    expect(screen.getByText('No properties match "nonsense".')).toBeInTheDocument();
   });
 
   it("adds a condition — and the selected type — to the active rule when a field is clicked", async () => {
@@ -349,6 +438,103 @@ describe("RuleBuilderPage", () => {
 
     expect(screen.getAllByLabelText("Rule name").map((input) => (input as HTMLInputElement).value))
       .toEqual(["New rule", "New rule (copy)"]);
+  });
+
+  it("adds an OR-linked branch off a rule, and shows the badge on both once linked", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+
+    expect(screen.queryByText("OR")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    expect(screen.getAllByLabelText("Rule name").map((input) => (input as HTMLInputElement).value)).toEqual([
+      "New rule",
+      "New rule (2)",
+    ]);
+    expect(screen.getAllByText("OR")).toHaveLength(2);
+  });
+
+  it("writes both OR branches out with the same group identifier, and no others", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
+    const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
+    const identifiers = [...xml.matchAll(/identifier="([^"]+)"/g)].map((match) => match[1]);
+
+    expect(identifiers).toHaveLength(2);
+    expect(new Set(identifiers).size).toBe(1);
+    expect(identifiers[0]).toMatch(/^ifcqa:or:/);
+  });
+
+  it("does not carry the OR link onto a plain duplicate of a linked rule", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    await user.click(screen.getByRole("button", { name: "Duplicate rule New rule" }));
+
+    // Three cards now: the two linked originals plus an independent copy.
+    expect(screen.getAllByLabelText("Rule name")).toHaveLength(3);
+    expect(screen.getAllByText("OR")).toHaveLength(2);
+  });
+
+  it("puts a duplicate of an OR branch below the whole group, not between the branches", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    await user.click(screen.getByRole("button", { name: "Duplicate rule New rule" }));
+
+    expect(screen.getAllByLabelText("Rule name").map((input) => (input as HTMLInputElement).value))
+      .toEqual(["New rule", "New rule (2)", "New rule (copy)"]);
+  });
+
+  it("drops the OR link off the branch left behind when the other one is deleted", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+    await createRuleViaWizard(user);
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+    expect(screen.getAllByText("OR")).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "Delete rule New rule (2)" }));
+
+    expect(screen.getAllByLabelText("Rule name")).toHaveLength(1);
+    expect(screen.queryByText("OR")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
+    expect(screen.getByLabelText("IDS XML preview").textContent ?? "").not.toContain("ifcqa:or:");
+  });
+
+  it("gives two independently created OR groups distinct identifiers", async () => {
+    const user = userEvent.setup();
+    renderBuilder([{ fileName: "tower.ifc" }]);
+    await screen.findByRole("tree");
+
+    await user.click(screen.getByRole("button", { name: /FireRating/ })); // creates "IfcWall rule"
+    await createRuleViaWizard(user); // creates "New rule"
+
+    await user.click(screen.getByRole("button", { name: "Add OR condition to IfcWall rule" }));
+    await user.click(screen.getByRole("button", { name: "Add OR condition to New rule" }));
+
+    await user.click(screen.getByRole("button", { name: "Show IDS XML" }));
+    const xml = screen.getByLabelText("IDS XML preview").textContent ?? "";
+    const identifiers = [...xml.matchAll(/identifier="([^"]+)"/g)].map((match) => match[1]);
+
+    // Four branches (two OR pairs), but only two distinct group ids — the two pairs must not merge.
+    expect(identifiers).toHaveLength(4);
+    expect(new Set(identifiers).size).toBe(2);
   });
 
   it("carries the Prohibited toggle through to the exported XML", async () => {
@@ -514,8 +700,8 @@ describe("RuleBuilderPage importing an IDS file", () => {
     await user.type(screen.getByLabelText("Author"), "Taco");
     await user.type(screen.getByLabelText("Date"), "16-08-2026");
 
-    expect(screen.getByText(/Author — IDS requires an email address/)).toBeInTheDocument();
-    expect(screen.getByText(/Date — IDS requires YYYY-MM-DD/)).toBeInTheDocument();
+    expect(screen.getByText(/Author: IDS requires an email address/)).toBeInTheDocument();
+    expect(screen.getByText(/Date: IDS requires YYYY-MM-DD/)).toBeInTheDocument();
   });
 
   // An empty box writes no element, which is what `minOccurs="0"` is for — a cleared field must not

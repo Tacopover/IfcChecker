@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isEvaluable, parseIdsXml } from "./parse-ids.js";
+import { isEvaluable, orGroupIdOf, parseIdsXml } from "./parse-ids.js";
 import type { ParsedRequirementFacet, ParsedRestriction } from "./parse-ids.js";
 
 /**
@@ -746,5 +746,52 @@ describe("parseIdsXml — several patterns on one value", () => {
     if (restriction?.kind !== "pattern") throw new Error("expected a pattern");
     for (const value of ["a", "b", "c"]) expect(restriction.regex.test(value)).toBe(true);
     expect(restriction.regex.test("d")).toBe(false);
+  });
+});
+
+function specificationWithIdentifier(identifier: string | null): string {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://standards.buildingsmart.org/IDS">
+  <info><title>Sample</title></info>
+  <specifications>
+    <specification name="Named" ifcVersion="IFC4"${identifier === null ? "" : ` identifier="${identifier}"`}>
+      <applicability maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+      </applicability>
+    </specification>
+  </specifications>
+</ids>`;
+}
+
+describe("ParsedSpecification identifier", () => {
+  it("reads the identifier attribute when the document states one", () => {
+    const [specification] = parseIdsXml(specificationWithIdentifier("REQ-042"));
+    expect(specification.identifier).toBe("REQ-042");
+  });
+
+  it("is null when the document states no identifier", () => {
+    const [specification] = parseIdsXml(specificationWithIdentifier(null));
+    expect(specification.identifier).toBeNull();
+  });
+});
+
+describe("orGroupIdOf", () => {
+  it("reads the id after this tool's own OR-group prefix", () => {
+    expect(orGroupIdOf("ifcqa:or:abc123")).toBe("abc123");
+  });
+
+  it("is null for a third party's own identifier scheme, even one that looks similar", () => {
+    expect(orGroupIdOf("REQ-042")).toBeNull();
+    expect(orGroupIdOf("or:abc123")).toBeNull();
+  });
+
+  it("is null for a prefix with nothing after it", () => {
+    expect(orGroupIdOf("ifcqa:or:")).toBeNull();
+  });
+
+  it("is null for absent or empty identifiers", () => {
+    expect(orGroupIdOf(null)).toBeNull();
+    expect(orGroupIdOf(undefined)).toBeNull();
+    expect(orGroupIdOf("")).toBeNull();
   });
 });

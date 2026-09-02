@@ -5,6 +5,7 @@ import {
   friendlyReadingOf,
   valueDraftForOperator,
 } from "@ifc-qa/ids-validator";
+import { SuggestCombobox } from "./SuggestCombobox.js";
 import { ValuePicker, type ObservedValue } from "./ValuePicker.js";
 import { OPERATORS_NEEDING_TEXT } from "./completeness.js";
 
@@ -70,8 +71,6 @@ export interface FacetValueEditorProps {
   label: string;
   /** What the operator select is called, which a row with two editors has to keep distinct. */
   operatorLabel: string;
-  /** The facet's id, so two rows showing the same parameter do not share one suggestion list. */
-  id: string;
   /** The id of the row's error message, so the text box can point at it. */
   errorId?: string;
   invalid?: boolean;
@@ -96,7 +95,6 @@ export function FacetValueEditor({
   absentLabel,
   label,
   operatorLabel,
-  id,
   errorId,
   invalid,
 }: FacetValueEditorProps) {
@@ -119,7 +117,7 @@ export function FacetValueEditor({
   }
 
   const operators = absentLabel === null ? OPERATORS.filter((entry) => entry.id !== "exists") : OPERATORS;
-  const listId = `values-${id}-${label}`;
+  const suggestions = observed.slice(0, MAX_SUGGESTIONS).map((entry) => entry.value);
 
   function change(operator: ConditionOperator, text: string, values: string[]) {
     // The prose follows the value it documents. Choosing "be exactly" is the one edit that drops
@@ -149,24 +147,17 @@ export function FacetValueEditor({
       </select>
 
       {OPERATORS_NEEDING_TEXT.has(reading.operator) && (
-        <>
-          <input
-            className="tok"
-            type="text"
-            aria-label={label}
-            aria-invalid={invalid ? true : undefined}
-            aria-describedby={invalid ? errorId : undefined}
-            list={listId}
-            placeholder={reading.operator === "matches" ? "regex, e.g. [A-Z]{2}-\\d{4}" : "value"}
-            value={reading.text}
-            onChange={(event) => change(reading.operator, event.target.value, reading.values)}
-          />
-          <datalist id={listId}>
-            {observed.slice(0, MAX_SUGGESTIONS).map((entry) => (
-              <option key={entry.value} value={entry.value} />
-            ))}
-          </datalist>
-        </>
+        <SuggestCombobox
+          label={label}
+          value={reading.text}
+          // A regex is written, not picked: offering the model's own values under a box that
+          // holds a pattern would suggest they belong in it.
+          options={reading.operator === "matches" ? [] : suggestions}
+          placeholder={reading.operator === "matches" ? "regex, e.g. [A-Z]{2}-\\d{4}" : "value"}
+          onChange={(text) => change(reading.operator, text, reading.values)}
+          errorId={errorId}
+          invalid={invalid}
+        />
       )}
 
       {reading.operator === "oneOf" && (

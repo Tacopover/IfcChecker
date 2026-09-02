@@ -53,7 +53,7 @@ function Harness({
 }
 
 describe("WizardRequirementsStep — normal (file-backed) mode", () => {
-  it("offers all six kinds and renders ordinary dropdown rows", async () => {
+  it("offers all six kinds and renders file-backed rows", async () => {
     const user = userEvent.setup();
     render(<Harness entityTypes={["IfcWall"]} />);
 
@@ -71,8 +71,10 @@ describe("WizardRequirementsStep — normal (file-backed) mode", () => {
     ]);
 
     await user.selectOptions(screen.getByLabelText("Add another check"), "property");
-    expect(screen.getByLabelText("Property set").tagName).toBe("SELECT");
-    expect(screen.getByLabelText("Field name").tagName).toBe("SELECT");
+    // Both rows type their names now, so the "Stored as" picker — which only a file can fill —
+    // is what separates a file-backed row from a manual one.
+    expect(screen.getByLabelText("Stored as")).toBeInTheDocument();
+    expect(screen.queryByText(/typed manually/)).toBeNull();
   });
 
   it("scores each added condition live against the real elements", async () => {
@@ -113,7 +115,8 @@ describe("WizardRequirementsStep — manual (zero-elements) mode", () => {
     expect(options).toContain("Classification");
 
     await user.selectOptions(screen.getByLabelText("Add another check"), "property");
-    expect(screen.getByLabelText("Property set").tagName).toBe("SELECT");
+    expect(screen.getByLabelText("Stored as")).toBeInTheDocument();
+    expect(screen.queryByText(/typed manually/)).toBeNull();
   });
 });
 

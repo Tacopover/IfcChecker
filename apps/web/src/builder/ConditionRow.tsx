@@ -8,9 +8,12 @@ import {
   valueDraftForOperator,
 } from "@ifc-qa/ids-validator";
 import type { FieldsForResult } from "./introspect.js";
+import { allIfcDataTypeNames } from "./allIfcDataTypes.js";
 import type { ObservedValue } from "./ValuePicker.js";
 import { FacetValueEditor, OPERATORS } from "./FacetValueEditor.js";
 import { FacetRowFrame, errorIdOf, rowNoun, type FacetSide } from "./FacetRowFrame.js";
+import { SuggestCombobox } from "./SuggestCombobox.js";
+import { SearchPicker, type SearchPickerGroup, type SearchPickerOption } from "./SearchPicker.js";
 import { conditionProblem } from "./completeness.js";
 
 export { OPERATORS } from "./FacetValueEditor.js";
@@ -30,8 +33,18 @@ export const CARDINALITIES: Array<{ id: ConditionalCardinality; label: string }>
   { id: "prohibited", label: "must NOT" },
 ];
 
-/** The value a `dataType` select carries when the facet should declare none. */
+/** The value a `dataType` picker carries when the facet should declare none. */
 export const NO_DATA_TYPE = "";
+
+/** How that reads in the list, and in the box while it is what the facet states. */
+export const ANY_DATA_TYPE = "any type";
+
+/**
+ * Enough to draw the schema's whole list at once — 108 names and the "any type" row above them.
+ * The picker's default cap is for the ~900-name entity list; here it would cut the list off partway
+ * through the alphabet, leaving a stated type past the cut with no row standing for it.
+ */
+export const DATA_TYPE_ROWS = 200;
 
 function propertyFieldIn(source: FieldsForResult, propertySet: string | null, name: string | null) {
   if (name === null) return undefined;
@@ -76,27 +89,38 @@ export function nameSummary(value: ValueDraft): string {
 /**
  * The types offered for a property, commonest in the model first.
  *
- * Everything offered comes from the user's own file, which is the whole point of the rail — and
- * here it is also the only honest source: a declared type the model does not hold fails every
- * element. A type an imported rule already states is kept selectable even when this model has
- * nothing stored that way, so opening a file never silently rewrites it.
+ * Where the file holds the property, its own storage is the only honest source: a declared type
+ * the model does not hold fails every element. That is the usual case, since the field is
+ * normally picked off the model in the first place.
+ *
+ * Where it does not — a name typed by hand, or one from a file that never carried it — there is
+ * nothing to derive from, and offering nothing would leave a hand-authored rule unable to state a
+ * type at all. The schema's own closed list stands in for the file there.
+ *
+ * A type an imported rule already states is kept selectable either way, so opening a file never
+ * silently rewrites it.
  */
 export function dataTypeOptionsFor(
   source: FieldsForResult,
   condition: ConditionDraft
-): Array<{ value: string; label: string }> {
+): SearchPickerOption[] {
   if (condition.kind !== "property") return [];
   const { propertySet, name } = plainNamesOf(condition);
   const observed = propertyFieldIn(source, propertySet, name)?.dataTypes ?? [];
-  const options = observed.map((entry) => ({
-    value: entry.value,
-    label: `${entry.value} (${entry.count})`,
-  }));
+  const options: SearchPickerOption[] =
+    observed.length > 0
+      ? observed.map((entry) => ({ value: entry.value, label: entry.value, note: String(entry.count) }))
+      : allIfcDataTypeNames().map((value) => ({ value, label: value }));
   const current = condition.dataType;
-  if (current && !observed.some((entry) => entry.value === current)) {
-    options.push({ value: current, label: `${current} (not in file)` });
+  if (current && !options.some((option) => option.value === current)) {
+    options.push({ value: current, label: current, note: "not in file" });
   }
   return options;
+}
+
+/** The stored-as list as the picker takes it, with "declare none" leading every reading of it. */
+export function dataTypeGroupsFor(options: SearchPickerOption[]): SearchPickerGroup[] {
+  return [{ label: "", options: [{ value: NO_DATA_TYPE, label: ANY_DATA_TYPE }, ...options] }];
 }
 
 /**
@@ -125,13 +149,6 @@ export function observedValuesFor(source: FieldsForResult, condition: ConditionD
   return field?.values ?? [];
 }
 
-function optionsWith(list: string[], current: string | null) {
-  const options = list.map((value) => ({ value, label: value }));
-  if (current && !list.includes(current)) {
-    options.push({ value: current, label: `${current} (not in file)` });
-  }
-  return options;
-}
 
 export interface ConditionRowProps {
   condition: ConditionDraft;
@@ -169,7 +186,10 @@ export function ConditionRow({
 }: ConditionRowProps) {
   const selects = side === "applicability";
   const observed = useMemo(() => observedValuesFor(source, condition), [source, condition]);
-  const dataTypeOptions = useMemo(() => dataTypeOptionsFor(source, condition), [source, condition]);
+  const dataTypeGroups = useMemo(
+    () => dataTypeGroupsFor(dataTypeOptionsFor(source, condition)),
+    [source, condition]
+  );
   // Not shown the instant a facet is added — only once the user leaves the row or the wizard tries
   // to advance, both of which mark it touched. `conditionProblem` itself is unaffected; it still
   // decides whether the facet can export, which `exportBlockers` reads regardless of `touched`.
@@ -190,6 +210,10 @@ export function ConditionRow({
           (field) => field.name
         )
   ).sort((a, b) => a.localeCompare(b));
+
+  const propertySetOptions = source.propertySets
+    .map((set) => set.name)
+    .sort((a, b) => a.localeCompare(b));
 
   const errorId = errorIdOf(condition.id);
 
@@ -234,10 +258,12 @@ export function ConditionRow({
     });
   }
 
+  // The field name is carried across rather than reset to the new set's first field: the name is
+  // typed here, so replacing it would throw away something the user wrote. Its suggestion list
+  // follows the new set on its own, and a name that set has nothing under shows as typed.
   function changePropertySet(propertySet: string) {
     if (condition.kind !== "property") return;
-    const set = source.propertySets.find((entry) => entry.name === propertySet);
-    const name = set?.fields[0]?.name ?? plainField ?? "";
+    const name = plainField ?? "";
     onChange({
       ...condition,
       propertySet: plainName(propertySet),
@@ -292,21 +318,13 @@ export function ConditionRow({
               property sets {nameSummary(condition.propertySet)}
             </span>
           ) : (
-            <select
-              className="tok"
-              aria-label="Property set"
+            <SuggestCombobox
+              label="Property set"
               value={plainSet ?? ""}
-              onChange={(event) => changePropertySet(event.target.value)}
-            >
-              {optionsWith(
-                source.propertySets.map((set) => set.name).sort((a, b) => a.localeCompare(b)),
-                plainSet
-              ).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              options={propertySetOptions}
+              placeholder="property set name"
+              onChange={changePropertySet}
+            />
           )}
           <span className="glue">·</span>
         </>
@@ -317,40 +335,27 @@ export function ConditionRow({
           fields {nameSummary(condition.name)}
         </span>
       ) : (
-        <select
-          className="tok"
-          aria-label="Field name"
+        <SuggestCombobox
+          label="Field name"
           value={plainField}
-          onChange={(event) => changeFieldName(event.target.value)}
-        >
-          {optionsWith(nameOptions, plainField).map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          options={nameOptions}
+          placeholder="field name"
+          onChange={changeFieldName}
+        />
       )}
 
       {condition.kind === "property" && (
-        <select
-          className="tok subtle"
-          aria-label="Stored as"
+        <SearchPicker
+          label="Stored as"
           title="The IFC data type the property must be stored as"
+          inputClassName="tok subtle"
           value={condition.dataType ?? NO_DATA_TYPE}
-          onChange={(event) =>
-            onChange({
-              ...condition,
-              dataType: event.target.value === NO_DATA_TYPE ? null : event.target.value,
-            })
+          groups={dataTypeGroups}
+          maxRows={DATA_TYPE_ROWS}
+          onPick={(picked) =>
+            onChange({ ...condition, dataType: picked === NO_DATA_TYPE ? null : picked })
           }
-        >
-          <option value={NO_DATA_TYPE}>any type</option>
-          {dataTypeOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        />
       )}
 
       {selects ? (
@@ -373,7 +378,6 @@ export function ConditionRow({
       )}
 
       <FacetValueEditor
-        id={condition.id}
         label="Value"
         operatorLabel="Operator"
         value={condition.value}

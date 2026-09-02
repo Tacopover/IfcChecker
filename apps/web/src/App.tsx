@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { RuleBuilderPage } from "./builder/RuleBuilderPage";
 import { IfcCheckerPage } from "./routes/IfcCheckerPage";
+import { AboutPage } from "./routes/AboutPage";
 import { pathFor, useRoute, type RouteId } from "./routing";
 import { useDocumentMeta } from "./seo";
 import { LoadedModelsProvider } from "./state/loadedModels";
@@ -11,6 +12,7 @@ const TABS: Array<{ id: RouteId; label: string }> = [
   { id: "validate", label: "Validate" },
   { id: "builder", label: "Build rules" },
   { id: "viewer", label: "3D view" },
+  { id: "about", label: "About" },
 ];
 
 export function App() {
@@ -58,6 +60,9 @@ export function App() {
       </div>
       <div hidden={tab !== "builder"}>
         <RuleBuilderPage onGoToFiles={() => navigate("validate")} />
+      </div>
+      <div className="page-narrow" hidden={tab !== "about"}>
+        <AboutPage />
       </div>
 
       {/* The viewer is the exception: it holds mesh buffers and a live WebGL

@@ -1,4 +1,12 @@
-import { Fragment, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
 import type { NormalizedElement } from "@ifc-qa/shared-types";
 import type {
   ConditionDraft,
@@ -6,9 +14,18 @@ import type {
   RefusedSpecification,
   RuleDraft,
 } from "@ifc-qa/ids-validator";
-import { expandedTypeNamesFor, plainName } from "@ifc-qa/ids-validator";
+import {
+  expandedTypeNamesFor,
+  indexAfterOrGroupOf,
+  nextOrGroupId,
+  OR_GROUP_IDENTIFIER_PREFIX,
+  orGroupIdOf,
+  orGroupSiblingsOf,
+  plainName,
+  withLoneOrGroupsCleared,
+} from "@ifc-qa/ids-validator";
 import { SPATIAL_STRUCTURE_TYPES } from "@ifc-qa/parser-adapters/browser";
-import { useLoadedModels } from "../state/loadedModels.js";
+import { modelKey as fileIdentity, useLoadedModels } from "../state/loadedModels.js";
 import { introspectModel, type FieldSummary, type FieldsForResult, type TreeNode } from "./introspect.js";
 import { ModelTree } from "./ModelTree.js";
 import { RuleCard } from "./RuleCard.js";
@@ -49,21 +66,34 @@ interface SchemaCardsProps {
   source: FieldsForResult;
   selectionName: string;
   groupTypeCount: number | null;
+  query: string;
   onAddField: (field: { kind: ConditionDraft["kind"]; propertySet: string | null; name: string }) => void;
+}
+
+/** Alphabetical, and narrowed to whatever the search box asks for — the panel is for scanning by
+ * name, unlike the value pickers elsewhere, which stay ranked by how common a value is. */
+function sortedAndFiltered(fields: FieldSummary[], query: string): FieldSummary[] {
+  const needle = query.trim().toLowerCase();
+  return fields
+    .filter((field) => needle === "" || field.name.toLowerCase().includes(needle))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function FieldRows({
   fields,
   kind,
+  query,
   onAddField,
 }: {
   fields: FieldSummary[];
   kind: ConditionDraft["kind"];
+  query: string;
   onAddField: SchemaCardsProps["onAddField"];
 }) {
+  const shown = sortedAndFiltered(fields, query);
   return (
     <>
-      {fields.map((field) => (
+      {shown.map((field) => (
         <Fragment key={field.name}>
           <button
             type="button"
@@ -91,12 +121,22 @@ function FieldRows({
           </div>
         </Fragment>
       ))}
-      {fields.length === 0 && <p className="hint">Nothing here for this selection.</p>}
+      {shown.length === 0 && (
+        <p className="hint">
+          {fields.length === 0 ? "Nothing here for this selection." : `No properties match "${query.trim()}".`}
+        </p>
+      )}
     </>
   );
 }
 
-function SchemaCards({ source, selectionName, groupTypeCount, onAddField }: SchemaCardsProps) {
+function SchemaCards({ source, selectionName, groupTypeCount, query, onAddField }: SchemaCardsProps) {
+  const needle = query.trim().toLowerCase();
+  const propertySets = [...source.propertySets]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    // A set with no field matching the search has nothing to show; skip its (otherwise empty) card.
+    .filter((set) => needle === "" || set.fields.some((field) => field.name.toLowerCase().includes(needle)));
+
   return (
     <div className="schema">
       <section className="card">
@@ -108,17 +148,17 @@ function SchemaCards({ source, selectionName, groupTypeCount, onAddField }: Sche
           </span>
         </header>
         <div className="body">
-          <FieldRows fields={source.attributes} kind="attribute" onAddField={onAddField} />
+          <FieldRows fields={source.attributes} kind="attribute" query={query} onAddField={onAddField} />
         </div>
       </section>
-      {source.propertySets.map((set) => (
+      {propertySets.map((set) => (
         <section className="card pset" key={set.name}>
           <header>
             <span className="micro">Pset</span>
             <span className="psname">{set.name}</span>
           </header>
           <div className="body">
-            <FieldRows fields={set.fields} kind="property" onAddField={onAddField} />
+            <FieldRows fields={set.fields} kind="property" query={query} onAddField={onAddField} />
           </div>
         </section>
       ))}
@@ -127,13 +167,34 @@ function SchemaCards({ source, selectionName, groupTypeCount, onAddField }: Sche
 }
 
 export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = {}) {
-  const { models } = useLoadedModels();
+  const { models, idsFile: sharedIdsFile } = useLoadedModels();
   const [modelKey, setModelKey] = useState<string | null>(null);
+
+  // The loadbar is sticky, and the explorer rail below it is too (see .explorer in styles.css) —
+  // its own sticky offset and height have to leave room for whatever the loadbar actually renders
+  // at, which varies as its content wraps, so that space is measured rather than guessed.
+  const builderRef = useRef<HTMLDivElement | null>(null);
+  const loadbarRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const loadbar = loadbarRef.current;
+    const builder = builderRef.current;
+    // Absent in the test environment and in any browser old enough to lack it; the CSS fallback
+    // (see --loadbar-h in styles.css) covers that case, so there is nothing more to do here.
+    if (!loadbar || !builder || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      builder.style.setProperty("--loadbar-h", `${entry.contentRect.height}px`);
+    });
+    observer.observe(loadbar);
+    return () => observer.disconnect();
+  }, []);
 
   const [selection, setSelection] = useState<string | null>(null);
   // null until the user opens or closes something themselves — until then the tree
   // shows whatever it takes to reveal the current selection, for whichever file is picked.
   const [expandedOverride, setExpanded] = useState<ReadonlySet<string> | null>(null);
+  // Narrows the properties panel below the model tree; kept across a type switch (searching
+  // "fire" while browsing several types is a normal way to use it) and cleared on a new file.
+  const [propertySearch, setPropertySearch] = useState("");
 
   const [rules, setRules] = useState<RuleDraft[]>([]);
   // Which rule a field click in the left rail adds a condition to — a rule id, or "new" to start
@@ -154,6 +215,32 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   const [infoOpen, setInfoOpen] = useState(false);
   const [extraInfo, setExtraInfo] = useState<string[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // The IDS file chosen on the validate page, picked up here the same way a parsed model is —
+  // once per file, and only while the page is still blank, so it never overwrites work already
+  // started here the way a manual re-import (which does ask) would.
+  const autoImportedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sharedIdsFile) return;
+    const identity = fileIdentity(sharedIdsFile);
+    if (autoImportedIdRef.current === identity) return;
+    autoImportedIdRef.current = identity;
+    if (rules.length > 0 || refused.length > 0) return;
+
+    (async () => {
+      const outcome = importIdsText(sharedIdsFile.name, await sharedIdsFile.text());
+      // A newer file arrived while this one was still being read — let that one win instead.
+      if (autoImportedIdRef.current !== identity || !outcome.ok) return;
+      setRules(outcome.result.rules);
+      setRefused(outcome.result.refused);
+      setDocumentInfo({ ...outcome.result.info, title: outcome.result.title ?? undefined });
+      setExtraInfo(outcome.result.extraInfo);
+      setTarget("new");
+      setOpenRuleIds(new Set());
+      setFailureRuleIds(new Set());
+      setJustAddedRuleId(null);
+    })();
+  }, [sharedIdsFile]);
 
   // Only a parsed model can be a worked example — the rest of the page reads its elements.
   const parsedModels = models.filter((entry) => entry.status === "succeeded");
@@ -205,6 +292,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     // Back to defaults: the new file's first type, and the ancestors that reveal it.
     setSelection(null);
     setExpanded(null);
+    setPropertySearch("");
   }
 
   function handleSelect(node: TreeNode) {
@@ -314,10 +402,52 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             })),
           }
         : {}),
+      // "Duplicate" makes an independent rule, not another OR branch: silently growing the
+      // group here would be a surprising side effect of a button that says nothing about OR.
+      // A non-OR identifier (a third party's own machine id) is left untouched.
+      ...(orGroupIdOf(rule.identifier) ? { identifier: null } : {}),
     };
-    const index = rules.indexOf(rule);
-    setRules([...rules.slice(0, index + 1), copy, ...rules.slice(index + 1)]);
+    // Past the whole OR group, not just past `rule`: dropped straight below a first branch the
+    // copy would sit inside the group's frame, reading as a branch of it while being linked to
+    // nothing. See `indexAfterOrGroupOf`.
+    const index = indexAfterOrGroupOf(rules, rule);
+    setRules([...rules.slice(0, index), copy, ...rules.slice(index)]);
     openRule(copy.id);
+  }
+
+  /**
+   * Adds a new rule that shares `rule`'s applicability but starts with no conditions of its own,
+   * linked to it (and any of its existing OR siblings) through a fresh or existing group id on
+   * `identifier`. The pair is meant to be read as one rule that passes an element if either
+   * branch does — see `validateBySpecificationGrouped`, which is what actually merges them at
+   * check time. `rule` itself gains the group id here too, the first time it branches.
+   *
+   * A fresh id goes through `nextOrGroupId` rather than a bare `nextDraftId("or")` — an imported
+   * document carries its `identifier` verbatim, never re-keyed onto the page's counter, so the very
+   * next counter value can already name a group the import brought in. Minting straight off the
+   * counter would then silently merge two unrelated OR groups into one at check time.
+   */
+  function handleAddOrBranch(rule: RuleDraft) {
+    const existingGroupId = orGroupIdOf(rule.identifier);
+    const groupId = existingGroupId ?? nextOrGroupId(rules, () => nextDraftId("or"));
+    const siblingCount = orGroupSiblingsOf(rules, rule).length;
+
+    const branch: RuleDraft = {
+      id: nextDraftId("r"),
+      name: `${rule.name} (${siblingCount + 2})`,
+      entityTypes: [...rule.entityTypes],
+      cardinality: rule.cardinality,
+      entityPredefinedType: rule.entityPredefinedType,
+      applicabilityFacets: rule.applicabilityFacets?.map((facet) => ({ ...facet, id: nextDraftId("c") })),
+      conditions: [],
+      ifcVersion: rule.ifcVersion,
+      identifier: `${OR_GROUP_IDENTIFIER_PREFIX}${groupId}`,
+    };
+
+    const index = rules.indexOf(rule);
+    const updatedSource = existingGroupId ? rule : { ...rule, identifier: branch.identifier };
+    setRules([...rules.slice(0, index), updatedSource, branch, ...rules.slice(index + 1)]);
+    openRule(branch.id);
   }
 
   async function handleImport(event: ChangeEvent<HTMLInputElement>) {
@@ -354,13 +484,35 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
     setJustAddedRuleId(null);
   }
 
-  /** Rules and refused specifications in the order the imported document put them. */
+  /**
+   * Rules and refused specifications in the order the imported document put them. OR-linked rules
+   * are always adjacent — `handleAddOrBranch` inserts a new branch right beside its source, and
+   * nothing in the builder reorders rules — so consecutive same-group cards are buffered and
+   * wrapped in one `.or-frame` to show they belong together. A group broken up by something else
+   * (an imported document, say) just renders as separate cards instead.
+   */
   function specificationCards(): ReactNode[] {
     const cards: ReactNode[] = [];
+    let groupBuffer: { groupId: string; nodes: ReactNode[] } | null = null;
+
+    function flushGroup() {
+      if (!groupBuffer) return;
+      cards.push(
+        groupBuffer.nodes.length > 1 ? (
+          <div className="or-frame" key={`or-frame-${groupBuffer.groupId}`}>
+            {groupBuffer.nodes}
+          </div>
+        ) : (
+          groupBuffer.nodes[0]
+        )
+      );
+      groupBuffer = null;
+    }
 
     for (let index = 0; index <= rules.length; index += 1) {
       refused.forEach((specification, position) => {
         if (Math.min(specification.passThrough.afterIndex, rules.length) !== index) return;
+        flushGroup();
         cards.push(
           <RefusedSpecificationCard
             key={`refused-${position}`}
@@ -372,7 +524,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
       if (index === rules.length) break;
 
       const rule = rules[index];
-      cards.push(
+      const card = (
         <RuleCard
           key={rule.id}
           rule={rule}
@@ -386,8 +538,12 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             setRules((previous) => previous.map((entry) => (entry.id === rule.id ? next : entry)))
           }
           onDuplicate={() => handleDuplicateRule(rule)}
+          orGroupSiblingNames={orGroupSiblingsOf(rules, rule).map((sibling) => sibling.name)}
+          onAddOrBranch={() => handleAddOrBranch(rule)}
           onDelete={() => {
-            setRules(rules.filter((entry) => entry.id !== rule.id));
+            // Cleared, not kept: deleting down to one branch leaves a group of one, whose id
+            // links nothing and only shows up as a stray identifier in the exported document.
+            setRules(withLoneOrGroupsCleared(rules.filter((entry) => entry.id !== rule.id)));
             setTarget((current) => (current === rule.id ? "new" : current));
           }}
           onActivate={() => setTarget(rule.id)}
@@ -395,7 +551,19 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
           onToggleFailures={() => toggleIn(setFailureRuleIds, rule.id)}
         />
       );
+
+      const groupId = orGroupIdOf(rule.identifier);
+      if (groupId === null) {
+        flushGroup();
+        cards.push(card);
+      } else if (groupBuffer && groupBuffer.groupId === groupId) {
+        groupBuffer.nodes.push(card);
+      } else {
+        flushGroup();
+        groupBuffer = { groupId, nodes: [card] };
+      }
     }
+    flushGroup();
     return cards;
   }
 
@@ -409,16 +577,16 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
   }
 
   return (
-    <div className="builder">
+    <div className="builder" ref={builderRef}>
       <header className="builder-head">
         <h1>IDS Rule Builder</h1>
         <p className="lede">
           Build buildingSMART IDS (Information Delivery Specification) rule sets from a real IFC
-          model — entirely in your browser, with no server and no upload.
+          model: entirely in your browser, with no server and no upload.
         </p>
       </header>
 
-      <div className="loadbar">
+      <div className="loadbar" ref={loadbarRef}>
         <div className="loadfile">
           <label htmlFor="builder-model">IFC file (one worked example)</label>
           <select
@@ -449,18 +617,12 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
           </span>
         )}
 
-        {/* The rest of the page reads its counts and field lists from a model, so an imported rule
-            has nothing to render against until one is parsed. */}
-        <label
-          className={`btn ghost importbtn${model ? "" : " is-disabled"}`}
-          title={model ? "Open an existing .ids file" : "Parse an IFC file first"}
-        >
+        <label className="btn ghost importbtn" title="Open an existing .ids file">
           Import .ids
           <input
             type="file"
             accept=".ids,.xml,application/xml,text/xml"
             aria-label="Import an IDS file"
-            disabled={!model}
             onChange={handleImport}
           />
         </label>
@@ -472,77 +634,97 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
         </p>
       )}
 
-      {!model || !selectionSource || selectionName === null ? (
-        <div className="empty-state">
-          <h2>Build rules from a real file</h2>
-          <p>
-            Everything offered here — types, property sets, values — comes from one of your own IFC
-            files, so the rules you write are rules it can actually be judged against. Load and parse
-            your files first, then pick one above.
-          </p>
-          {onGoToFiles && (
-            <button type="button" className="btn" onClick={onGoToFiles}>
-              Load IFC files
-            </button>
-          )}
-        </div>
-      ) : (
+      {(() => {
+        const hasSelection = model !== null && selectionSource !== null && selectionName !== null;
+        // Every reader of `model.fileName` below the gate used to be able to assume a model, back
+        // when the whole two-pane layout was hidden without one. It no longer is: a rule can be
+        // authored, and an .ids file imported, before any file is loaded — so those readers now
+        // fall back to this instead.
+        const fileLabel = model?.fileName ?? "your rule set";
+        return (
         <div className="wrap">
           <aside className="explorer">
-            <div className="explorer-intro">
-              <p>
-                Everything here comes from this file. Pick a type or an inherited group, then click a
-                field to add it as a condition.
-              </p>
-            </div>
+            {hasSelection ? (
+              <>
+                <div className="explorer-intro">
+                  <p>
+                    Everything here comes from this file. Pick a type or an inherited group, then
+                    click a field to add it as a condition.
+                  </p>
+                </div>
 
-            <section className="card">
-              <header>
-                <span className="micro">In your model</span>
-                <span className="tally">
-                  {introspection.entityTypes.length} types · {introspection.groups.length} groups
-                </span>
-              </header>
-              <div className="body">
-                <ModelTree
-                  nodes={introspection.tree}
-                  selectedName={selectionName}
-                  expanded={expanded}
-                  onSelect={handleSelect}
-                  onToggle={handleToggle}
+                <section className="card">
+                  <header>
+                    <span className="micro">In your model</span>
+                    <span className="tally">
+                      {introspection.entityTypes.length} types · {introspection.groups.length} groups
+                    </span>
+                  </header>
+                  <div className="body">
+                    <ModelTree
+                      nodes={introspection.tree}
+                      selectedName={selectionName as string}
+                      expanded={expanded}
+                      onSelect={handleSelect}
+                      onToggle={handleToggle}
+                    />
+                  </div>
+                </section>
+
+                <div className="target-strip">
+                  <label htmlFor="rule-target" className="micro">
+                    Add conditions to
+                  </label>
+                  <select
+                    id="rule-target"
+                    value={target}
+                    title={target === "new" ? "Create a new rule" : (rules.find((rule) => rule.id === target)?.name ?? "")}
+                    onChange={(event) => setTarget(event.target.value)}
+                  >
+                    <option value="new">+ Create a new rule</option>
+                    {rules.length > 0 && (
+                      <optgroup label="Existing rules">
+                        {rules.map((rule) => (
+                          <option key={rule.id} value={rule.id} title={rule.name}>
+                            {rule.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+
+                <div className="property-search">
+                  <input
+                    type="text"
+                    aria-label="Search properties"
+                    placeholder="Search properties…"
+                    value={propertySearch}
+                    onChange={(event) => setPropertySearch(event.target.value)}
+                  />
+                </div>
+
+                <SchemaCards
+                  source={selectionSource as FieldsForResult}
+                  selectionName={selectionName as string}
+                  groupTypeCount={selectedGroup ? selectedGroup.types.length : null}
+                  query={propertySearch}
+                  onAddField={handleAddField}
                 />
-              </div>
-            </section>
-
-            <div className="target-strip">
-              <label htmlFor="rule-target" className="micro">
-                Add conditions to
-              </label>
-              <select
-                id="rule-target"
-                value={target}
-                title={target === "new" ? "Create a new rule" : (rules.find((rule) => rule.id === target)?.name ?? "")}
-                onChange={(event) => setTarget(event.target.value)}
-              >
-                <option value="new">+ Create a new rule</option>
-                {rules.length > 0 && (
-                  <optgroup label="Existing rules">
-                    {rules.map((rule) => (
-                      <option key={rule.id} value={rule.id} title={rule.name}>
-                        {rule.name}
-                      </option>
-                    ))}
-                  </optgroup>
+              </>
+            ) : (
+              <div className="explorer-empty">
+                <p>
+                  Load and parse an IFC file to browse its types and fields here. You can still
+                  start a rule from scratch on the right, or import an existing .ids file above.
+                </p>
+                {onGoToFiles && (
+                  <button type="button" className="btn ghost" onClick={onGoToFiles}>
+                    Load IFC files
+                  </button>
                 )}
-              </select>
-            </div>
-
-            <SchemaCards
-              source={selectionSource}
-              selectionName={selectionName}
-              groupTypeCount={selectedGroup ? selectedGroup.types.length : null}
-              onAddField={handleAddField}
-            />
+              </div>
+            )}
           </aside>
 
           <main
@@ -559,7 +741,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
               <RuleWizard
                 introspection={introspection}
                 elements={builderElements}
-                fileName={model.fileName}
+                fileName={fileLabel}
                 onFinish={handleWizardFinish}
                 onCancel={() => setWizardOpen(false)}
               />
@@ -577,7 +759,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
 
                 <DocumentInfoPanel
                   info={documentInfo}
-                  titlePlaceholder={model.fileName}
+                  titlePlaceholder={fileLabel}
                   open={infoOpen}
                   onToggle={() => setInfoOpen((wasOpen) => !wasOpen)}
                   onChange={setDocumentInfo}
@@ -585,7 +767,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
 
                 {rules.length === 0 && refused.length === 0 && (
                   <p className="hint">
-                    No rules yet — click a field on the left, start one below, or import an
+                    No rules yet: click a field on the left, start one below, or import an
                     existing .ids file.
                   </p>
                 )}
@@ -606,8 +788,9 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
                   <div>
                     <div className="t">Create a new rule</div>
                     <div className="d">
-                      Answer a few questions about what to check — we'll pull types, fields and
-                      real values straight from {model.fileName} as you go.
+                      {model
+                        ? `Answer a few questions about what to check; we'll pull types, fields and real values straight from ${model.fileName} as you go.`
+                        : "Answer a few questions about what to check; pick from the full IFC schema until a file is loaded."}
                     </div>
                   </div>
                   <button type="button" className="go" onClick={() => setWizardOpen(true)}>
@@ -618,7 +801,7 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
                 <IdsXmlPreview
                   rules={rules}
                   info={documentInfo}
-                  title={documentInfo.title || model.fileName}
+                  title={documentInfo.title || fileLabel}
                   refused={refused}
                   extraInfo={extraInfo}
                 />
@@ -626,7 +809,8 @@ export function RuleBuilderPage({ onGoToFiles }: { onGoToFiles?: () => void } = 
             )}
           </main>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

@@ -11,5 +11,6 @@ export declare const SITE_ORIGIN: string;
 export declare const ROUTES: {
   validate: SeoRoute;
   builder: SeoRoute;
+  about: SeoRoute;
   viewer: SeoRoute;
 };

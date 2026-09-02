@@ -39,7 +39,6 @@ const COLUMN_CLASS: Record<string, string> = {
   elementType: "col-type",
   fileName: "col-file",
   ruleId: "col-rule",
-  severity: "col-severity",
   message: "col-message",
 };
 
@@ -137,14 +136,6 @@ export function IssueTable({
       }),
       columnHelper.accessor("fileName", { header: "File" }),
       columnHelper.accessor("ruleId", { header: "Rule" }),
-      columnHelper.accessor("severity", {
-        header: "Severity",
-        cell: (context) => (
-          <span className="pill" data-severity={context.getValue()}>
-            {context.getValue()}
-          </span>
-        ),
-      }),
       columnHelper.accessor("message", { header: "Message" }),
     ],
     [onSelectElement, selectedElementId, onViewElementIn3D]
@@ -208,18 +199,6 @@ export function IssueTable({
             />
           </label>
         )}
-        <label>
-          Severity
-          <select
-            aria-label="Filter by severity"
-            value={activeFilter.severity}
-            onChange={(e) => setField("severity", e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="error">error</option>
-            <option value="warning">warning</option>
-          </select>
-        </label>
       </div>
 
       {rows.length > 0 && (

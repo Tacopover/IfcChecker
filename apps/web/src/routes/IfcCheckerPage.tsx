@@ -1,8 +1,18 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import type { EngineId } from "@ifc-qa/shared-types";
 import {
   parseFile,
-  validateParsedModels,
+  validateParsedModelsWithProgress,
+  type CheckProgress,
   type ParseProgress,
   type SpecificationSummary,
 } from "../local/parseAndValidate.js";
@@ -18,8 +28,81 @@ import { buildElementFocusRequest, buildSpecificationFocusRequest, type ViewerFo
 
 type ExportKind = "csv" | "excel" | "bcf";
 
+interface ExampleIds {
+  fileName: string;
+  label: string;
+  description: string;
+}
+
+// Bundled by scripts/copy-example-ids.mjs from fixtures/ids/ at the repo root into
+// public/examples/ids/, so a user can try the app without sourcing their own IDS file first.
+const EXAMPLE_IDS_FILES: ExampleIds[] = [
+  {
+    fileName: "Example-IDS.ids",
+    label: "Example IDS",
+    description:
+      "Starter checks: storey naming, site name, material presence, NL-SfB classification codes, required properties, and system membership.",
+  },
+  {
+    fileName: "Load_bearing-IDS.ids",
+    label: "Load-bearing IDS",
+    description:
+      "The example checks above, plus load-bearing property checks for walls, slabs, and beams.",
+  },
+];
+
 function countViolations(summaries: SpecificationSummary[] | null): number {
   return summaries?.reduce((total, summary) => total + summary.violations.length, 0) ?? 0;
+}
+
+function hasExtension(file: File, extensions: string[]): boolean {
+  const name = file.name.toLowerCase();
+  return extensions.some((extension) => name.endsWith(extension));
+}
+
+interface FileDropzoneProps {
+  extensions: string[];
+  onFiles: (files: File[]) => void;
+  children: ReactNode;
+}
+
+/**
+ * Wraps a `.file-field` so the same drop target both opens the OS file picker (via the `<input>`
+ * inside it, unchanged) and accepts a drag-and-drop. Filters dropped files by extension itself —
+ * unlike a picker, a drop is not narrowed by the input's own `accept`.
+ */
+function FileDropzone({ extensions, onFiles, children }: FileDropzoneProps) {
+  const [dragging, setDragging] = useState(false);
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragging(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    // Only once the pointer actually leaves the zone, not when it crosses into a child element.
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setDragging(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragging(false);
+    const dropped = Array.from(event.dataTransfer.files).filter((file) => hasExtension(file, extensions));
+    if (dropped.length > 0) onFiles(dropped);
+  }
+
+  return (
+    <div
+      className="dropzone"
+      data-dragging={dragging}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {children}
+    </div>
+  );
 }
 
 export interface IfcCheckerPageProps {
@@ -28,11 +111,11 @@ export interface IfcCheckerPageProps {
 }
 
 export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
-  const { models, addFiles, applyParseOutcome, removeModel, clearModels } = useLoadedModels();
+  const { models, addFiles, applyParseOutcome, removeModel, clearModels, idsFile, setIdsFile } =
+    useLoadedModels();
 
   // ifc-lite is faster and more robust than web-ifc, so it's the only engine offered.
   const engine: EngineId = "ifc-lite";
-  const [idsFile, setIdsFile] = useState<File | null>(null);
   const [results, setResults] = useState<SpecificationSummary[] | null>(null);
   // Mirrors `results` with each specification's violations narrowed to whatever its issue
   // table's own filters currently admit — see CheckSummary's onFilteredSummariesChange.
@@ -46,7 +129,10 @@ export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isExportingBcf, setIsExportingBcf] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exampleError, setExampleError] = useState<string | null>(null);
+  const [loadingExample, setLoadingExample] = useState<string | null>(null);
   const [progress, setProgress] = useState<ParseProgress | null>(null);
+  const [checkProgress, setCheckProgress] = useState<CheckProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const cancelledRef = useRef(false);
@@ -98,12 +184,36 @@ export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
     setExportError(null);
   }
 
-  function handleIfcFilesChange(event: ChangeEvent<HTMLInputElement>) {
-    addFiles(Array.from(event.target.files ?? []));
+  function handleIfcFiles(files: File[]) {
+    addFiles(files);
     dropStaleResults();
+  }
+
+  function handleIfcFilesChange(event: ChangeEvent<HTMLInputElement>) {
+    handleIfcFiles(Array.from(event.target.files ?? []));
     // Clear the input so picking files again adds to the list instead of
     // being a no-op (the browser won't fire onChange for a repeat selection).
     event.target.value = "";
+  }
+
+  function handleIdsFile(file: File | null) {
+    setIdsFile(file);
+    dropStaleResults();
+  }
+
+  async function handleLoadExample(example: ExampleIds) {
+    setExampleError(null);
+    setLoadingExample(example.fileName);
+    try {
+      const response = await fetch(`/examples/ids/${example.fileName}`);
+      if (!response.ok) throw new Error(`Could not load ${example.label} (${response.status}).`);
+      const blob = await response.blob();
+      handleIdsFile(new File([blob], example.fileName, { type: "application/xml" }));
+    } catch (error) {
+      setExampleError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingExample(null);
+    }
   }
 
   function handleRemoveIfcFile(key: string) {
@@ -163,14 +273,21 @@ export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
     if (!canCheck) return;
     setIsChecking(true);
     setCheckError(null);
+    setCheckProgress(null);
+    setElapsedSeconds(0);
+    clearInterval(tickIntervalRef.current);
+    tickIntervalRef.current = setInterval(() => setElapsedSeconds((seconds) => seconds + 1), 1000);
     try {
       const idsXml = await idsFile.text();
-      setResults(validateParsedModels(parsed, idsXml));
+      setResults(await validateParsedModelsWithProgress(parsed, idsXml, setCheckProgress));
     } catch (error) {
       setResults(null);
       setCheckError(error instanceof Error ? error.message : String(error));
     } finally {
+      clearInterval(tickIntervalRef.current);
       setIsChecking(false);
+      setCheckProgress(null);
+      setElapsedSeconds(0);
     }
   }
 
@@ -235,13 +352,13 @@ export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
         <h1>IFC IDS Validator</h1>
         <p className="lede">
           Check IFC building models against buildingSMART IDS (Information Delivery
-          Specification) rule sets — entirely in your browser, with no server and no upload.
+          Specification) rule sets: entirely in your browser, with no server and no upload.
         </p>
         <details className="about-ids">
           <summary>What is IDS?</summary>
           <p>
             IDS (Information Delivery Specification) is a buildingSMART standard for writing
-            machine-readable requirements against IFC models — for example, that every door has
+            machine-readable requirements against IFC models, for example, that every door has
             a fire rating, or every space carries a classification code. This tool loads an IDS
             file and reports, element by element, which parts of a model satisfy it and which
             don&apos;t.
@@ -268,16 +385,19 @@ export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
 
         <div className="step-body">
           <div className="control-row">
-            <div className="file-field">
-              <label htmlFor="local-ifc-files">IFC files</label>
-              <input
-                id="local-ifc-files"
-                type="file"
-                multiple
-                accept=".ifc"
-                onChange={handleIfcFilesChange}
-              />
-            </div>
+            <FileDropzone extensions={[".ifc"]} onFiles={handleIfcFiles}>
+              <div className="file-field">
+                <label htmlFor="local-ifc-files">IFC files</label>
+                <input
+                  id="local-ifc-files"
+                  type="file"
+                  multiple
+                  accept=".ifc"
+                  onChange={handleIfcFilesChange}
+                />
+                <p className="drop-hint">or drop .ifc files here</p>
+              </div>
+            </FileDropzone>
           </div>
 
           {models.length > 0 && (
@@ -313,12 +433,12 @@ export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
                             </span>
                           </td>
                           <td className="num">
-                            {model.parseMs !== null ? `${Math.round(model.parseMs)} ms` : "—"}
+                            {model.parseMs !== null ? `${Math.round(model.parseMs)} ms` : "-"}
                           </td>
                           <td className="num">
                             {model.status === "succeeded"
                               ? model.elements.length.toLocaleString()
-                              : "—"}
+                              : "-"}
                           </td>
                           <td className="col-actions">
                             <div className="row-actions">
@@ -417,20 +537,39 @@ export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
         </header>
 
         <div className="step-body">
-          <div className="file-field">
-            <label htmlFor="local-ids-file">IDS rule set (.ids or .xml)</label>
-            <input
-              key={`ids-${resetKey}`}
-              id="local-ids-file"
-              type="file"
-              // An IDS document is XML, but it is normally saved as .ids — a picker
-              // filtered to .xml alone hides the very files it is asking for.
-              accept=".ids,.xml,application/xml,text/xml"
-              onChange={(e) => {
-                setIdsFile(e.target.files?.[0] ?? null);
-                dropStaleResults();
-              }}
-            />
+          <FileDropzone extensions={[".ids", ".xml"]} onFiles={(files) => handleIdsFile(files[0] ?? null)}>
+            <div className="file-field">
+              <label htmlFor="local-ids-file">IDS rule set (.ids or .xml)</label>
+              <input
+                key={`ids-${resetKey}`}
+                id="local-ids-file"
+                type="file"
+                // An IDS document is XML, but it is normally saved as .ids — a picker
+                // filtered to .xml alone hides the very files it is asking for.
+                accept=".ids,.xml,application/xml,text/xml"
+                onChange={(e) => handleIdsFile(e.target.files?.[0] ?? null)}
+              />
+              <p className="drop-hint">or drop a .ids file here</p>
+            </div>
+          </FileDropzone>
+
+          <div className="example-ids">
+            <p className="example-ids-label">Try an example</p>
+            <div className="example-ids-row">
+              {EXAMPLE_IDS_FILES.map((example) => (
+                <button
+                  key={example.fileName}
+                  type="button"
+                  className="btn ghost"
+                  title={example.description}
+                  disabled={loadingExample !== null}
+                  onClick={() => void handleLoadExample(example)}
+                >
+                  {loadingExample === example.fileName ? "Loading..." : example.label}
+                </button>
+              ))}
+            </div>
+            {exampleError && <p role="alert">{exampleError}</p>}
           </div>
 
           <div className="step-actions">
@@ -442,6 +581,16 @@ export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
               <p className="requirement">To check: {checkRequirements.join(", ")}.</p>
             )}
           </div>
+
+          {isChecking && (
+            <p role="status" className="progress">
+              <span className="spinner" aria-hidden="true" />
+              {checkProgress
+                ? `Checking ${checkProgress.index} of ${checkProgress.total}: ${checkProgress.fileName}`
+                : "Reading the rule set"}
+              … ({elapsedSeconds}s elapsed)
+            </p>
+          )}
 
           {checkError && <p role="alert">{checkError}</p>}
         </div>

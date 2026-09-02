@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   ConditionDraft,
   ConditionOperator,
@@ -17,9 +17,14 @@ import {
   effectiveCardinalityOf,
   escapeRegExp,
   friendlyReadingOf,
+  indexAfterOrGroupOf,
+  nextOrGroupId,
+  orGroupIdsInUse,
+  orGroupSiblingsOf,
   patternValueDraft,
   plainName,
   valueDraftForOperator,
+  withLoneOrGroupsCleared,
 } from "./rule-draft.js";
 
 /**
@@ -467,6 +472,130 @@ describe("applicabilityEntityNamesOf", () => {
 
   it("keeps a name the schema table does not know", () => {
     expect(applicabilityEntityNamesOf(rule({ entityTypes: ["IfcNotAThing"] }))).toEqual(["IFCNOTATHING"]);
+  });
+});
+
+describe("orGroupSiblingsOf", () => {
+  it("is empty for a rule with no identifier at all", () => {
+    const solo = rule({ id: "r1" });
+    expect(orGroupSiblingsOf([solo], solo)).toEqual([]);
+  });
+
+  it("is empty for a rule whose identifier is not this tool's OR-group prefix", () => {
+    const solo = rule({ id: "r1", identifier: "REQ-042" });
+    const other = rule({ id: "r2", identifier: "REQ-042" });
+    expect(orGroupSiblingsOf([solo, other], solo)).toEqual([]);
+  });
+
+  it("finds the other members sharing the same group id, excluding itself", () => {
+    const a = rule({ id: "r1", name: "Branch A", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", name: "Branch B", identifier: "ifcqa:or:g1" });
+    const c = rule({ id: "r3", name: "Unrelated", identifier: "ifcqa:or:g2" });
+    expect(orGroupSiblingsOf([a, b, c], a)).toEqual([b]);
+    expect(orGroupSiblingsOf([a, b, c], b)).toEqual([a]);
+  });
+
+  it("is empty once every other member of the group is gone", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    expect(orGroupSiblingsOf([a], a)).toEqual([]);
+  });
+});
+
+describe("indexAfterOrGroupOf", () => {
+  it("is the rule's own index plus one when it carries no group id", () => {
+    const a = rule({ id: "r1" });
+    const b = rule({ id: "r2" });
+    expect(indexAfterOrGroupOf([a, b], a)).toBe(1);
+  });
+
+  it("skips past the branches below a first OR member", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:g1" });
+    const c = rule({ id: "r3", identifier: "ifcqa:or:g1" });
+    const d = rule({ id: "r4" });
+    expect(indexAfterOrGroupOf([a, b, c, d], a)).toBe(3);
+  });
+
+  it("is one past a last member, which has no branches below it", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:g1" });
+    expect(indexAfterOrGroupOf([a, b], b)).toBe(2);
+  });
+
+  it("stops at a different group rather than swallowing it", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:g2" });
+    expect(indexAfterOrGroupOf([a, b], a)).toBe(1);
+  });
+
+  it("appends when the rule is not in the list", () => {
+    const a = rule({ id: "r1" });
+    expect(indexAfterOrGroupOf([rule({ id: "r2" })], a)).toBe(1);
+  });
+});
+
+describe("withLoneOrGroupsCleared", () => {
+  it("clears the identifier of a group left with one member", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    expect(withLoneOrGroupsCleared([a])).toEqual([{ ...a, identifier: null }]);
+  });
+
+  it("leaves a group that still has two members alone", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:g1" });
+    expect(withLoneOrGroupsCleared([a, b])).toEqual([a, b]);
+  });
+
+  it("clears only the emptied group, not a healthy one beside it", () => {
+    const lone = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const a = rule({ id: "r2", identifier: "ifcqa:or:g2" });
+    const b = rule({ id: "r3", identifier: "ifcqa:or:g2" });
+    expect(withLoneOrGroupsCleared([lone, a, b])).toEqual([{ ...lone, identifier: null }, a, b]);
+  });
+
+  it("keeps an identifier that is not this tool's OR prefix", () => {
+    const a = rule({ id: "r1", identifier: "REQ-042" });
+    expect(withLoneOrGroupsCleared([a])).toEqual([a]);
+  });
+});
+
+describe("orGroupIdsInUse", () => {
+  it("is empty when no rule carries an OR-group identifier", () => {
+    const a = rule({ id: "r1" });
+    const b = rule({ id: "r2", identifier: "REQ-042" });
+    expect(orGroupIdsInUse([a, b])).toEqual(new Set());
+  });
+
+  it("collects every distinct group id, including one read verbatim off an import", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:g1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:g1" });
+    const c = rule({ id: "r3", identifier: "ifcqa:or:g2" });
+    expect(orGroupIdsInUse([a, b, c])).toEqual(new Set(["g1", "g2"]));
+  });
+});
+
+describe("nextOrGroupId", () => {
+  it("takes the id source's first candidate when nothing is using it yet", () => {
+    const mint = vi.fn().mockReturnValue("or1");
+    expect(nextOrGroupId([], mint)).toBe("or1");
+    expect(mint).toHaveBeenCalledTimes(1);
+  });
+
+  it("redraws until the candidate is not already in use — the import-collision case", () => {
+    // A page counter can hand out "or7" again after a reload, while an imported rule already
+    // carries that exact group id — the id source alone cannot tell the two apart.
+    const imported = rule({ id: "r1", identifier: "ifcqa:or:or7" });
+    const mint = vi.fn().mockReturnValueOnce("or7").mockReturnValueOnce("or8");
+    expect(nextOrGroupId([imported], mint)).toBe("or8");
+    expect(mint).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps redrawing past several collisions in a row", () => {
+    const a = rule({ id: "r1", identifier: "ifcqa:or:or1" });
+    const b = rule({ id: "r2", identifier: "ifcqa:or:or2" });
+    const mint = vi.fn().mockReturnValueOnce("or1").mockReturnValueOnce("or2").mockReturnValueOnce("or3");
+    expect(nextOrGroupId([a, b], mint)).toBe("or3");
+    expect(mint).toHaveBeenCalledTimes(3);
   });
 });
 

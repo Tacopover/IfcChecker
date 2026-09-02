@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import type { ConditionDraft, PropertyFacetDraft } from "@ifc-qa/ids-validator";
 import { plainName } from "@ifc-qa/ids-validator";
 import { ManualConditionRow } from "./ManualConditionRow";
+import { pickFromSearch, searchPicker } from "../test/combobox";
 
 const CONDITION: PropertyFacetDraft = {
   id: "c1",
@@ -57,6 +58,41 @@ describe("ManualConditionRow", () => {
 
     expect(screen.getByLabelText("Property set")).toHaveValue("Pset_CurtainWallCommon");
     expect(screen.getByLabelText("Field name")).toHaveValue("FireRating");
+  });
+
+  // Nothing to derive a type from, so the schema's own list stands in — otherwise a rule written
+  // with no file open cannot state a stored type at all.
+  it("offers the schema's closed list of data types", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    expect(screen.getByLabelText("Stored as")).toHaveValue("any type");
+    const { rows } = await searchPicker(user, "Stored as");
+    expect(rows[0].name).toBe("any type");
+    const offered = rows.map((row) => row.name);
+    expect(offered).toContain("IFCLABEL");
+    expect(offered).toContain("IFCBOOLEAN");
+    expect(offered).toContain("IFCVOLUMEMEASURE");
+  });
+
+  it("narrows that list as it is typed, and states only a name on it", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const { rows } = await searchPicker(user, "Stored as", "volume");
+    expect(rows.every((row) => row.name.toLowerCase().includes("volume"))).toBe(true);
+
+    await pickFromSearch(user, "Stored as", "IFCVOLUMEMEASURE");
+    expect(screen.getByLabelText("Stored as")).toHaveValue("IFCVOLUMEMEASURE");
+  });
+
+  // IDS declares dataType on <property> alone.
+  it("hides the stored-as picker for an attribute", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.selectOptions(screen.getByLabelText("Condition kind"), "attribute");
+    expect(screen.queryByLabelText("Stored as")).toBeNull();
   });
 
   it("hides the property set input for an attribute", async () => {

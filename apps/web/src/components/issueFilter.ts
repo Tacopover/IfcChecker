@@ -11,7 +11,6 @@ export interface IssueFilter {
   fileName: string;
   elementType: string;
   ruleId: string;
-  severity: string;
 }
 
 export const EMPTY_ISSUE_FILTER: IssueFilter = {
@@ -19,7 +18,6 @@ export const EMPTY_ISSUE_FILTER: IssueFilter = {
   fileName: "",
   elementType: "",
   ruleId: "",
-  severity: "",
 };
 
 export function isIssueFilterActive(filter: IssueFilter): boolean {
@@ -40,9 +38,6 @@ export function matchesIssueFilter(row: IssueRow, filter: IssueFilter): boolean 
   if (filter.fileName !== "" && !includes(row.fileName, filter.fileName)) return false;
   if (filter.elementType !== "" && !includes(row.elementType, filter.elementType)) return false;
   if (filter.ruleId !== "" && !includes(row.ruleId, filter.ruleId)) return false;
-  // Exact, unlike the text fields: severity comes from a fixed list, so a substring match would
-  // only ever be a way to select the same one value more loosely.
-  if (filter.severity !== "" && row.severity !== filter.severity) return false;
   return true;
 }
 
