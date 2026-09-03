@@ -54,6 +54,33 @@ function toMeshData(mesh: ViewerMesh, offset: number): MeshData {
 }
 
 /**
+ * Upload one model's meshes to an already-initialised renderer. Split out of
+ * the imperative handle's `addMeshes` so both the live call and the queued
+ * replay (see `pendingMeshesRef`) share the exact same offset/bookkeeping
+ * logic. Deliberately does not render — callers render once, after either a
+ * single call or a whole queue has been applied.
+ */
+function applyMeshes(
+  renderer: Renderer,
+  federation: ModelFederation,
+  modelExpressIds: Map<string, Set<number>>,
+  batchCountRef: { current: number },
+  modelKey: string,
+  meshes: readonly ViewerMesh[]
+): void {
+  if (meshes.length === 0) return;
+  const offset = federation.offsetFor(modelKey);
+  const known = modelExpressIds.get(modelKey) ?? new Set<number>();
+  const meshData = meshes.map((mesh) => {
+    known.add(mesh.expressId);
+    return toMeshData(mesh, offset);
+  });
+  modelExpressIds.set(modelKey, known);
+  renderer.addMeshes(meshData, true);
+  batchCountRef.current += 1;
+}
+
+/**
  * Drives `camera.update(dt)` + a render every frame while the camera reports
  * itself still animating — the engine ties frameBounds()/animateTo() tweens
  * and orbit/pan/zoom inertia to this being pumped; nothing self-drives it.
@@ -88,6 +115,8 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
   const batchCountRef = useRef(0);
   const animRef = useRef<number | null>(null);
   const dragRef = useRef<{ x: number; y: number; button: number } | null>(null);
+  /** addMeshes calls that arrived before async init() resolved — replayed once the renderer exists. */
+  const pendingMeshesRef = useRef<Array<{ modelKey: string; meshes: readonly ViewerMesh[] }>>([]);
 
   // Read through refs so pointer handlers, the imperative handle, and the
   // animation pump never close over stale props.
@@ -153,6 +182,11 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
         if (!active) return;
         rendererRef.current = renderer;
         cameraRef.current = renderer.getCamera();
+        // Replay any addMeshes calls that arrived while init() was still in flight.
+        for (const pending of pendingMeshesRef.current) {
+          applyMeshes(renderer, federationRef.current, modelExpressIdsRef.current, batchCountRef, pending.modelKey, pending.meshes);
+        }
+        pendingMeshesRef.current = [];
         renderer.onDeviceLost((info) => onError(`3D rendering stopped: ${info.message}`));
         renderer.resize(canvas.width, canvas.height);
         cameraRef.current.setAspect(canvas.width / Math.max(1, canvas.height));
@@ -171,11 +205,16 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
       active = false;
       if (animRef.current !== null) cancelAnimationFrame(animRef.current);
       animRef.current = null;
+      // The engine's CameraAnimator runs its own internal rAF poll to drive an
+      // in-flight frameBounds()/animateTo() tween; only a completed tween or
+      // reset() stops it, so an unmount mid-tween would otherwise leak it.
+      cameraRef.current?.reset();
       rendererRef.current = null;
       cameraRef.current = null;
       modelExpressIdsRef.current = new Map();
       federationRef.current = new ModelFederation();
       batchCountRef.current = 0;
+      pendingMeshesRef.current = [];
       renderer.destroy();
     };
   }, [onError, buildRenderOptions]);
@@ -227,16 +266,13 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
     (): ViewerCanvasHandle => ({
       addMeshes: (modelKey, meshes) => {
         const renderer = rendererRef.current;
-        if (!renderer || meshes.length === 0) return;
-        const offset = federationRef.current.offsetFor(modelKey);
-        const known = modelExpressIdsRef.current.get(modelKey) ?? new Set<number>();
-        const meshData = meshes.map((mesh) => {
-          known.add(mesh.expressId);
-          return toMeshData(mesh, offset);
-        });
-        modelExpressIdsRef.current.set(modelKey, known);
-        renderer.addMeshes(meshData, true);
-        batchCountRef.current += 1;
+        if (meshes.length === 0) return;
+        if (!renderer) {
+          // init() hasn't resolved yet — queue for the replay in its .then().
+          pendingMeshesRef.current.push({ modelKey, meshes });
+          return;
+        }
+        applyMeshes(renderer, federationRef.current, modelExpressIdsRef.current, batchCountRef, modelKey, meshes);
         renderer.render(buildRenderOptions());
       },
       removeModel: (modelKey) => {
@@ -294,7 +330,9 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
         const pixel = canvasPixel(event.clientX, event.clientY);
         if (!renderer || !pixel) return;
         const token = ++hoverTokenRef.current;
-        void renderer.pick(pixel[0], pixel[1]).then((result) => {
+        // hiddenIds must be passed explicitly — pick() has no fallback to the
+        // last render()'s visibility, unlike the old renderer's shader-side hide.
+        void renderer.pick(pixel[0], pixel[1], { hiddenIds: buildRenderOptions().hiddenIds }).then((result) => {
           if (hoverTokenRef.current !== token || dragRef.current) return;
           setOverElement(result !== null);
         });
@@ -329,11 +367,11 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
       const renderer = rendererRef.current;
       const pixel = canvasPixel(event.clientX, event.clientY);
       if (!renderer || !pixel) return;
-      void renderer.pick(pixel[0], pixel[1]).then((result) => {
+      void renderer.pick(pixel[0], pixel[1], { hiddenIds: buildRenderOptions().hiddenIds }).then((result) => {
         onPick(result ? federationRef.current.fromGlobalId(result.expressId) : null);
       });
     },
-    [onPick, canvasPixel]
+    [onPick, canvasPixel, buildRenderOptions]
   );
 
   /** A cancelled drag is not a click: it ends the drag without selecting anything. */
