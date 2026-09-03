@@ -4,11 +4,9 @@ import { isEmptyBounds } from "./bounds.js";
 import {
   boundsOfElements,
   elementBoundsList,
-  expressIdToPickColor,
   indexElementsByGlobalId,
   mapMeshesToElements,
   meshBounds,
-  pickColorToExpressId,
   type ViewerMesh,
 } from "./meshMapping.js";
 
@@ -130,26 +128,6 @@ describe("boundsOfElements", () => {
   it("returns empty bounds when nothing requested has geometry", () => {
     const mapping = mapMeshesToElements([], [element(100)]);
     expect(isEmptyBounds(boundsOfElements(mapping, [100]))).toBe(true);
-  });
-});
-
-describe("colour-pick encoding", () => {
-  it("round-trips across the whole 24-bit range", () => {
-    for (const expressId of [1, 2, 255, 256, 65535, 65536, 1_000_003, 16_777_215]) {
-      const [r, g, b] = expressIdToPickColor(expressId);
-      expect(pickColorToExpressId(r, g, b)).toBe(expressId);
-    }
-  });
-
-  it("reads a cleared black buffer as a miss, not as element zero", () => {
-    expect(pickColorToExpressId(0, 0, 0)).toBeNull();
-  });
-
-  it("stays within a byte per channel at the top of the range", () => {
-    for (const value of expressIdToPickColor(16_777_215)) {
-      expect(value).toBeGreaterThanOrEqual(0);
-      expect(value).toBeLessThanOrEqual(255);
-    }
   });
 });
 

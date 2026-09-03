@@ -177,17 +177,3 @@ export function elementBoundsList(
   return boxes;
 }
 
-/**
- * Encode an express id as an RGB triple for the colour-pick pass, and read it
- * back. Id 0 is reserved for "nothing here", so the buffer can be cleared to
- * black and a miss is simply a zero read. 24 bits carries ~16.7 M ids, well
- * past the 14 M entities of the largest file the pipeline documents.
- */
-export function expressIdToPickColor(expressId: number): [number, number, number] {
-  return [(expressId >> 16) & 0xff, (expressId >> 8) & 0xff, expressId & 0xff];
-}
-
-export function pickColorToExpressId(r: number, g: number, b: number): number | null {
-  const expressId = (r << 16) | (g << 8) | b;
-  return expressId === 0 ? null : expressId;
-}
