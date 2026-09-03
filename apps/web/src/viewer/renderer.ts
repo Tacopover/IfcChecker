@@ -208,7 +208,18 @@ export class ViewerRenderer {
     gl.disable(gl.CULL_FACE);
   }
 
-  addMeshes(modelKey: string, meshes: readonly ViewerMesh[]): void {
+  /**
+   * `slotState` seeds the new batch's visibility texture from the current
+   * rules directly, rather than defaulting every slot to visible and relying
+   * on a follow-up `setVisibility` — which would have to walk every batch
+   * loaded so far, turning a federated model's stream of batches into
+   * O(batches²) work while it loads.
+   */
+  addMeshes(
+    modelKey: string,
+    meshes: readonly ViewerMesh[],
+    slotState: (modelKey: string, expressId: number) => 0 | 1 | 2 = () => 1
+  ): void {
     if (meshes.length === 0) return;
     const gl = this.gl;
     const packed = packBatch(meshes);
@@ -250,7 +261,13 @@ export class ViewerRenderer {
     gl.bindVertexArray(null);
 
     const size = visibilityTextureSize(packed.expressIdBySlot.length, VISIBILITY_ROW);
-    const visibilityTexture = this.createLookupTexture(gl.R8UI, gl.RED_INTEGER, gl.UNSIGNED_BYTE, size, visibilityBytes(packed.expressIdBySlot, () => 1, VISIBILITY_ROW));
+    const visibilityTexture = this.createLookupTexture(
+      gl.R8UI,
+      gl.RED_INTEGER,
+      gl.UNSIGNED_BYTE,
+      size,
+      visibilityBytes(packed.expressIdBySlot, (expressId) => slotState(modelKey, expressId), VISIBILITY_ROW)
+    );
 
     const pickIds = new Uint32Array(size.width * size.height);
     pickIds.set(packed.expressIdBySlot);

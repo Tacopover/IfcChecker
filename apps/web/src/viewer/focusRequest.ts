@@ -16,6 +16,9 @@ import type { SpecificationSummary } from "../local/parseAndValidate.js";
  * `buildSpecificationFocusRequest`, with the remainder counted in
  * `otherFileCount` rather than dropped silently.
  */
+/** How a focused set is shown: only those elements, or all of them with these tinted. */
+export type FocusMode = "isolate" | "highlight";
+
 export interface ViewerFocusRequest {
   modelKey: string;
   fileName: string;

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IfcCheckerPage } from "./IfcCheckerPage";
+import { CheckResultsProvider } from "../state/checkResults";
 import { LoadedModelsProvider } from "../state/loadedModels";
 
 const { parse, cancel } = vi.hoisted(() => ({ parse: vi.fn(), cancel: vi.fn() }));
@@ -59,7 +60,9 @@ function violation(overrides: Record<string, unknown> = {}) {
 function renderPage() {
   return render(
     <LoadedModelsProvider>
-      <IfcCheckerPage />
+      <CheckResultsProvider>
+        <IfcCheckerPage />
+      </CheckResultsProvider>
     </LoadedModelsProvider>
   );
 }

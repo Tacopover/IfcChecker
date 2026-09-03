@@ -63,7 +63,7 @@ function TreeRow({
           {hasChildren ? (open ? "▾" : "▸") : "·"}
         </button>
 
-        <button type="button" className="viewer-tree-label" onClick={() => onSelect(node)}>
+        <button type="button" className="viewer-tree-label" title={node.label} onClick={() => onSelect(node)}>
           {node.label}
         </button>
 

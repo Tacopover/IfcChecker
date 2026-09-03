@@ -3,6 +3,7 @@ import type { NormalizedElement } from "@ifc-qa/shared-types";
 import { isEmptyBounds } from "./bounds.js";
 import {
   boundsOfElements,
+  elementBoundsList,
   expressIdToPickColor,
   indexElementsByGlobalId,
   mapMeshesToElements,
@@ -149,5 +150,71 @@ describe("colour-pick encoding", () => {
       expect(value).toBeGreaterThanOrEqual(0);
       expect(value).toBeLessThanOrEqual(255);
     }
+  });
+});
+
+describe("meshBounds — inconsistent AABB space", () => {
+  // The geometry pipeline captures most AABBs in the same local frame as
+  // `positions`, but reports some already offset by `origin`. Adding the
+  // origin to the second kind puts the element at twice its true distance.
+  it("does not offset an AABB that is already in world space", () => {
+    const bounds = meshBounds(
+      mesh(100, {
+        // Vertices are the default 0..1 triangle in local space; the AABB is
+        // reported around them *after* the origin was applied.
+        origin: [900, 0, -200],
+        localBounds: { min: [900, 0, -200], max: [901, 1, -200] },
+      })
+    );
+
+    expect(bounds.min).toEqual({ x: 900, y: 0, z: -200 });
+    expect(bounds.max).toEqual({ x: 901, y: 1, z: -200 });
+  });
+
+  it("still offsets an AABB captured in local space", () => {
+    const bounds = meshBounds(
+      mesh(100, {
+        origin: [900, 0, -200],
+        localBounds: { min: [0, 0, 0], max: [1, 1, 0] },
+      })
+    );
+
+    expect(bounds.min).toEqual({ x: 900, y: 0, z: -200 });
+    expect(bounds.max).toEqual({ x: 901, y: 1, z: -200 });
+  });
+
+  it("falls back to the vertices when the AABB fits neither space", () => {
+    const bounds = meshBounds(
+      mesh(100, {
+        origin: [10, 0, 0],
+        localBounds: { min: [-500, -500, -500], max: [-400, -400, -400] },
+      })
+    );
+
+    expect(bounds.min).toEqual({ x: 10, y: 0, z: 0 });
+    expect(bounds.max).toEqual({ x: 11, y: 1, z: 0 });
+  });
+});
+
+describe("elementBoundsList", () => {
+  it("gives one box per element, unioning that element's own meshes", () => {
+    const mapping = mapMeshesToElements(
+      [
+        mesh(100, { origin: [0, 0, 0] }),
+        mesh(100, { origin: [5, 0, 0] }),
+        mesh(200, { origin: [50, 0, 0] }),
+      ],
+      [element(100), element(200)]
+    );
+
+    const boxes = elementBoundsList(mapping, [100, 200]);
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0]).toEqual({ min: { x: 0, y: 0, z: 0 }, max: { x: 6, y: 1, z: 0 } });
+    expect(boxes[1]).toEqual({ min: { x: 50, y: 0, z: 0 }, max: { x: 51, y: 1, z: 0 } });
+  });
+
+  it("skips elements with no geometry rather than emitting empty boxes", () => {
+    const mapping = mapMeshesToElements([mesh(100)], [element(100), element(200)]);
+    expect(elementBoundsList(mapping, [100, 200])).toHaveLength(1);
   });
 });

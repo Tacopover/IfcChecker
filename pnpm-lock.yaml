@@ -23,6 +23,9 @@ importers:
       '@ifc-lite/geometry':
         specifier: ^4.1.0
         version: 4.1.0
+      '@ifc-lite/renderer':
+        specifier: ^1.50.0
+        version: 1.50.0
       '@ifc-qa/ids-validator':
         specifier: workspace:*
         version: link:../../packages/ids-validator
@@ -424,6 +427,12 @@ packages:
 
   '@ifc-lite/pointcloud@0.7.1':
     resolution: {integrity: sha512-j9C8Ss1WHzweIz/dpCoeOb3uU19cEa+7IL7utq4K1GIm+qp2zqoAJ1t0iTPu8AhG1SKEN9Aydrth1qzYYwe5Sw==}
+
+  '@ifc-lite/renderer@1.50.0':
+    resolution: {integrity: sha512-MWq8E2wavu8I/w6fimFB8M/VXnqz8cKwxYZH9bschpn0yYOb829nftDKCyROsLOIuGtWWR7k553YjRNIo1mclg==}
+
+  '@ifc-lite/spatial@1.14.15':
+    resolution: {integrity: sha512-d0hGAcAPXZnOksW13aWFKK5D/R6S17XDNUmNBtmysACTRP/32GjSbbX6V+X8I87hFaF63U/MDXxQBl50KvoqbQ==}
 
   '@ifc-lite/wasm@6.1.1':
     resolution: {integrity: sha512-USR/3IxNFaIhYcJIxE22YBdWwJcg/3g7fOsn78h8mCiXAXCgPdgj5onef14PpZwuEfNeLoMRYYxxEnM0ImCeNA==}
@@ -2150,6 +2159,15 @@ snapshots:
   '@ifc-lite/pointcloud@0.7.1':
     dependencies:
       laz-perf: 0.0.7
+
+  '@ifc-lite/renderer@1.50.0':
+    dependencies:
+      '@ifc-lite/geometry': 4.1.0
+      '@ifc-lite/spatial': 1.14.15
+
+  '@ifc-lite/spatial@1.14.15':
+    dependencies:
+      '@ifc-lite/geometry': 4.1.0
 
   '@ifc-lite/wasm@6.1.1': {}
 

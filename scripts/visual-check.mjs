@@ -465,7 +465,6 @@ const SCENARIOS = {
     viewButton.click();
 
     await h.waitFor(function () { return document.querySelector(".viewer-page"); }, "viewer page");
-    await h.waitFor(function () { return document.querySelector(".viewer-focus-panel"); }, "viewer focus panel");
 
     // A pending focus request auto-starts that file's geometry load; wait for
     // at least one mesh batch to land before drawing.
@@ -473,7 +472,17 @@ const SCENARIOS = {
       return window.__viewer && window.__viewer.current && window.__viewer.current.batchCount() > 0;
     }, "geometry batch uploaded");
 
-    var focusAlert = document.querySelector(".viewer-focus-alert");
+    // The chip only appears once the request has resolved to elements that are
+    // actually on screen, so it is the honest signal that the focus landed.
+    await h.waitFor(function () {
+      return document.querySelector('.viewer-chip[data-kind="focus"]');
+    }, "result focus chip");
+
+    var toolCount = h.all(".viewer-tool").length;
+    if (toolCount < 4) throw new Error("expected the overlay toolbar over the canvas, found " + toolCount + " tools");
+    if (!document.querySelector(".viewer-spec-head")) throw new Error("the Results rail listed no specifications");
+
+    var focusAlert = document.querySelector('.viewer-toast[data-kind="error"]');
     if (focusAlert) throw new Error("unexpected no-geometry alert for a fixture built with real geometry: " + focusAlert.textContent);
 
     var canvas = document.querySelector("[data-smoke-viewer-canvas]");

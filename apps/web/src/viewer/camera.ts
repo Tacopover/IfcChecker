@@ -99,7 +99,7 @@ export function cameraBasis(camera: OrbitCamera): { forward: Vec3; right: Vec3; 
 export function frameBounds(camera: OrbitCamera, bounds: Bounds, aspect: number): OrbitCamera {
   if (isEmptyBounds(bounds)) return camera;
 
-  const distance = fitDistance(bounds, camera.fovY, aspect);
+  const distance = fitDistance(bounds, camera.fovY, aspect, 1.15, camera.pitch);
   return {
     ...camera,
     target: boundsCenter(bounds),

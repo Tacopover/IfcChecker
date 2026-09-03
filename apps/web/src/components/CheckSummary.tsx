@@ -10,7 +10,7 @@ import {
 } from "./issueFilter";
 import { IssueTable, type IssueRow } from "./IssueTable";
 
-type SpecStatus = "failed" | "passed" | "not-applied" | "not-checked";
+export type SpecStatus = "failed" | "passed" | "not-applied" | "not-checked";
 
 // A required specification with nothing to match it is, structurally, the same "matched nothing"
 // case as an optional one — the model just doesn't have that kind of element. Not a failure.
@@ -24,7 +24,7 @@ function isProhibitedMatchFailure(summary: SpecificationSummary): boolean {
   return summary.cardinalityFailure !== null && summary.cardinalityFailure.startsWith("Nothing may match");
 }
 
-function statusOf(summary: SpecificationSummary): SpecStatus {
+export function statusOf(summary: SpecificationSummary): SpecStatus {
   // Ordered by how much the counts can be trusted: an unchecked specification has no counts at
   // all, so it can never be mistaken for one that ran and matched nothing.
   if (!summary.checked) return "not-checked";

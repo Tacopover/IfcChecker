@@ -16,6 +16,7 @@ import {
   type ParseProgress,
   type SpecificationSummary,
 } from "../local/parseAndValidate.js";
+import { useCheckResults } from "../state/checkResults.js";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { parseWorkerClient } from "../local/parseWorkerClient.js";
 import { exportResultsAsBcf, exportResultsAsCsv, exportResultsAsExcel } from "../local/exportResults.js";
@@ -116,7 +117,9 @@ export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
 
   // ifc-lite is faster and more robust than web-ifc, so it's the only engine offered.
   const engine: EngineId = "ifc-lite";
-  const [results, setResults] = useState<SpecificationSummary[] | null>(null);
+  // Shared with the 3D page rather than owned here: the viewer's Results rail
+  // shows the same specifications and puts their failing elements on screen.
+  const { results, setResults } = useCheckResults();
   // Mirrors `results` with each specification's violations narrowed to whatever its issue
   // table's own filters currently admit — see CheckSummary's onFilteredSummariesChange.
   const [filteredResults, setFilteredResults] = useState<SpecificationSummary[] | null>(null);
