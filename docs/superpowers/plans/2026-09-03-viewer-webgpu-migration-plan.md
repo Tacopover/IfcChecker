@@ -16,7 +16,7 @@
 - The engine's `Camera` is the only camera state. No React state, no app-level camera math.
 - Federated element ids are offset at the `ViewerCanvas` boundary only. Every other module keeps using bare `{modelKey, expressId}`.
 - `node scripts/verify.mjs` (build + typecheck + tests) must pass after every task that touches source.
-- Headless Chromium on this host cannot obtain a real WebGPU adapter (confirmed twice during the POC) — the `viewer` visual-check scenario is expected to print a skip line here, not to actually draw. Real coverage is the manual pass in Task 9.
+- Headless Chromium on this host cannot obtain a real WebGPU adapter (confirmed twice during the POC) — the `viewer` visual-check scenario is expected to print a skip line here, not to actually draw. Real coverage is the manual pass in Task 8.
 
 ## Plan corrections found while grounding this plan against the actual `@ifc-lite/renderer` `.d.ts` files (not re-litigating the approved spec, just resolving detail the spec left implicit)
 
@@ -192,7 +192,7 @@ EOF
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: nothing new — this is a pure deletion task. `ViewerCanvas.tsx` (Task 6) and `ViewerPage.tsx` (Task 7) still import from `camera.ts`/`renderer.ts` until those tasks run, so this repo will not typecheck between Task 2 and Task 7 — that is expected; do not stop to "fix" the resulting errors, they are resolved by Task 6/7.
+- Produces: nothing new — this is a pure deletion task. `ViewerCanvas.tsx` (Task 5) and `ViewerPage.tsx` (Task 6) still import from `camera.ts`/`renderer.ts` until those tasks run, so this repo will not typecheck between Task 2 and Task 6 — that is expected; do not stop to "fix" the resulting errors, they are resolved by Task 5/6.
 
 - [ ] **Step 1: Delete the four files**
 
@@ -447,7 +447,7 @@ EOF
   `aspect()` and `pick()` are dropped from the handle (see plan-correction notes 1-2 above; `pick` becomes purely internal to this file's own pointer handlers).
   `ViewerCanvasProps` drops `camera`/`onCameraChange` (the engine's `Camera` is not driven from React state); `section`, `selection`, `isVisible`, `onPick`, `onError`, `handleRef` are unchanged.
 
-There is no dedicated `ViewerCanvas.test.tsx` today (canvas/GPU code isn't unit-testable in jsdom — confirmed, no such file exists) and this plan does not add one; correctness here is established by typecheck (Step 2) and the manual browser pass in Task 9, matching how the file it replaces was verified.
+There is no dedicated `ViewerCanvas.test.tsx` today (canvas/GPU code isn't unit-testable in jsdom — confirmed, no such file exists) and this plan does not add one; correctness here is established by typecheck (Step 2) and the manual browser pass in Task 8, matching how the file it replaces was verified.
 
 - [ ] **Step 1: Replace the whole file**
 
