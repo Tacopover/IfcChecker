@@ -4,9 +4,6 @@ import { boundsCenter, boundsSize, isEmptyBounds, type Bounds, type Vec3 } from 
 // solid reads as a hollow shell. Capping wants a stencil pass in the renderer;
 // the maths here is what decides *what* is cut, and it is the same either way.
 
-/** `[nx, ny, nz, d]`. A point is kept where `dot(n, p) + d >= 0`. */
-export type ClipPlane = readonly [number, number, number, number];
-
 export interface SectionBox {
   enabled: boolean;
   bounds: Bounds;
@@ -31,33 +28,6 @@ export function sectionBoxFromBounds(bounds: Bounds, enabled = false): SectionBo
       max: { x: bounds.max.x + margin, y: bounds.max.y + margin, z: bounds.max.z + margin },
     },
   };
-}
-
-/**
- * The six planes, in min-x, max-x, min-y, max-y, min-z, max-z order. Always six
- * even when disabled — the shader takes a fixed-size array and a single
- * uniform switch, which is cheaper than recompiling for a varying plane count.
- */
-export function sectionPlanes(box: SectionBox): ClipPlane[] {
-  const { min, max } = box.bounds;
-  return [
-    [1, 0, 0, -min.x],
-    [-1, 0, 0, max.x],
-    [0, 1, 0, -min.y],
-    [0, -1, 0, max.y],
-    [0, 0, 1, -min.z],
-    [0, 0, -1, max.z],
-  ];
-}
-
-export function isInsideSection(box: SectionBox, point: Vec3): boolean {
-  if (!box.enabled) return true;
-  const { min, max } = box.bounds;
-  return (
-    point.x >= min.x && point.x <= max.x &&
-    point.y >= min.y && point.y <= max.y &&
-    point.z >= min.z && point.z <= max.z
-  );
 }
 
 /**
