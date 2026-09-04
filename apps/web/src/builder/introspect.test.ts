@@ -7,6 +7,7 @@ function element(ifcType: string, overrides: Overrides = {}): NormalizedElement 
   nextId += 1;
   return {
     globalId: `g${nextId}`,
+    expressId: nextId,
     ifcType,
     predefinedType: null,
     name: `${ifcType}-${nextId}`,

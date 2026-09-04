@@ -46,6 +46,8 @@ export interface IssueTableProps {
   results: IssueRow[];
   onSelectElement?: (row: IssueRow) => void;
   selectedElementId?: string | null;
+  /** Renders a "View in 3D" action per row when set — navigates to the viewer, isolated on this one element. */
+  onViewElementIn3D?: (row: IssueRow) => void;
   /** Set when the table already sits under one specification, where a Rule column repeats a constant. */
   hideRuleColumn?: boolean;
   /**
@@ -67,6 +69,7 @@ export function IssueTable({
   results,
   onSelectElement,
   selectedElementId,
+  onViewElementIn3D,
   hideRuleColumn = false,
   renderDetails,
   filter,
@@ -100,16 +103,30 @@ export function IssueTable({
               <span className="element-gid">{row.elementGlobalId}</span>
             </>
           );
-          if (!onSelectElement) return <span className="element-cell">{identity}</span>;
           return (
-            <button
-              type="button"
-              className="element-cell link"
-              aria-pressed={selectedElementId === row.id}
-              onClick={() => onSelectElement(row)}
-            >
-              {identity}
-            </button>
+            <span className="element-cell-group">
+              {onSelectElement ? (
+                <button
+                  type="button"
+                  className="element-cell link"
+                  aria-pressed={selectedElementId === row.id}
+                  onClick={() => onSelectElement(row)}
+                >
+                  {identity}
+                </button>
+              ) : (
+                <span className="element-cell">{identity}</span>
+              )}
+              {onViewElementIn3D && (
+                <button
+                  type="button"
+                  className="ghost-btn view-in-3d"
+                  onClick={() => onViewElementIn3D(row)}
+                >
+                  View in 3D
+                </button>
+              )}
+            </span>
           );
         },
       }),
@@ -121,7 +138,7 @@ export function IssueTable({
       columnHelper.accessor("ruleId", { header: "Rule" }),
       columnHelper.accessor("message", { header: "Message" }),
     ],
-    [onSelectElement, selectedElementId]
+    [onSelectElement, selectedElementId, onViewElementIn3D]
   );
 
   const table = useReactTable({

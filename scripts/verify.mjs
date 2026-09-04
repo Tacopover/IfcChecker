@@ -50,6 +50,16 @@ if (VISUAL)
     process.execPath,
     ["scripts/visual-check.mjs", "--scenario", "validate"],
   ]);
+// The 3D page is the one thing no unit test can cover: whether a frame was
+// actually drawn. It gets its own run because it needs a scenario — parse a
+// file, check it, follow a result into the viewer, load its geometry, draw
+// one frame, read pixels back.
+if (VISUAL)
+  stages.push([
+    "browser viewer check",
+    process.execPath,
+    ["scripts/visual-check.mjs", "--scenario", "viewer"],
+  ]);
 
 const results = [];
 for (const [label, command, commandArgs] of stages) {

@@ -9,6 +9,7 @@ import { stating } from "../test/conditions";
 function element(overrides: Partial<NormalizedElement> = {}): NormalizedElement {
   return {
     globalId: "g1",
+    expressId: 1,
     ifcType: "IFCWALL",
     predefinedType: null,
     name: "Basic Wall",

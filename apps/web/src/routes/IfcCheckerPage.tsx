@@ -16,6 +16,7 @@ import {
   type ParseProgress,
   type SpecificationSummary,
 } from "../local/parseAndValidate.js";
+import { useCheckResults } from "../state/checkResults.js";
 import { useLoadedModels } from "../state/loadedModels.js";
 import { parseWorkerClient } from "../local/parseWorkerClient.js";
 import { exportResultsAsBcf, exportResultsAsCsv, exportResultsAsExcel } from "../local/exportResults.js";
@@ -24,6 +25,7 @@ import { ElementDetails } from "../components/ElementDetails";
 import { ExportScopeDialog } from "../components/ExportScopeDialog";
 import type { IssueRow } from "../components/IssueTable";
 import { ModelStructureTree } from "../components/ModelStructureTree";
+import { buildElementFocusRequest, buildSpecificationFocusRequest, type ViewerFocusRequest } from "../viewer/focusRequest.js";
 
 type ExportKind = "csv" | "excel" | "bcf";
 
@@ -104,13 +106,20 @@ function FileDropzone({ extensions, onFiles, children }: FileDropzoneProps) {
   );
 }
 
-export function IfcCheckerPage() {
+export interface IfcCheckerPageProps {
+  /** Navigates to the viewer, isolated on the given element(s). Absent in tests that don't need it. */
+  onFocusInViewer?: (request: ViewerFocusRequest) => void;
+}
+
+export function IfcCheckerPage({ onFocusInViewer }: IfcCheckerPageProps = {}) {
   const { models, addFiles, applyParseOutcome, removeModel, clearModels, idsFile, setIdsFile } =
     useLoadedModels();
 
   // ifc-lite is faster and more robust than web-ifc, so it's the only engine offered.
   const engine: EngineId = "ifc-lite";
-  const [results, setResults] = useState<SpecificationSummary[] | null>(null);
+  // Shared with the 3D page rather than owned here: the viewer's Results rail
+  // shows the same specifications and puts their failing elements on screen.
+  const { results, setResults } = useCheckResults();
   // Mirrors `results` with each specification's violations narrowed to whatever its issue
   // table's own filters currently admit — see CheckSummary's onFilteredSummariesChange.
   const [filteredResults, setFilteredResults] = useState<SpecificationSummary[] | null>(null);
@@ -640,6 +649,16 @@ export function IfcCheckerPage() {
               summaries={results}
               onSelectElement={setSelectedIssue}
               selectedElementId={selectedIssue?.id ?? null}
+              onViewElementIn3D={
+                onFocusInViewer && ((row) => onFocusInViewer(buildElementFocusRequest(row)))
+              }
+              onViewSpecificationIn3D={
+                onFocusInViewer &&
+                ((summary) => {
+                  const request = buildSpecificationFocusRequest(summary);
+                  if (request) onFocusInViewer(request);
+                })
+              }
               onFilteredSummariesChange={setFilteredResults}
               renderDetails={(row) => (
                 <div ref={detailsRef}>

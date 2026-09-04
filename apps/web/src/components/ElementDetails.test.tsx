@@ -7,6 +7,7 @@ import { ElementDetails } from "./ElementDetails";
 function makeElement(overrides: Partial<NormalizedElement> = {}): NormalizedElement {
   return {
     globalId: "1Aa2Bb3Cc4Dd5Ee6Ff7G01",
+    expressId: 1,
     ifcType: "IFCWALL",
     predefinedType: "STANDARD",
     name: "West Wall",

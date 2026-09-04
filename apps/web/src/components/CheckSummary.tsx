@@ -10,7 +10,7 @@ import {
 } from "./issueFilter";
 import { IssueTable, type IssueRow } from "./IssueTable";
 
-type SpecStatus = "failed" | "passed" | "not-applied" | "not-checked";
+export type SpecStatus = "failed" | "passed" | "not-applied" | "not-checked";
 
 // A required specification with nothing to match it is, structurally, the same "matched nothing"
 // case as an optional one — the model just doesn't have that kind of element. Not a failure.
@@ -24,7 +24,7 @@ function isProhibitedMatchFailure(summary: SpecificationSummary): boolean {
   return summary.cardinalityFailure !== null && summary.cardinalityFailure.startsWith("Nothing may match");
 }
 
-function statusOf(summary: SpecificationSummary): SpecStatus {
+export function statusOf(summary: SpecificationSummary): SpecStatus {
   // Ordered by how much the counts can be trusted: an unchecked specification has no counts at
   // all, so it can never be mistaken for one that ran and matched nothing.
   if (!summary.checked) return "not-checked";
@@ -72,6 +72,10 @@ export interface CheckSummaryProps {
   selectedElementId?: string | null;
   /** Handed to the issue table, which opens it under the element it describes. */
   renderDetails?: (row: IssueRow) => ReactNode;
+  /** Renders a per-row "View in 3D" action, handed straight to the issue table. */
+  onViewElementIn3D?: (row: IssueRow) => void;
+  /** Renders a "View in 3D" action on a specification's own header, isolating every failing element it lists. */
+  onViewSpecificationIn3D?: (summary: SpecificationSummary) => void;
   /**
    * Called with `summaries`, each specification's violations swapped for whichever of them
    * currently survive the filters above the results and then that specification's own filter,
@@ -86,6 +90,8 @@ export function CheckSummary({
   onSelectElement,
   selectedElementId,
   renderDetails,
+  onViewElementIn3D,
+  onViewSpecificationIn3D,
   onFilteredSummariesChange,
 }: CheckSummaryProps) {
   const [expanded, setExpanded] = useState<Set<number>>(() => initiallyExpanded(summaries));
@@ -234,10 +240,12 @@ export function CheckSummary({
                 <th className="num">Failed</th>
                 <th className="num">Success</th>
                 <th className="col-issues">Issues</th>
+                {onViewSpecificationIn3D && <th className="col-view3d">3D</th>}
               </tr>
             </thead>
             <tbody>
               {visible.map(({ summary, index }) => {
+                const columnCount = onViewSpecificationIn3D ? 7 : 6;
                 const status = statusOf(summary);
                 const isExpanded = expanded.has(index);
                 const issueCount = summary.violations.length;
@@ -270,30 +278,45 @@ export function CheckSummary({
                       </td>
                       <td className="col-issues">
                         {issueCount > 0 ? (
-                          // The visible label stays short so it can't wrap the column open; the
-                          // specification's name lives in the accessible name, where a screen
-                          // reader still needs it to tell two toggles apart.
-                          <button
-                            type="button"
-                            className="ghost-btn"
-                            aria-expanded={isExpanded}
-                            aria-label={`${isExpanded ? "Hide" : "Show"} ${issueLabel} for ${summary.name}`}
-                            onClick={() => toggle(index)}
-                          >
-                            <span className="caret" data-open={isExpanded} aria-hidden="true">
-                              ▸
-                            </span>
-                            {issueLabel}
-                          </button>
+                          <>
+                            {/* The visible label stays short so it can't wrap the column open; the
+                                specification's name lives in the accessible name, where a screen
+                                reader still needs it to tell two toggles apart. */}
+                            <button
+                              type="button"
+                              className="ghost-btn"
+                              aria-expanded={isExpanded}
+                              aria-label={`${isExpanded ? "Hide" : "Show"} ${issueLabel} for ${summary.name}`}
+                              onClick={() => toggle(index)}
+                            >
+                              <span className="caret" data-open={isExpanded} aria-hidden="true">
+                                ▸
+                              </span>
+                              {issueLabel}
+                            </button>
+                          </>
                         ) : (
                           <span className="dash">-</span>
                         )}
                       </td>
+                      {onViewSpecificationIn3D && (
+                        <td className="col-view3d">
+                          {issueCount > 0 && (
+                            <button
+                              type="button"
+                              className="spec-view3d-btn"
+                              onClick={() => onViewSpecificationIn3D(summary)}
+                            >
+                              View in 3D
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
 
                     {status === "not-checked" && (
                       <tr className="spec-not-checked">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           {/* The worst failure mode there is, and it arrives from two directions: a
                               rule whose elements we cannot select matches nothing, and a rule whose
                               every requirement we had to drop finds nothing wrong. Both report a
@@ -320,7 +343,7 @@ export function CheckSummary({
                       !isEmptyRequiredMatch(summary) &&
                       !isProhibitedMatchFailure(summary) && (
                       <tr className="spec-cardinality">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           {/* Failed as a whole, with no failing element to show for it — so the
                               reason has to be stated, or the row reads as an empty accusation. */}
                           <p role="alert">{summary.cardinalityFailure}</p>
@@ -330,7 +353,7 @@ export function CheckSummary({
 
                     {status === "not-applied" && !isEmptyRequiredMatch(summary) && (
                       <tr className="spec-not-applied">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           {/* Ran, but selected nothing — a real measurement, unlike "not checked". */}
                           <p role="alert">
                             No element matched this specification, so nothing was checked. Its
@@ -342,7 +365,7 @@ export function CheckSummary({
 
                     {status !== "not-checked" && droppedRequirements(summary).length > 0 && (
                       <tr className="spec-partial">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           {/* Ran, but against fewer requirements than the author wrote — so a pass
                               here is weaker than the source asked for, and says so. */}
                           <p role="alert">
@@ -362,11 +385,12 @@ export function CheckSummary({
 
                     {isExpanded && (
                       <tr className="drawer-row">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           <IssueTable
                             results={summary.violations}
                             onSelectElement={onSelectElement}
                             selectedElementId={selectedElementId}
+                            onViewElementIn3D={onViewElementIn3D}
                             renderDetails={renderDetails}
                             hideRuleColumn
                             filter={specFilters.get(index) ?? EMPTY_ISSUE_FILTER}

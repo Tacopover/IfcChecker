@@ -83,8 +83,8 @@ function measureTypeOf(raw: unknown): string | undefined {
 // The spatial-structure backbone every IFC model is expected to declare,
 // aggregated top-down via IFCRELAGGREGATES (Project -> Site -> Building ->
 // Storey). Deliberately excludes IFCSPACE — spaces are kept as elements (see
-// element-filter.ts) and counted into their storey's elementCounts, not made
-// into a nested tree node.
+// element-filter.ts) and listed under their storey's elementIdsByType, not
+// made into a nested tree node.
 const SPATIAL_TYPE_NAMES = ["IFCPROJECT", "IFCSITE", "IFCBUILDING", "IFCBUILDINGSTOREY"] as const;
 
 function nameOf(line: WebIfcLine): string | null {
@@ -123,21 +123,24 @@ function buildWebIfcModelStructure(
     childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), ...childIds]);
   }
 
-  // Spatial structure expressId -> counts of directly-contained physical
-  // elements by type, from every IFCRELCONTAINEDINSPATIALSTRUCTURE.
-  const elementCountsByStructure = new Map<number, Record<string, number>>();
+  // Spatial structure expressId -> the directly-contained physical elements by
+  // type, from every IFCRELCONTAINEDINSPATIALSTRUCTURE.
+  const elementIdsByStructure = new Map<number, Record<string, number[]>>();
   const containedLineIds = ifcApi.GetLineIDsWithType(modelID, WebIFC.IFCRELCONTAINEDINSPATIALSTRUCTURE);
   for (let i = 0; i < containedLineIds.size(); i++) {
     const rel = ifcApi.GetLine(modelID, containedLineIds.get(i)) as WebIfcLine;
     const structureId = rel.RelatingStructure?.value;
     if (structureId === undefined) continue;
-    const counts = elementCountsByStructure.get(structureId) ?? {};
+    const idsByType = elementIdsByStructure.get(structureId) ?? {};
     for (const ref of rel.RelatedElements ?? []) {
       const ifcType = elementTypeByExpressId.get(ref?.value);
       if (!ifcType) continue;
-      counts[ifcType] = (counts[ifcType] ?? 0) + 1;
+      (idsByType[ifcType] ??= []).push(ref.value);
     }
-    elementCountsByStructure.set(structureId, counts);
+    elementIdsByStructure.set(structureId, idsByType);
+  }
+  for (const idsByType of elementIdsByStructure.values()) {
+    for (const ids of Object.values(idsByType)) ids.sort((a, b) => a - b);
   }
 
   function buildNode(expressId: number): ModelStructureNode {
@@ -147,7 +150,7 @@ function buildWebIfcModelStructure(
       expressId,
       ifcType: spatialTypeByExpressId.get(expressId) as string,
       name: nameOf(line),
-      elementCounts: elementCountsByStructure.get(expressId) ?? {},
+      elementIdsByType: elementIdsByStructure.get(expressId) ?? {},
       children: childIds.map(buildNode),
     };
   }
@@ -610,6 +613,7 @@ export async function parseWebIfcBuffer(
 
         idsScope.push({
           globalId: identifyEntity(typeName, globalId, expressID),
+          expressId: expressID,
           ifcType: typeName,
           ...resolvePredefinedType(
             {

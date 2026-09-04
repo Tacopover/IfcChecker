@@ -92,6 +92,23 @@ window.__smokeErrors = [];
   };
   window.addEventListener("error", function (e) { window.__smokeErrors.push("uncaught: " + e.message); });
   window.addEventListener("unhandledrejection", function (e) { window.__smokeErrors.push("unhandled rejection: " + e.reason); });
+
+  // A worker has its own console/global scope, so console.error inside one
+  // never reaches the patch above — the geometry pipeline's worker pool is
+  // the first thing in this app to run off-main-thread. Wrapping the
+  // constructor is the only way to hear a worker's own uncaught error.
+  var RealWorker = window.Worker;
+  window.Worker = function (url, options) {
+    var worker = new RealWorker(url, options);
+    worker.addEventListener("error", function (e) {
+      window.__smokeErrors.push("worker error (" + url + "): " + (e.message || e.filename + ":" + e.lineno));
+    });
+    worker.addEventListener("messageerror", function () {
+      window.__smokeErrors.push("worker messageerror (" + url + ")");
+    });
+    return worker;
+  };
+  window.Worker.prototype = RealWorker.prototype;
 })();
 </script>`;
 
@@ -386,6 +403,111 @@ const SCENARIOS = {
       kept: keptBadges
     };
   `,
+
+  // The 3D page is the one thing no unit test can cover: whether a frame was
+  // actually drawn. Drives the real flow end to end — parse a fixture with
+  // real geometry, check it, click "View in 3D" on a failing specification —
+  // then draws one frame and reads pixels back.
+  viewer: `
+    if (!navigator.gpu) {
+      return { skip: true, reason: "navigator.gpu is undefined" };
+    }
+    var adapter = await navigator.gpu.requestAdapter().catch(function () { return null; });
+    if (!adapter) {
+      return { skip: true, reason: "requestAdapter() returned null" };
+    }
+
+    h.click('[data-smoke-route="validate"]');
+    await h.waitFor(function () { return document.getElementById("local-ifc-files"); }, "validate page");
+
+    var response = await fetch("/fixtures/ifc/two-walls-geometry.ifc");
+    if (!response.ok) throw new Error("fixture fetch failed: " + response.status);
+    var bytes = await response.arrayBuffer();
+
+    var input = document.getElementById("local-ifc-files");
+    var transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], "two-walls-geometry.ifc", { type: "application/octet-stream" }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await h.waitFor(function () {
+      var button = h.button("Parse files");
+      return button && !button.disabled ? button : null;
+    }, "enabled Parse files button");
+    h.button("Parse files").click();
+    await h.waitFor(function () {
+      return h.all("table td").some(function (cell) { return cell.textContent === "succeeded"; });
+    }, "parsed file row");
+
+    // Neither wall carries any property set, so both fail this — two
+    // violations in one file, exactly what a "View in 3D" click needs.
+    var ids = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<ids xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://standards.buildingsmart.org/IDS">',
+      '<info><title>Viewer smoke</title></info>',
+      '<specifications>',
+      '<specification name="Walls are fire rated" ifcVersion="IFC4">',
+      '<applicability maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability>',
+      '<requirements><property dataType="IFCLABEL">',
+      '<propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>',
+      '<baseName><simpleValue>FireRating</simpleValue></baseName></property></requirements>',
+      '</specification>',
+      '</specifications></ids>'
+    ].join("\\n");
+
+    var idsInput = document.getElementById("local-ids-file");
+    var idsTransfer = new DataTransfer();
+    idsTransfer.items.add(new File([ids], "walls.ids", { type: "text/xml" }));
+    idsInput.files = idsTransfer.files;
+    idsInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await h.waitFor(function () {
+      var button = h.button("Check files");
+      return button && !button.disabled ? button : null;
+    }, "enabled Check files button");
+    h.button("Check files").click();
+    await h.waitFor(function () { return document.querySelector(".check-summary"); }, "check summary");
+
+    var viewButton = h.all(".check-summary .view-in-3d")[0];
+    if (!viewButton) throw new Error("no \\"View in 3D\\" action was offered on the failing specification");
+    viewButton.click();
+
+    await h.waitFor(function () { return document.querySelector(".viewer-page"); }, "viewer page");
+
+    // A pending focus request auto-starts that file's geometry load; wait for
+    // at least one mesh batch to land before drawing.
+    await h.waitFor(function () {
+      return window.__viewer && window.__viewer.current && window.__viewer.current.batchCount() > 0;
+    }, "geometry batch uploaded");
+
+    // The chip only appears once the request has resolved to elements that are
+    // actually on screen, so it is the honest signal that the focus landed.
+    await h.waitFor(function () {
+      return document.querySelector('.viewer-chip[data-kind="focus"]');
+    }, "result focus chip");
+
+    var toolCount = h.all(".viewer-tool").length;
+    if (toolCount < 4) throw new Error("expected the overlay toolbar over the canvas, found " + toolCount + " tools");
+    if (!document.querySelector(".viewer-spec-head")) throw new Error("the Results rail listed no specifications");
+
+    var focusAlert = document.querySelector('.viewer-toast[data-kind="error"]');
+    if (focusAlert) throw new Error("unexpected no-geometry alert for a fixture built with real geometry: " + focusAlert.textContent);
+
+    var canvas = document.querySelector("[data-smoke-viewer-canvas]");
+    if (!canvas) throw new Error("no viewer canvas rendered");
+
+    window.__viewer.current.renderFrame();
+
+    var stats = window.__viewer.current.frameStats();
+    if (!stats || stats.drawCalls === 0) {
+      throw new Error("getFrameStats() reported no draw calls — nothing was drawn");
+    }
+
+    window.scrollTo(0, 0);
+    await h.settle(50);
+
+    return { batches: window.__viewer.current.batchCount(), drawCalls: stats.drawCalls };
+  `,
 };
 
 if (SCENARIO && !SCENARIOS[SCENARIO]) {
@@ -586,6 +708,12 @@ function chromeRun(extraArgs) {
         `--user-data-dir=${PROFILE_DIR}`, "--no-first-run", "--disable-extensions",
         "--disable-background-networking", "--disable-sync", "--disable-default-apps",
         "--metrics-recording-only", "--mute-audio",
+        // `--disable-gpu` alone leaves WebGL2 unavailable under headless — the
+        // viewer scenario is the first thing in this gate that needs a real
+        // GL context, and getContext("webgl2") returned null without these.
+        // SwiftShader is a software GL implementation, so no real GPU is needed.
+        "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
+        "--ignore-gpu-blocklist",
         `--virtual-time-budget=${TIME_BUDGET}`, "--run-all-compositor-stages-before-draw",
         ...extraArgs,
         `${origin}/smoke.html`,
@@ -654,6 +782,15 @@ for (const viewport of VIEWPORTS) {
     break;
   }
   firstResult ??= result;
+  if (result.scenario && result.scenario.skip) {
+    console.log(`browser check SKIPPED — viewer scenario: ${result.scenario.reason}`);
+    server.close();
+    if (!KEEP) {
+      rmSync(BUILD, { recursive: true, force: true });
+      rmSync(PROFILE_DIR, { recursive: true, force: true });
+    }
+    process.exit(0);
+  }
 
   if (!result.mounted) failures.push(`${viewport.name}: app did not mount — #root is empty`);
   if (result.errors.length) {

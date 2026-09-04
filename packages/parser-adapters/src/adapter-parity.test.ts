@@ -29,7 +29,7 @@ describe("adapter parity", () => {
 
     function shape(node: typeof webIfcResult.modelStructure): unknown {
       if (!node) return null;
-      return { ifcType: node.ifcType, name: node.name, elementCounts: node.elementCounts, children: node.children.map(shape) };
+      return { ifcType: node.ifcType, name: node.name, elementIdsByType: node.elementIdsByType, children: node.children.map(shape) };
     }
 
     expect(shape(ifcLiteResult.modelStructure)).toEqual(shape(webIfcResult.modelStructure));
@@ -42,7 +42,7 @@ describe("adapter parity", () => {
 
     function shape(node: typeof webIfcResult.modelStructure): unknown {
       if (!node) return null;
-      return { ifcType: node.ifcType, name: node.name, elementCounts: node.elementCounts, children: node.children.map(shape) };
+      return { ifcType: node.ifcType, name: node.name, elementIdsByType: node.elementIdsByType, children: node.children.map(shape) };
     }
 
     const webIfcShape = shape(webIfcResult.modelStructure);
@@ -50,8 +50,8 @@ describe("adapter parity", () => {
 
     const building = (webIfcResult.modelStructure?.children[0]?.children[0]) ?? null;
     expect(building?.children.map((storey) => storey.name)).toEqual(["Level 1", "Level 2"]);
-    expect(building?.children[0].elementCounts).toEqual({ IFCWALL: 2, IFCDOOR: 1 });
-    expect(building?.children[1].elementCounts).toEqual({ IFCWALL: 1 });
+    expect(building?.children[0].elementIdsByType).toEqual({ IFCWALL: [16, 17], IFCDOOR: [18] });
+    expect(building?.children[1].elementIdsByType).toEqual({ IFCWALL: [19] });
   });
 
   // Both engines now enumerate the model instead of iterating one shared list
@@ -241,7 +241,7 @@ describe("adapter parity", () => {
     const countsByStorey = (result: typeof webIfcResult) =>
       (result.modelStructure?.children[0]?.children[0]?.children ?? []).map((storey) => [
         storey.name,
-        Object.fromEntries(Object.entries(storey.elementCounts).filter(([type]) => type !== "IFCSPACE")),
+        Object.fromEntries(Object.entries(storey.elementIdsByType).filter(([type]) => type !== "IFCSPACE")),
       ]);
 
     expect(countsByStorey(ifcLiteResult)).toEqual(countsByStorey(webIfcResult));
@@ -251,17 +251,17 @@ describe("adapter parity", () => {
       [
         "Level 1",
         {
-          IFCACTUATOR: 1,
-          IFCAIRTERMINAL: 2,
-          IFCDAMPER: 1,
-          IFCDOOR: 1,
-          IFCDUCTFITTING: 2,
-          IFCDUCTSEGMENT: 2,
-          IFCSANITARYTERMINAL: 1,
-          IFCSENSOR: 1,
+          IFCACTUATOR: [35],
+          IFCAIRTERMINAL: [30, 31],
+          IFCDAMPER: [29],
+          IFCDOOR: [42],
+          IFCDUCTFITTING: [24, 25],
+          IFCDUCTSEGMENT: [20, 21],
+          IFCSANITARYTERMINAL: [32],
+          IFCSENSOR: [34],
         },
       ],
-      ["Plant Level", { IFCPIPEFITTING: 1, IFCPIPESEGMENT: 2, IFCPUMP: 1, IFCVALVE: 2, IFCWALL: 2 }],
+      ["Plant Level", { IFCPIPEFITTING: [26], IFCPIPESEGMENT: [22, 23], IFCPUMP: [33], IFCVALVE: [27, 28], IFCWALL: [40, 41] }],
     ]);
   });
 
@@ -279,10 +279,10 @@ describe("adapter parity", () => {
     const fromIfcLite = plantLevel(await new IfcLiteAdapter().parse(path));
 
     expect(fromWebIfc.children).toEqual([]);
-    expect(fromWebIfc.elementCounts.IFCSPACE).toBe(1);
+    expect(fromWebIfc.elementIdsByType.IFCSPACE?.length).toBe(1);
 
     expect(fromIfcLite.children.map((child: { ifcType: string }) => child.ifcType)).toEqual(["IFCSPACE"]);
-    expect(fromIfcLite.elementCounts.IFCSPACE).toBeUndefined();
+    expect(fromIfcLite.elementIdsByType.IFCSPACE).toBeUndefined();
   });
 
   it("both engines walk the same partOf chains, and keep nesting distinct from aggregation", async () => {

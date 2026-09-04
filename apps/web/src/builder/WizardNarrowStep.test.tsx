@@ -10,6 +10,7 @@ import { introspectModel } from "./introspect";
 function wall(index: number, classified: boolean): NormalizedElement {
   return {
     globalId: `w${index}`,
+    expressId: index,
     ifcType: "IFCWALL",
     predefinedType: null,
     name: `Wall ${index}`,

@@ -12,4 +12,5 @@ export declare const ROUTES: {
   validate: SeoRoute;
   builder: SeoRoute;
   about: SeoRoute;
+  viewer: SeoRoute;
 };

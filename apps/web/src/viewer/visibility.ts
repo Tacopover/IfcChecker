@@ -1,0 +1,142 @@
+// What the viewer is currently showing. Deliberately a plain value with plain
+// transitions: every hide/isolate/highlight interaction, and the
+// results-to-viewer navigation, is a change to this and nothing else.
+
+/** An element is addressed by its model and its express id — ids repeat across files. */
+export interface ElementRef {
+  modelKey: string;
+  expressId: number;
+}
+
+export interface VisibilityState {
+  /** Elements the user hid one at a time. */
+  hidden: ReadonlySet<string>;
+  /** Whole IFC types switched off, upper-cased. Spaces start in here. */
+  hiddenTypes: ReadonlySet<string>;
+  /** Whole files switched off, by `LoadedModel.key`. */
+  hiddenModels: ReadonlySet<string>;
+  /** When set, *only* these are shown. Null means nothing is isolated. */
+  isolated: ReadonlySet<string> | null;
+  /**
+   * Highlight-only mode: every element stays visible, but these get an
+   * emissive tint — the alternative to isolating when spatial context next to
+   * a result still matters. Independent of `isolated`; the UI offers one mode
+   * at a time but nothing here enforces that.
+   */
+  highlighted: ReadonlySet<string> | null;
+}
+
+/**
+ * `IfcSpace` renders as a solid block filling its room, so a model that shows
+ * them by default looks like a pile of boxes with the building hidden inside.
+ * `IfcOpeningElement` needs no entry: it is dropped before it ever becomes an
+ * element (see `classifyEntityType`), so the loader never uploads its meshes.
+ */
+export const DEFAULT_HIDDEN_TYPES = ["IFCSPACE"] as const;
+
+export function refKey(ref: ElementRef): string {
+  return `${ref.modelKey}#${ref.expressId}`;
+}
+
+/** Inverse of `refKey` — splits on the LAST `#`, so a `modelKey` containing one stays intact. */
+export function parseRefKey(key: string): ElementRef {
+  const separatorIndex = key.lastIndexOf("#");
+  return { modelKey: key.slice(0, separatorIndex), expressId: Number(key.slice(separatorIndex + 1)) };
+}
+
+export function initialVisibility(): VisibilityState {
+  return {
+    hidden: new Set(),
+    hiddenTypes: new Set(DEFAULT_HIDDEN_TYPES),
+    hiddenModels: new Set(),
+    isolated: null,
+    highlighted: null,
+  };
+}
+
+/**
+ * Isolation is absolute: while it is active exactly the isolated elements are
+ * visible, whatever else is hidden. Anything softer breaks the case it exists
+ * for — isolating the elements that failed a check must show them even when
+ * they are a type the user switched off, or sit in a file they collapsed.
+ */
+export function isVisible(
+  state: VisibilityState,
+  ref: ElementRef,
+  ifcType: string
+): boolean {
+  const key = refKey(ref);
+  if (state.isolated) return state.isolated.has(key);
+  if (state.hiddenModels.has(ref.modelKey)) return false;
+  if (state.hiddenTypes.has(ifcType.toUpperCase())) return false;
+  return !state.hidden.has(key);
+}
+
+export function isHighlighted(state: VisibilityState, ref: ElementRef): boolean {
+  return state.highlighted?.has(refKey(ref)) ?? false;
+}
+
+/**
+ * The renderer's per-slot visibility texture is tri-state, not boolean: 0
+ * hidden, 1 visible, 2 visible-and-highlighted. This is the single place that
+ * combines `isVisible` and `isHighlighted` into that byte, so the renderer and
+ * any other consumer never have to re-derive the combination themselves.
+ */
+export function visibilityCode(
+  state: VisibilityState,
+  ref: ElementRef,
+  ifcType: string
+): 0 | 1 | 2 {
+  if (!isVisible(state, ref, ifcType)) return 0;
+  return isHighlighted(state, ref) ? 2 : 1;
+}
+
+export function hideElements(state: VisibilityState, refs: readonly ElementRef[]): VisibilityState {
+  const hidden = new Set(state.hidden);
+  for (const ref of refs) hidden.add(refKey(ref));
+  return { ...state, hidden };
+}
+
+export function showElements(state: VisibilityState, refs: readonly ElementRef[]): VisibilityState {
+  const hidden = new Set(state.hidden);
+  for (const ref of refs) hidden.delete(refKey(ref));
+  return { ...state, hidden };
+}
+
+export function isolateElements(state: VisibilityState, refs: readonly ElementRef[]): VisibilityState {
+  return { ...state, isolated: new Set(refs.map(refKey)) };
+}
+
+export function clearIsolation(state: VisibilityState): VisibilityState {
+  return { ...state, isolated: null };
+}
+
+export function highlightElements(state: VisibilityState, refs: readonly ElementRef[]): VisibilityState {
+  return { ...state, highlighted: new Set(refs.map(refKey)) };
+}
+
+export function clearHighlight(state: VisibilityState): VisibilityState {
+  return { ...state, highlighted: null };
+}
+
+export function toggleType(state: VisibilityState, ifcType: string): VisibilityState {
+  const hiddenTypes = new Set(state.hiddenTypes);
+  const upper = ifcType.toUpperCase();
+  if (!hiddenTypes.delete(upper)) hiddenTypes.add(upper);
+  return { ...state, hiddenTypes };
+}
+
+export function toggleModel(state: VisibilityState, modelKey: string): VisibilityState {
+  const hiddenModels = new Set(state.hiddenModels);
+  if (!hiddenModels.delete(modelKey)) hiddenModels.add(modelKey);
+  return { ...state, hiddenModels };
+}
+
+/**
+ * The one control that undoes every hide at once, including the type defaults.
+ * Distinct from `initialVisibility`, which is the reset the un-isolate button
+ * offers: back to a fresh view, spaces out of sight again.
+ */
+export function showEverything(): VisibilityState {
+  return { hidden: new Set(), hiddenTypes: new Set(), hiddenModels: new Set(), isolated: null, highlighted: null };
+}

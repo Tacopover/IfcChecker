@@ -1,4 +1,4 @@
-import type { ModelStructureNode } from "@ifc-qa/shared-types";
+import { elementCountsOf, type ModelStructureNode } from "@ifc-qa/shared-types";
 
 const SPATIAL_TYPE_LABELS: Record<string, string> = {
   IFCPROJECT: "Project",
@@ -12,7 +12,7 @@ function spatialLabel(ifcType: string): string {
 }
 
 function TreeNode({ node }: { node: ModelStructureNode }) {
-  const elementCounts = Object.entries(node.elementCounts);
+  const elementCounts = Object.entries(elementCountsOf(node));
 
   return (
     <li>

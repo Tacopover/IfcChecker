@@ -58,7 +58,7 @@ describe("parseIfcLiteBuffer", () => {
     const storey = building?.children[0];
     expect(storey?.ifcType).toBe("IFCBUILDINGSTOREY");
     expect(storey?.name).toBe("Level 1");
-    expect(storey?.elementCounts).toEqual({ IFCWALL: 1 });
+    expect(storey?.elementIdsByType).toEqual({ IFCWALL: [15] });
     expect(storey?.children).toEqual([]);
   });
 

@@ -18,9 +18,12 @@ export function pathFor(route: RouteId): string {
   return ROUTES[route].path;
 }
 
-/** Client-side history-API routing for the app's two real pages. Both stay
- * mounted regardless of route (see App.tsx) — this only tracks which one is
- * current and updates the URL bar, it never remounts anything. */
+/** Client-side history-API routing for the app's three real pages. Validate
+ * and Build rules stay mounted regardless of route; the viewer is the
+ * exception, mounted only while its route is current (see App.tsx) so its
+ * WebGL context and mesh buffers are released on navigating away. This hook
+ * only tracks which route is current and updates the URL bar — mounting
+ * decisions live in App.tsx, not here. */
 export function useRoute(): [RouteId, (route: RouteId) => void] {
   const [route, setRoute] = useState<RouteId>(() => routeForPath(window.location.pathname));
 

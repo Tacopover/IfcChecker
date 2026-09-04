@@ -22,4 +22,10 @@ export const ROUTES = {
     title: "About: IFC IDS Validator",
     description: "What the IFC IDS Validator is, who built it, and where to find the source and MepSketcher.",
   },
+  viewer: {
+    path: "/3d-view/",
+    title: "3D IFC Viewer — Inspect Models and IDS Check Results in 3D",
+    description:
+      "View an IFC model in 3D and jump straight to the elements an IDS check failed, entirely in your browser. No upload, no server, no signup.",
+  },
 };
