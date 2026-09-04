@@ -5,7 +5,6 @@ import type { IssueRow } from "../components/IssueTable";
 import { useCheckResults } from "../state/checkResults";
 import { useLoadedModels } from "../state/loadedModels";
 import { emptyBounds, isEmptyBounds, robustBounds, unionBounds, type Bounds } from "./bounds.js";
-import { frameBounds, initialCamera, type OrbitCamera } from "./camera.js";
 import {
   buildSpecificationFocusRequest,
   resolveFocusElements,
@@ -132,7 +131,6 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
     document.body.classList.remove("col-resizing");
   }, []);
 
-  const [camera, setCamera] = useState<OrbitCamera>(initialCamera);
   const [visibility, setVisibility] = useState(initialVisibility);
   const [section, setSection] = useState<SectionBox | null>(null);
   const [selection, setSelection] = useState<ElementRef | null>(null);
@@ -200,11 +198,6 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
     ? geometry[selection.modelKey]?.mapping.elementByExpressId.get(selection.expressId) ?? null
     : null;
 
-  // Framing has to be told the shape of the viewport it frames into. This used
-  // to be a hardcoded 16/9 while the canvas is nothing of the sort once the two
-  // rails take their share, which left every fit noticeably off.
-  const viewportAspect = useCallback(() => canvasRef.current?.aspect() ?? 16 / 9, []);
-
   const loadModel = useCallback(
     async (modelKey: string) => {
       const model = parsedModels.find((candidate) => candidate.key === modelKey);
@@ -265,7 +258,7 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
 
           // Establishing shot for a file with nothing on screen yet — not a
           // selection event, so it is exempt from "camera never auto-moves".
-          setCamera((current) => frameBounds(current, framingBounds, viewportAspect()));
+          canvasRef.current?.frameBounds(framingBounds);
           setSection(sectionBoxFromBounds(bounds));
         } finally {
           processor.dispose();
@@ -281,7 +274,7 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
         setBusyModelKey(null);
       }
     },
-    [busyModelKey, parsedModels, viewportAspect]
+    [busyModelKey, parsedModels]
   );
 
   const unloadModel = useCallback((modelKey: string) => {
@@ -348,7 +341,7 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
     // taken anyone anywhere.
     if (withGeometry.length > 0) {
       const focused = boundsOfElements(loaded.mapping, withGeometry);
-      setCamera((current) => frameBounds(current, focused, viewportAspect()));
+      canvasRef.current?.frameBounds(focused);
     }
 
     const parts: string[] = [];
@@ -365,7 +358,7 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
     setFocusAlert(parts.length > 0 ? parts.join(" ") : null);
 
     appliedFocusRef.current = activeFocus;
-  }, [activeFocus, geometry, parsedModels, busyModelKey, loadModel, requestedFocusMode, viewportAspect]);
+  }, [activeFocus, geometry, parsedModels, busyModelKey, loadModel, requestedFocusMode]);
 
   const clearFocus = useCallback(() => {
     setActiveFocus(null);
@@ -662,8 +655,6 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
       <section className="viewer-stage">
         <ViewerCanvas
           handleRef={canvasRef}
-          camera={camera}
-          onCameraChange={setCamera}
           section={section}
           selection={selection}
           isVisible={isVisible}
@@ -672,14 +663,10 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
         />
 
         <ViewerOverlay
-          onZoomToFit={() =>
-            setCamera((current) => frameBounds(current, zoomToFitTarget(), viewportAspect()))
-          }
+          onZoomToFit={() => canvasRef.current?.frameBounds(zoomToFitTarget())}
           onZoomToSelection={() => {
             const target = zoomToSelectionTarget();
-            if (!isEmptyBounds(target)) {
-              setCamera((current) => frameBounds(current, target, viewportAspect()));
-            }
+            if (!isEmptyBounds(target)) canvasRef.current?.frameBounds(target);
           }}
           canZoomToSelection={
             selection !== null || visibility.isolated !== null || visibility.highlighted !== null
@@ -689,7 +676,7 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
             setSelection(null);
             setOpenSpecIndex(null);
             clearFocus();
-            setCamera((current) => frameBounds(current, allFramingBounds, viewportAspect()));
+            canvasRef.current?.frameBounds(allFramingBounds);
           }}
           section={section}
           sectionBounds={allBounds}
