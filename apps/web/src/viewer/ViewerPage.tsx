@@ -231,6 +231,10 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
             }
           );
 
+          // Streaming is done: merge the per-batch fragments the upload path
+          // created into consolidated batches before anything draws again.
+          canvasRef.current?.finishLoad();
+
           const mapping = mapMeshesToElements(collected, model.elements);
           const bounds = boundsOfElements(mapping, mapping.meshesByExpressId.keys());
           const framingBounds = robustBounds(

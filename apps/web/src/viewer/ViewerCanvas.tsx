@@ -18,6 +18,8 @@ export interface ViewerCanvasHandle {
   renderFrame: () => void;
   /** Animated, direction-preserving — see camera.frameBounds(). No-op on empty bounds. */
   frameBounds: (bounds: Bounds) => void;
+  /** Call once a model's geometry has fully streamed in — merges streaming fragments into real batches. */
+  finishLoad: () => void;
   batchCount: () => number;
   frameStats: () => FrameStats | null;
 }
@@ -54,6 +56,24 @@ function toMeshData(mesh: ViewerMesh, offset: number): MeshData {
 }
 
 /**
+ * Settle whatever the streaming upload path left behind into real batches.
+ * Both halves are guarded no-ops on their own, so this is safe to call at any
+ * point: `finalizeStreaming` returns early when no streaming fragments are
+ * outstanding, `rebuildPendingBatches` returns early when no bucket is marked
+ * dirty. The second half is what makes a removal actually take —
+ * `removeMeshesForEntities` only marks the affected buckets, and nothing in
+ * the engine drains that queue on its own.
+ */
+function finalizeStreamedGeometry(renderer: Renderer): void {
+  const device = renderer.getGPUDevice();
+  const pipeline = renderer.getPipeline();
+  if (!device || !pipeline) return;
+  const scene = renderer.getScene();
+  scene.finalizeStreaming(device, pipeline);
+  scene.rebuildPendingBatches(device, pipeline);
+}
+
+/**
  * Upload one model's meshes to an already-initialised renderer. Split out of
  * the imperative handle's `addMeshes` so both the live call and the queued
  * replay (see `pendingMeshesRef`) share the exact same offset/bookkeeping
@@ -65,6 +85,7 @@ function applyMeshes(
   federation: ModelFederation,
   modelExpressIds: Map<string, Set<number>>,
   batchCountRef: { current: number },
+  geometryVersionRef: { current: number },
   modelKey: string,
   meshes: readonly ViewerMesh[]
 ): void {
@@ -78,6 +99,7 @@ function applyMeshes(
   modelExpressIds.set(modelKey, known);
   renderer.addMeshes(meshData, true);
   batchCountRef.current += 1;
+  geometryVersionRef.current += 1;
 }
 
 /**
@@ -113,6 +135,15 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
   /** Every expressId this canvas has ever been given for a model, so a render pass can enumerate what to hide. */
   const modelExpressIdsRef = useRef(new Map<string, Set<number>>());
   const batchCountRef = useRef(0);
+  /** Bumped whenever loaded geometry actually changes, so the options cache below can key off it. */
+  const geometryVersionRef = useRef(0);
+  const optionsCacheRef = useRef<{
+    section: SectionBox | null;
+    selection: { modelKey: string; expressId: number } | null;
+    isVisible: (modelKey: string, expressId: number) => 0 | 1 | 2;
+    geometryVersion: number;
+    options: RenderOptions;
+  } | null>(null);
   const animRef = useRef<number | null>(null);
   const dragRef = useRef<{ x: number; y: number; button: number } | null>(null);
   /** addMeshes calls that arrived before async init() resolved — replayed once the renderer exists. */
@@ -136,6 +167,22 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
   const hoverTokenRef = useRef(0);
 
   const buildRenderOptions = useCallback((): RenderOptions => {
+    // Every call enumerates every loaded element, and the camera paths call it
+    // per pointer-move / wheel / tween frame — none of which change any of the
+    // four things the result actually depends on. All four are stable
+    // identities across a camera-only interaction, so reference equality is a
+    // sufficient (and exact) cache key.
+    const cached = optionsCacheRef.current;
+    if (
+      cached &&
+      cached.section === sectionRef.current &&
+      cached.selection === selectionRef.current &&
+      cached.isVisible === isVisibleRef.current &&
+      cached.geometryVersion === geometryVersionRef.current
+    ) {
+      return cached.options;
+    }
+
     const hiddenIds = new Set<number>();
     const highlightedIds = new Set<number>();
     for (const [modelKey, expressIds] of modelExpressIdsRef.current) {
@@ -161,12 +208,20 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
         }
       : undefined;
 
-    return {
+    const options: RenderOptions = {
       hiddenIds,
       selectedIds: highlightedIds.size > 0 ? highlightedIds : undefined,
       selectedId: selectedId ?? undefined,
       clipBox,
     };
+    optionsCacheRef.current = {
+      section: sectionRef.current,
+      selection: selectionRef.current,
+      isVisible: isVisibleRef.current,
+      geometryVersion: geometryVersionRef.current,
+      options,
+    };
+    return options;
   }, []);
 
   useEffect(() => {
@@ -184,7 +239,7 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
         cameraRef.current = renderer.getCamera();
         // Replay any addMeshes calls that arrived while init() was still in flight.
         for (const pending of pendingMeshesRef.current) {
-          applyMeshes(renderer, federationRef.current, modelExpressIdsRef.current, batchCountRef, pending.modelKey, pending.meshes);
+          applyMeshes(renderer, federationRef.current, modelExpressIdsRef.current, batchCountRef, geometryVersionRef, pending.modelKey, pending.meshes);
         }
         pendingMeshesRef.current = [];
         renderer.onDeviceLost((info) => onError(`3D rendering stopped: ${info.message}`));
@@ -215,6 +270,10 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
       federationRef.current = new ModelFederation();
       batchCountRef.current = 0;
       pendingMeshesRef.current = [];
+      // The cache keys off section/selection/isVisible/geometryVersion, none of
+      // which the resets above touch — so it has to be dropped by hand or a
+      // remount could serve options built against the discarded id map.
+      optionsCacheRef.current = null;
       renderer.destroy();
     };
   }, [onError, buildRenderOptions]);
@@ -272,7 +331,7 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
           pendingMeshesRef.current.push({ modelKey, meshes });
           return;
         }
-        applyMeshes(renderer, federationRef.current, modelExpressIdsRef.current, batchCountRef, modelKey, meshes);
+        applyMeshes(renderer, federationRef.current, modelExpressIdsRef.current, batchCountRef, geometryVersionRef, modelKey, meshes);
         renderer.render(buildRenderOptions());
       },
       removeModel: (modelKey) => {
@@ -282,7 +341,9 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
         if (renderer && ids && ids.size > 0) {
           const offset = federationRef.current.offsetFor(modelKey);
           renderer.getScene().removeMeshesForEntities([...ids].map((id) => offset + id));
+          finalizeStreamedGeometry(renderer);
         }
+        geometryVersionRef.current += 1;
         federationRef.current.removeModel(modelKey);
         // Drop any batches for this model still queued behind an in-flight
         // init() — otherwise the drain in init().then() replays them after
@@ -297,6 +358,12 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
         if (!renderer || !camera || isEmptyBounds(bounds)) return;
         void camera.frameBounds(bounds.min, bounds.max);
         pumpCameraAnimation(renderer, camera, animRef, buildRenderOptions);
+      },
+      finishLoad: () => {
+        const renderer = rendererRef.current;
+        if (!renderer) return;
+        finalizeStreamedGeometry(renderer);
+        renderer.render(buildRenderOptions());
       },
       batchCount: () => batchCountRef.current,
       frameStats: () => rendererRef.current?.getFrameStats() ?? null,
@@ -349,10 +416,12 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
       dragRef.current = { ...drag, x: event.clientX, y: event.clientY };
 
       // addVelocity: false — no inertia, matching the direct-manipulation feel
-      // the app has always had. Sensitivity lives inside the engine now, not
-      // as an app-side multiplier, so raw pixel deltas go straight through.
-      if (drag.button === 0) camera.orbit(-dx, dy, false);
-      else camera.pan(-dx, dy, false);
+      // the app has always had. Sensitivity AND sign both live inside the
+      // engine now (orbit negates deltaX itself; pan's right axis is
+      // cross(dir, up), which points screen-left), so raw pixel deltas go
+      // straight through — negating here would invert the horizontal axis.
+      if (drag.button === 0) camera.orbit(dx, dy, false);
+      else camera.pan(dx, dy, false);
       renderer.render(buildRenderOptions());
     },
     [canvasPixel, buildRenderOptions]
@@ -389,7 +458,12 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
       const renderer = rendererRef.current;
       const camera = cameraRef.current;
       if (!renderer || !camera) return;
-      camera.zoom(event.deltaY, false);
+      // Sign only, fixed magnitude. camera.zoom() scales by the delta's
+      // magnitude, but deltaY's own scale is a deltaMode artefact — ~100 per
+      // notch in pixel mode, ~3 in line mode — so passing it raw would make
+      // zoom speed a property of the browser. 100 lands exactly on the
+      // engine's MAX_ZOOM_DELTA clamp, i.e. the old renderer's 1.1x step.
+      camera.zoom(event.deltaY > 0 ? 100 : -100, false);
       renderer.render(buildRenderOptions());
     },
     [buildRenderOptions]
