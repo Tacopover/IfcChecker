@@ -8,6 +8,7 @@ const BOUNDS = { min: { x: -5, y: 0, z: -5 }, max: { x: 5, y: 3, z: 5 } };
 
 function renderOverlay(overrides: Partial<ViewerOverlayProps> = {}) {
   const props: ViewerOverlayProps = {
+    loading: null,
     onZoomToFit: vi.fn(),
     onZoomToSelection: vi.fn(),
     canZoomToSelection: false,
@@ -91,5 +92,16 @@ describe("ViewerOverlay", () => {
   it("floats a failed load over the canvas as an alert", () => {
     renderOverlay({ messages: [{ kind: "error", text: "Geometry could not be read." }] });
     expect(screen.getByRole("alert")).toHaveTextContent("Geometry could not be read.");
+  });
+
+  it("announces streaming geometry with the file name and a running mesh count", () => {
+    renderOverlay({ loading: { fileName: "Tower-A.ifc", meshCount: 42 } });
+    expect(screen.getByRole("status")).toHaveTextContent("Loading Tower-A.ifc");
+    expect(screen.getByRole("status")).toHaveTextContent("42 meshes");
+  });
+
+  it("shows no loading indicator once nothing is streaming", () => {
+    renderOverlay({ loading: null });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

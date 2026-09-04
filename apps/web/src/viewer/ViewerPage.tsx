@@ -4,7 +4,15 @@ import type { NormalizedValue } from "@ifc-qa/shared-types";
 import type { IssueRow } from "../components/IssueTable";
 import { useCheckResults } from "../state/checkResults";
 import { useLoadedModels } from "../state/loadedModels";
-import { emptyBounds, isEmptyBounds, robustBounds, unionBounds, type Bounds } from "./bounds.js";
+import {
+  boundsCenter,
+  emptyBounds,
+  isEmptyBounds,
+  robustBounds,
+  unionBounds,
+  type Bounds,
+  type Vec3,
+} from "./bounds.js";
 import {
   buildSpecificationFocusRequest,
   resolveFocusElements,
@@ -45,7 +53,6 @@ import {
   showElements,
   showEverything,
   toggleModel,
-  visibilityCode,
   type ElementRef,
 } from "./visibility.js";
 
@@ -184,14 +191,6 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
         }))
       ),
     [parsedModels]
-  );
-
-  const isVisible = useCallback(
-    (modelKey: string, expressId: number) => {
-      const ifcType = geometry[modelKey]?.mapping.elementByExpressId.get(expressId)?.ifcType ?? "";
-      return visibilityCode(visibility, { modelKey, expressId }, ifcType);
-    },
-    [geometry, visibility]
   );
 
   const selectedElement = selection
@@ -342,8 +341,10 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
 
     // Goal 4's "camera never auto-moves" is about selection, not about this: a
     // request to go look at some elements that leaves them off screen has not
-    // taken anyone anywhere.
-    if (withGeometry.length > 0) {
+    // taken anyone anywhere. But that only holds for a request that IS the
+    // navigation (activeFocus.autoFrame) — browsing results already on screen
+    // (opening a spec, switching its isolate/highlight mode) must not recenter.
+    if (withGeometry.length > 0 && activeFocus.autoFrame) {
       const focused = boundsOfElements(loaded.mapping, withGeometry);
       canvasRef.current?.frameBounds(focused);
     }
@@ -515,6 +516,15 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
     return bounds;
   }, [selection, geometry, visibility]);
 
+  // The orbit pivot for the *next* drag: the current selection's center, or
+  // null when nothing is selected (the canvas then falls back to a viewpoint
+  // raycast). Reuses the exact same "what counts as selected" definition as
+  // "Zoom to selection" so the two stay in agreement.
+  const getOrbitPivot = useCallback((): Vec3 | null => {
+    const target = zoomToSelectionTarget();
+    return isEmptyBounds(target) ? null : boundsCenter(target);
+  }, [zoomToSelectionTarget]);
+
   const loadedModelKeys = useMemo(() => new Set(Object.keys(geometry)), [geometry]);
   const totalSkipped = Object.values(geometry).reduce(
     (total, loaded) => total + loaded.skippedExpressIds.length,
@@ -661,12 +671,21 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
           handleRef={canvasRef}
           section={section}
           selection={selection}
-          isVisible={isVisible}
+          visibility={visibility}
           onPick={setSelection}
           onError={setError}
+          getOrbitPivot={getOrbitPivot}
         />
 
         <ViewerOverlay
+          loading={
+            busyModelKey
+              ? {
+                  fileName: parsedModels.find((model) => model.key === busyModelKey)?.fileName ?? busyModelKey,
+                  meshCount: progress,
+                }
+              : null
+          }
           onZoomToFit={() => canvasRef.current?.frameBounds(zoomToFitTarget())}
           onZoomToSelection={() => {
             const target = zoomToSelectionTarget();

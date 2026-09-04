@@ -73,3 +73,66 @@ export function CloseIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+/** Open eye — the element (or model) is shown. */
+export function EyeIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="2.6" />
+    </Glyph>
+  );
+}
+
+/** The same eye, struck through — hidden. */
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="2.6" />
+      <path d="M3.5 3.5l17 17" />
+    </Glyph>
+  );
+}
+
+/** One solid box between two dashed, excluded ones — keep this, drop the rest. */
+export function IsolateIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="9.5" y="4" width="5" height="16" />
+      <rect x="2" y="7" width="4" height="10" strokeDasharray="2.2 2.2" />
+      <rect x="18" y="7" width="4" height="10" strokeDasharray="2.2 2.2" />
+    </Glyph>
+  );
+}
+
+/** A four-point sparkle — tint this, don't hide everything else. */
+export function HighlightIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 2 13.5 9 20.5 10.5 13.5 12 12 19 10.5 12 3.5 10.5 10.5 9Z" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
+/** A tray with an arrow dropping into it — bring the geometry in. */
+export function LoadModelIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 3v11" />
+      <path d="M7.5 10.5 12 15l4.5-4.5" />
+      <path d="M4 15.5v3A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-3" />
+    </Glyph>
+  );
+}
+
+/** The same tray, arrow lifting out — give the mesh buffers back. */
+export function UnloadModelIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 14V3" />
+      <path d="M7.5 7.5 12 3l4.5 4.5" />
+      <path d="M4 15.5v3A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-3" />
+    </Glyph>
+  );
+}

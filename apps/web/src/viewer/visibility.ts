@@ -38,6 +38,12 @@ export function refKey(ref: ElementRef): string {
   return `${ref.modelKey}#${ref.expressId}`;
 }
 
+/** Inverse of `refKey` — splits on the LAST `#`, so a `modelKey` containing one stays intact. */
+export function parseRefKey(key: string): ElementRef {
+  const separatorIndex = key.lastIndexOf("#");
+  return { modelKey: key.slice(0, separatorIndex), expressId: Number(key.slice(separatorIndex + 1)) };
+}
+
 export function initialVisibility(): VisibilityState {
   return {
     hidden: new Set(),

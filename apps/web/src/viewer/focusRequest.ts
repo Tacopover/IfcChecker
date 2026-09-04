@@ -26,6 +26,14 @@ export interface ViewerFocusRequest {
   rows: IssueRow[];
   /** Failing elements the request left out because they live in a different file. */
   otherFileCount: number;
+  /**
+   * Whether applying this request should move the camera. True only for a
+   * request that IS the navigation (the Validate page's "view in 3D"); false
+   * for requests raised by browsing results already on screen (opening a
+   * spec, switching its isolate/highlight mode), which must leave the camera
+   * where the user left it.
+   */
+  autoFrame: boolean;
 }
 
 export function buildElementFocusRequest(row: IssueRow): ViewerFocusRequest {
@@ -35,6 +43,7 @@ export function buildElementFocusRequest(row: IssueRow): ViewerFocusRequest {
     label: elementLabel(row),
     rows: [row],
     otherFileCount: 0,
+    autoFrame: true,
   };
 }
 
@@ -54,6 +63,7 @@ export function buildSpecificationFocusRequest(summary: SpecificationSummary): V
     label: summary.name,
     rows,
     otherFileCount: summary.violations.length - rows.length,
+    autoFrame: false,
   };
 }
 

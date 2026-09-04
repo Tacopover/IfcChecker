@@ -8,6 +8,7 @@ import {
   isHighlighted,
   isolateElements,
   isVisible,
+  parseRefKey,
   refKey,
   showElements,
   showEverything,
@@ -24,6 +25,17 @@ const pipe = { modelKey: "mep", expressId: 100 };
 describe("refKey", () => {
   it("separates the same express id in two different files", () => {
     expect(refKey(wall)).not.toBe(refKey(pipe));
+  });
+});
+
+describe("parseRefKey", () => {
+  it("round-trips refKey's output", () => {
+    expect(parseRefKey(refKey(wall))).toEqual(wall);
+    expect(parseRefKey(refKey(pipe))).toEqual(pipe);
+  });
+
+  it("splits on the last # so a modelKey containing one stays intact", () => {
+    expect(parseRefKey("weird#model#42")).toEqual({ modelKey: "weird#model", expressId: 42 });
   });
 });
 

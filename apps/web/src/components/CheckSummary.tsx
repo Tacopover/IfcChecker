@@ -240,10 +240,12 @@ export function CheckSummary({
                 <th className="num">Failed</th>
                 <th className="num">Success</th>
                 <th className="col-issues">Issues</th>
+                {onViewSpecificationIn3D && <th className="col-view3d">3D</th>}
               </tr>
             </thead>
             <tbody>
               {visible.map(({ summary, index }) => {
+                const columnCount = onViewSpecificationIn3D ? 7 : 6;
                 const status = statusOf(summary);
                 const isExpanded = expanded.has(index);
                 const issueCount = summary.violations.length;
@@ -292,25 +294,29 @@ export function CheckSummary({
                               </span>
                               {issueLabel}
                             </button>
-                            {onViewSpecificationIn3D && (
-                              <button
-                                type="button"
-                                className="ghost-btn view-in-3d"
-                                onClick={() => onViewSpecificationIn3D(summary)}
-                              >
-                                View in 3D
-                              </button>
-                            )}
                           </>
                         ) : (
                           <span className="dash">-</span>
                         )}
                       </td>
+                      {onViewSpecificationIn3D && (
+                        <td className="col-view3d">
+                          {issueCount > 0 && (
+                            <button
+                              type="button"
+                              className="spec-view3d-btn"
+                              onClick={() => onViewSpecificationIn3D(summary)}
+                            >
+                              View in 3D
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
 
                     {status === "not-checked" && (
                       <tr className="spec-not-checked">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           {/* The worst failure mode there is, and it arrives from two directions: a
                               rule whose elements we cannot select matches nothing, and a rule whose
                               every requirement we had to drop finds nothing wrong. Both report a
@@ -337,7 +343,7 @@ export function CheckSummary({
                       !isEmptyRequiredMatch(summary) &&
                       !isProhibitedMatchFailure(summary) && (
                       <tr className="spec-cardinality">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           {/* Failed as a whole, with no failing element to show for it — so the
                               reason has to be stated, or the row reads as an empty accusation. */}
                           <p role="alert">{summary.cardinalityFailure}</p>
@@ -347,7 +353,7 @@ export function CheckSummary({
 
                     {status === "not-applied" && !isEmptyRequiredMatch(summary) && (
                       <tr className="spec-not-applied">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           {/* Ran, but selected nothing — a real measurement, unlike "not checked". */}
                           <p role="alert">
                             No element matched this specification, so nothing was checked. Its
@@ -359,7 +365,7 @@ export function CheckSummary({
 
                     {status !== "not-checked" && droppedRequirements(summary).length > 0 && (
                       <tr className="spec-partial">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           {/* Ran, but against fewer requirements than the author wrote — so a pass
                               here is weaker than the source asked for, and says so. */}
                           <p role="alert">
@@ -379,7 +385,7 @@ export function CheckSummary({
 
                     {isExpanded && (
                       <tr className="drawer-row">
-                        <td colSpan={6}>
+                        <td colSpan={columnCount}>
                           <IssueTable
                             results={summary.violations}
                             onSelectElement={onSelectElement}

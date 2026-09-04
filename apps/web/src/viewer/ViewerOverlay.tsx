@@ -63,6 +63,8 @@ function Chip({ kind, label, count, clearLabel, onClear }: ChipProps) {
 }
 
 export interface ViewerOverlayProps {
+  /** Set while a model's geometry is streaming in — the rail's own progress text is easy to miss. */
+  loading: { fileName: string; meshCount: number } | null;
   onZoomToFit: () => void;
   onZoomToSelection: () => void;
   /** False when nothing is picked and nothing is isolated or highlighted — there is no target. */
@@ -93,6 +95,7 @@ export interface ViewerOverlayProps {
 }
 
 export function ViewerOverlay({
+  loading,
   onZoomToFit,
   onZoomToSelection,
   canZoomToSelection,
@@ -117,6 +120,18 @@ export function ViewerOverlay({
 
   return (
     <>
+      {loading && (
+        <div className="viewer-ov viewer-ov-tc">
+          <div className="viewer-glass viewer-loading" role="status" aria-live="polite">
+            <span className="viewer-loading-spinner" aria-hidden="true" />
+            <span>
+              Loading {loading.fileName}
+              <span className="viewer-loading-count"> — {loading.meshCount.toLocaleString()} meshes</span>
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="viewer-ov viewer-ov-tl">
         <div className="viewer-glass viewer-tools">
           <Tool label="Zoom to fit" onClick={onZoomToFit}>

@@ -1,5 +1,13 @@
 import { useState } from "react";
 import type { ViewerTreeNode } from "./viewerTree.js";
+import {
+  EyeIcon,
+  EyeOffIcon,
+  HighlightIcon,
+  IsolateIcon,
+  LoadModelIcon,
+  UnloadModelIcon,
+} from "./viewerIcons";
 
 // The tree spans every loaded file whether or not its geometry is resident:
 // browsing the structure of a 1.6 GB federation costs nothing, while holding
@@ -76,32 +84,60 @@ function TreeRow({
               type="button"
               className="viewer-tree-action"
               disabled={!isLoaded}
+              aria-label={hiddenModelKeys.has(node.modelKey) ? "Show" : "Hide"}
+              data-tip={hiddenModelKeys.has(node.modelKey) ? "Show" : "Hide"}
               onClick={() => onToggleModel(node.modelKey)}
             >
-              {hiddenModelKeys.has(node.modelKey) ? "Show" : "Hide"}
+              {hiddenModelKeys.has(node.modelKey) ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
             </button>
             <button
               type="button"
               className="viewer-tree-action"
               disabled={isBusy}
+              aria-label={isBusy ? "Loading…" : isLoaded ? "Unload" : "Load 3D"}
+              data-tip={isBusy ? "Loading…" : isLoaded ? "Unload" : "Load 3D"}
               onClick={() => (isLoaded ? onUnloadModel(node.modelKey) : onLoadModel(node.modelKey))}
             >
-              {isBusy ? "Loading…" : isLoaded ? "Unload" : "Load 3D"}
+              {isLoaded ? <UnloadModelIcon size={15} /> : <LoadModelIcon size={15} />}
             </button>
           </>
         ) : (
           <>
-            <button type="button" className="viewer-tree-action" onClick={() => onIsolate(node)}>
-              Isolate
+            <button
+              type="button"
+              className="viewer-tree-action"
+              aria-label="Isolate"
+              data-tip="Isolate"
+              onClick={() => onIsolate(node)}
+            >
+              <IsolateIcon size={15} />
             </button>
-            <button type="button" className="viewer-tree-action" onClick={() => onHighlight(node)}>
-              Highlight
+            <button
+              type="button"
+              className="viewer-tree-action"
+              aria-label="Highlight"
+              data-tip="Highlight"
+              onClick={() => onHighlight(node)}
+            >
+              <HighlightIcon size={15} />
             </button>
-            <button type="button" className="viewer-tree-action" onClick={() => onHide(node)}>
-              Hide
+            <button
+              type="button"
+              className="viewer-tree-action"
+              aria-label="Hide"
+              data-tip="Hide"
+              onClick={() => onHide(node)}
+            >
+              <EyeOffIcon size={15} />
             </button>
-            <button type="button" className="viewer-tree-action" onClick={() => onShow(node)}>
-              Show
+            <button
+              type="button"
+              className="viewer-tree-action"
+              aria-label="Show"
+              data-tip="Show"
+              onClick={() => onShow(node)}
+            >
+              <EyeIcon size={15} />
             </button>
           </>
         )}

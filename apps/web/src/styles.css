@@ -2364,8 +2364,38 @@ tr.drawer-row > td {
   text-align: right;
 }
 
+.spec-table .col-view3d {
+  width: 7.5rem;
+  text-align: right;
+}
+
 .spec-table td {
   vertical-align: middle;
+}
+
+/* Distinct at rest, not just on hover like .ghost-btn — this button leaves the
+   page (into the 3D viewer) rather than toggling something on it, so it reads
+   as a different kind of action from its neighbour, not a second copy of it. */
+.spec-view3d-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.spec-view3d-btn:hover {
+  background: var(--accent-soft);
 }
 
 .check-summary .spec-name {
@@ -3838,6 +3868,43 @@ body.col-resizing {
   max-width: min(34rem, 92%);
 }
 
+.viewer-ov-tc {
+  top: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.viewer-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.viewer-loading-spinner {
+  flex: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.viewer-loading-count {
+  color: #9fb0c3;
+  font-weight: 400;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-loading-spinner {
+    animation: none;
+  }
+}
+
 /* Chrome floating on the viewport stays dark in both themes: it belongs to the
    model, and the model is drawn against a dark ground whatever the page does. */
 .viewer-glass {
@@ -4092,11 +4159,11 @@ body.col-resizing {
 
 .viewer-tree-row:hover .viewer-tree-action,
 .viewer-tree-row:focus-within .viewer-tree-action {
-  display: inline-block;
+  display: grid;
 }
 
 .viewer-tree-row[data-kind="model"] .viewer-tree-action {
-  display: inline-block;
+  display: grid;
 }
 
 .viewer-tree-twisty {
@@ -4136,14 +4203,61 @@ body.col-resizing {
   font-weight: 600;
 }
 
+/* Icon, not text — a row with 2-4 text buttons squeezed a long name down to a
+   sliver, since none of them can shrink below their own label. A glyph's
+   automatic minimum is a fraction of that, so the label keeps real room. */
 .viewer-tree-action {
-  border: 1px solid var(--border);
-  background: var(--surface);
+  position: relative;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+  border: 0;
+  background: none;
   color: var(--faint);
   border-radius: 4px;
   cursor: pointer;
-  font-size: 10.5px;
-  padding: 0 0.35rem;
+  padding: 0;
+}
+
+.viewer-tree-action:hover {
+  background: var(--panel-line, var(--accent-soft));
+}
+
+.viewer-tree-action:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+/* Same tooltip-on-hover contract as .viewer-tool, sized down for a tree row. */
+.viewer-tree-action::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0d1219;
+  color: #e6edf5;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 90ms ease;
+  z-index: 1;
+}
+
+.viewer-tree-action:hover::after,
+.viewer-tree-action:focus-visible::after {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-tree-action::after {
+    transition: none;
+  }
 }
 
 /* Notes and errors are toasts over the canvas now; this is what is left, the

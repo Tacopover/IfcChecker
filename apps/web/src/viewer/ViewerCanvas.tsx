@@ -2,10 +2,11 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { Camera, Renderer, type ClipBox, type FrameStats, type RenderOptions } from "@ifc-lite/renderer";
 import type { MeshData } from "@ifc-lite/geometry";
-import { isEmptyBounds, type Bounds } from "./bounds.js";
+import { isEmptyBounds, type Bounds, type Vec3 } from "./bounds.js";
 import { ModelFederation } from "./federation.js";
 import type { ViewerMesh } from "./meshMapping.js";
 import type { SectionBox } from "./sectionBox.js";
+import { parseRefKey, type VisibilityState } from "./visibility.js";
 
 // The canvas and the GPU device, and nothing else. Everything it is told to
 // draw arrives as already-decided state, so the interesting behaviour stays in
@@ -27,15 +28,29 @@ export interface ViewerCanvasHandle {
 interface ViewerCanvasProps {
   section: SectionBox | null;
   selection: { modelKey: string; expressId: number } | null;
-  /** 0 hidden / 1 visible / 2 visible-and-highlighted — see visibility.ts's `visibilityCode`. */
-  isVisible: (modelKey: string, expressId: number) => 0 | 1 | 2;
+  /**
+   * The raw state, not a derived per-element callback — so isolate/highlight
+   * translate into GPU id sets in time proportional to what changed (the
+   * isolated/highlighted set), not to every element ever loaded. See
+   * `buildRenderOptions`'s three independent caches below.
+   */
+  visibility: VisibilityState;
   onPick: (hit: { modelKey: string; expressId: number } | null) => void;
   onError: (message: string) => void;
+  /**
+   * World-space center of whatever counts as "selected" right now (picked
+   * element, else isolated/highlighted set), or null when nothing is. Read at
+   * the start of every orbit drag to decide the pivot — see `onPointerDown`.
+   */
+  getOrbitPivot: () => Vec3 | null;
   handleRef?: Ref<ViewerCanvasHandle>;
 }
 
 /** Shortest gap between two hover picks. Well under a pointer event stream, well over a frame. */
 const HOVER_PICK_INTERVAL_MS = 80;
+
+/** Shared empty id set for the isolated case: isolation is absolute, so nothing else needs hiding. Never mutated. */
+const EMPTY_IDS: Set<number> = new Set();
 
 function toMeshData(mesh: ViewerMesh, offset: number): MeshData {
   return {
@@ -83,7 +98,7 @@ function finalizeStreamedGeometry(renderer: Renderer): void {
 function applyMeshes(
   renderer: Renderer,
   federation: ModelFederation,
-  modelExpressIds: Map<string, Set<number>>,
+  modelExpressIds: Map<string, Map<number, string>>,
   batchCountRef: { current: number },
   geometryVersionRef: { current: number },
   modelKey: string,
@@ -91,9 +106,9 @@ function applyMeshes(
 ): void {
   if (meshes.length === 0) return;
   const offset = federation.offsetFor(modelKey);
-  const known = modelExpressIds.get(modelKey) ?? new Set<number>();
+  const known = modelExpressIds.get(modelKey) ?? new Map<number, string>();
   const meshData = meshes.map((mesh) => {
-    known.add(mesh.expressId);
+    known.set(mesh.expressId, mesh.ifcType);
     return toMeshData(mesh, offset);
   });
   modelExpressIds.set(modelKey, known);
@@ -127,23 +142,40 @@ function pumpCameraAnimation(
   animRef.current = requestAnimationFrame(tick);
 }
 
-export function ViewerCanvas({ section, selection, isVisible, onPick, onError, handleRef }: ViewerCanvasProps) {
+export function ViewerCanvas({
+  section,
+  selection,
+  visibility,
+  onPick,
+  onError,
+  getOrbitPivot,
+  handleRef,
+}: ViewerCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const cameraRef = useRef<Camera | null>(null);
   const federationRef = useRef(new ModelFederation());
-  /** Every expressId this canvas has ever been given for a model, so a render pass can enumerate what to hide. */
-  const modelExpressIdsRef = useRef(new Map<string, Set<number>>());
+  /** Every expressId this canvas has ever been given for a model, to its ifcType — so a render pass can enumerate what to hide by type without asking the app. */
+  const modelExpressIdsRef = useRef(new Map<string, Map<number, string>>());
   const batchCountRef = useRef(0);
-  /** Bumped whenever loaded geometry actually changes, so the options cache below can key off it. */
+  /** Bumped whenever loaded geometry actually changes, so the caches below can key off it. */
   const geometryVersionRef = useRef(0);
-  const optionsCacheRef = useRef<{
-    section: SectionBox | null;
-    selection: { modelKey: string; expressId: number } | null;
-    isVisible: (modelKey: string, expressId: number) => 0 | 1 | 2;
+  /**
+   * `hiddenIds` is the one piece that genuinely requires enumerating every
+   * loaded element (a hidden type/model membership test has no cheaper index),
+   * so it gets its own cache keyed only on what it actually depends on —
+   * unaffected by isolated/highlighted changing.
+   */
+  const hiddenIdsCacheRef = useRef<{
+    hidden: ReadonlySet<string>;
+    hiddenTypes: ReadonlySet<string>;
+    hiddenModels: ReadonlySet<string>;
     geometryVersion: number;
-    options: RenderOptions;
+    ids: Set<number>;
   } | null>(null);
+  /** isolated/highlighted are already the exact element set — translating them costs O(selection), not O(everything loaded). */
+  const isolatedIdsCacheRef = useRef<{ isolated: ReadonlySet<string> | null; ids: Set<number> | null } | null>(null);
+  const highlightedIdsCacheRef = useRef<{ highlighted: ReadonlySet<string> | null; ids: Set<number> } | null>(null);
   const animRef = useRef<number | null>(null);
   const dragRef = useRef<{ x: number; y: number; button: number } | null>(null);
   /** addMeshes calls that arrived before async init() resolved — replayed once the renderer exists. */
@@ -155,8 +187,8 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
   sectionRef.current = section;
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  const isVisibleRef = useRef(isVisible);
-  isVisibleRef.current = isVisible;
+  const visibilityRef = useRef(visibility);
+  visibilityRef.current = visibility;
 
   // Both drive the cursor and nothing else, so they are the only pointer state
   // that is allowed to re-render: a drag begins and ends once, and the hover
@@ -166,33 +198,82 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
   const lastHoverRef = useRef(0);
   const hoverTokenRef = useRef(0);
 
-  const buildRenderOptions = useCallback((): RenderOptions => {
-    // Every call enumerates every loaded element, and the camera paths call it
-    // per pointer-move / wheel / tween frame — none of which change any of the
-    // four things the result actually depends on. All four are stable
-    // identities across a camera-only interaction, so reference equality is a
-    // sufficient (and exact) cache key.
-    const cached = optionsCacheRef.current;
+  /** expressId -> federated global id, translating one model's ref keys at a time. */
+  const toGlobalIds = useCallback((keys: Iterable<string>): Set<number> => {
+    const ids = new Set<number>();
+    for (const key of keys) {
+      const { modelKey, expressId } = parseRefKey(key);
+      ids.add(federationRef.current.offsetFor(modelKey) + expressId);
+    }
+    return ids;
+  }, []);
+
+  const getHiddenIds = useCallback((state: VisibilityState): Set<number> => {
+    const cached = hiddenIdsCacheRef.current;
     if (
       cached &&
-      cached.section === sectionRef.current &&
-      cached.selection === selectionRef.current &&
-      cached.isVisible === isVisibleRef.current &&
+      cached.hidden === state.hidden &&
+      cached.hiddenTypes === state.hiddenTypes &&
+      cached.hiddenModels === state.hiddenModels &&
       cached.geometryVersion === geometryVersionRef.current
     ) {
-      return cached.options;
+      return cached.ids;
     }
 
-    const hiddenIds = new Set<number>();
-    const highlightedIds = new Set<number>();
+    const ids = new Set<number>();
     for (const [modelKey, expressIds] of modelExpressIdsRef.current) {
       const offset = federationRef.current.offsetFor(modelKey);
-      for (const expressId of expressIds) {
-        const code = isVisibleRef.current(modelKey, expressId);
-        if (code === 0) hiddenIds.add(offset + expressId);
-        else if (code === 2) highlightedIds.add(offset + expressId);
+      if (state.hiddenModels.has(modelKey)) {
+        for (const expressId of expressIds.keys()) ids.add(offset + expressId);
+        continue;
+      }
+      for (const [expressId, ifcType] of expressIds) {
+        if (state.hiddenTypes.has(ifcType.toUpperCase()) || state.hidden.has(`${modelKey}#${expressId}`)) {
+          ids.add(offset + expressId);
+        }
       }
     }
+
+    hiddenIdsCacheRef.current = {
+      hidden: state.hidden,
+      hiddenTypes: state.hiddenTypes,
+      hiddenModels: state.hiddenModels,
+      geometryVersion: geometryVersionRef.current,
+      ids,
+    };
+    return ids;
+  }, []);
+
+  const getIsolatedIds = useCallback(
+    (state: VisibilityState): Set<number> | null => {
+      const cached = isolatedIdsCacheRef.current;
+      if (cached && cached.isolated === state.isolated) return cached.ids;
+      const ids = state.isolated === null ? null : toGlobalIds(state.isolated);
+      isolatedIdsCacheRef.current = { isolated: state.isolated, ids };
+      return ids;
+    },
+    [toGlobalIds]
+  );
+
+  const getHighlightedIds = useCallback(
+    (state: VisibilityState): Set<number> => {
+      const cached = highlightedIdsCacheRef.current;
+      if (cached && cached.highlighted === state.highlighted) return cached.ids;
+      const ids = state.highlighted === null ? new Set<number>() : toGlobalIds(state.highlighted);
+      highlightedIdsCacheRef.current = { highlighted: state.highlighted, ids };
+      return ids;
+    },
+    [toGlobalIds]
+  );
+
+  const buildRenderOptions = useCallback((): RenderOptions => {
+    const state = visibilityRef.current;
+    // Isolation is absolute (visibility.ts's `isVisible`): an isolated element
+    // shows even if it is a hidden type/model, so hiddenIds is irrelevant once
+    // isolatedIds is set — computing it would be wasted work every call.
+    const isolatedIds = getIsolatedIds(state);
+    const hiddenIds = isolatedIds ? EMPTY_IDS : getHiddenIds(state);
+    const highlightedIds = getHighlightedIds(state);
 
     const selected = selectionRef.current;
     const selectedId = selected
@@ -208,21 +289,14 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
         }
       : undefined;
 
-    const options: RenderOptions = {
+    return {
       hiddenIds,
+      isolatedIds,
       selectedIds: highlightedIds.size > 0 ? highlightedIds : undefined,
       selectedId: selectedId ?? undefined,
       clipBox,
     };
-    optionsCacheRef.current = {
-      section: sectionRef.current,
-      selection: selectionRef.current,
-      isVisible: isVisibleRef.current,
-      geometryVersion: geometryVersionRef.current,
-      options,
-    };
-    return options;
-  }, []);
+  }, [getHiddenIds, getIsolatedIds, getHighlightedIds]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -270,10 +344,12 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
       federationRef.current = new ModelFederation();
       batchCountRef.current = 0;
       pendingMeshesRef.current = [];
-      // The cache keys off section/selection/isVisible/geometryVersion, none of
-      // which the resets above touch — so it has to be dropped by hand or a
-      // remount could serve options built against the discarded id map.
-      optionsCacheRef.current = null;
+      // None of the resets above touch the caches below — so they have to be
+      // dropped by hand or a remount could serve ids built against the
+      // discarded id map (stale federation offsets, stale hidden-type scans).
+      hiddenIdsCacheRef.current = null;
+      isolatedIdsCacheRef.current = null;
+      highlightedIdsCacheRef.current = null;
       renderer.destroy();
     };
   }, [onError, buildRenderOptions]);
@@ -318,7 +394,7 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
     const renderer = rendererRef.current;
     if (!renderer) return;
     renderer.render(buildRenderOptions());
-  }, [section, selection, isVisible, buildRenderOptions]);
+  }, [section, selection, visibility, buildRenderOptions]);
 
   useImperativeHandle(
     handleRef,
@@ -340,7 +416,7 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
         modelExpressIdsRef.current.delete(modelKey);
         if (renderer && ids && ids.size > 0) {
           const offset = federationRef.current.offsetFor(modelKey);
-          renderer.getScene().removeMeshesForEntities([...ids].map((id) => offset + id));
+          renderer.getScene().removeMeshesForEntities([...ids.keys()].map((id) => offset + id));
           finalizeStreamedGeometry(renderer);
         }
         geometryVersionRef.current += 1;
@@ -379,11 +455,40 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
     return [clientX - rect.left, clientY - rect.top];
   }, []);
 
-  const onPointerDown = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { x: event.clientX, y: event.clientY, button: event.button };
-    setDragMode(event.button === 0 ? "orbit" : "pan");
-  }, []);
+  const onPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLCanvasElement>) => {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      dragRef.current = { x: event.clientX, y: event.clientY, button: event.button };
+      setDragMode(event.button === 0 ? "orbit" : "pan");
+      if (event.button !== 0) return;
+
+      // Decided once per drag, not tracked live: orbit around the current
+      // selection if there is one, otherwise around whatever sits at the
+      // center of the current view (a scene raycast at the canvas midpoint),
+      // falling back to the engine's default (camera.target) over empty space.
+      const camera = cameraRef.current;
+      if (!camera) return;
+      const pivot = getOrbitPivot();
+      if (pivot) {
+        camera.setOrbitCenter(pivot);
+        return;
+      }
+
+      const renderer = rendererRef.current;
+      const canvas = canvasRef.current;
+      if (!renderer || !canvas) {
+        camera.setOrbitCenter(null);
+        return;
+      }
+      const pickOptions = buildRenderOptions();
+      const hit = renderer.raycastScene(canvas.clientWidth / 2, canvas.clientHeight / 2, {
+        hiddenIds: pickOptions.hiddenIds,
+        isolatedIds: pickOptions.isolatedIds,
+      });
+      camera.setOrbitCenter(hit ? hit.intersection.point : null);
+    },
+    [getOrbitPivot, buildRenderOptions]
+  );
 
   const onPointerMove = useCallback(
     (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -401,12 +506,16 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
         const pixel = canvasPixel(event.clientX, event.clientY);
         if (!renderer || !pixel) return;
         const token = ++hoverTokenRef.current;
-        // hiddenIds must be passed explicitly — pick() has no fallback to the
-        // last render()'s visibility, unlike the old renderer's shader-side hide.
-        void renderer.pick(pixel[0], pixel[1], { hiddenIds: buildRenderOptions().hiddenIds }).then((result) => {
-          if (hoverTokenRef.current !== token || dragRef.current) return;
-          setOverElement(result !== null);
-        });
+        // hiddenIds/isolatedIds must be passed explicitly — pick() has no
+        // fallback to the last render()'s visibility, unlike the old
+        // renderer's shader-side hide.
+        const pickOptions = buildRenderOptions();
+        void renderer
+          .pick(pixel[0], pixel[1], { hiddenIds: pickOptions.hiddenIds, isolatedIds: pickOptions.isolatedIds })
+          .then((result) => {
+            if (hoverTokenRef.current !== token || dragRef.current) return;
+            setOverElement(result !== null);
+          });
         return;
       }
 
@@ -440,9 +549,12 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
       const renderer = rendererRef.current;
       const pixel = canvasPixel(event.clientX, event.clientY);
       if (!renderer || !pixel) return;
-      void renderer.pick(pixel[0], pixel[1], { hiddenIds: buildRenderOptions().hiddenIds }).then((result) => {
-        onPick(result ? federationRef.current.fromGlobalId(result.expressId) : null);
-      });
+      const pickOptions = buildRenderOptions();
+      void renderer
+        .pick(pixel[0], pixel[1], { hiddenIds: pickOptions.hiddenIds, isolatedIds: pickOptions.isolatedIds })
+        .then((result) => {
+          onPick(result ? federationRef.current.fromGlobalId(result.expressId) : null);
+        });
     },
     [onPick, canvasPixel, buildRenderOptions]
   );
