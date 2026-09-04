@@ -284,6 +284,10 @@ export function ViewerCanvas({ section, selection, isVisible, onPick, onError, h
           renderer.getScene().removeMeshesForEntities([...ids].map((id) => offset + id));
         }
         federationRef.current.removeModel(modelKey);
+        // Drop any batches for this model still queued behind an in-flight
+        // init() — otherwise the drain in init().then() replays them after
+        // the caller has already asked for the model to be gone.
+        pendingMeshesRef.current = pendingMeshesRef.current.filter((pending) => pending.modelKey !== modelKey);
         renderer?.render(buildRenderOptions());
       },
       renderFrame: () => rendererRef.current?.render(buildRenderOptions()),
