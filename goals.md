@@ -76,25 +76,6 @@ pass-through has fallen to the prose we choose not to surface.
 
 ---
 
-## 4. Navigate from a check result to its elements in the viewer
-
-**Why:** a results table is a list of GlobalIds. Clicking a row should take the user to the
-elements that failed, isolated and framed, so a violation becomes something they can see.
-
-**Done when:**
-- Clicking a row in the Validate page's issue table isolates the failing elements in the viewer
-  and zooms to fit, with a visible un-isolate / reset control.
-- ~~Results carry the `LoadedModel` key rather than the file name~~ — done: `CheckRow.modelKey`.
-- Failing elements only; the validator needs no change, since that is exactly what it returns.
-- ~~Decided: whether a row navigates to its one element or the table groups by rule~~ — done:
-  results group by specification, and a row selects its one element.
-- Handled honestly: a failing element with no geometry, and a clicked result whose model has
-  not had its geometry loaded yet.
-
-**Size:** medium. Its `expressId` prerequisite is already met — the 3D viewer is built.
-
----
-
 ## Smaller known gaps
 
 Not scheduled; each is self-contained.
