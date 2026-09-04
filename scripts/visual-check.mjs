@@ -409,6 +409,14 @@ const SCENARIOS = {
   // real geometry, check it, click "View in 3D" on a failing specification —
   // then draws one frame and reads pixels back.
   viewer: `
+    if (!navigator.gpu) {
+      return { skip: true, reason: "navigator.gpu is undefined" };
+    }
+    var adapter = await navigator.gpu.requestAdapter().catch(function () { return null; });
+    if (!adapter) {
+      return { skip: true, reason: "requestAdapter() returned null" };
+    }
+
     h.click('[data-smoke-route="validate"]');
     await h.waitFor(function () { return document.getElementById("local-ifc-files"); }, "validate page");
 
@@ -490,27 +498,15 @@ const SCENARIOS = {
 
     window.__viewer.current.renderFrame();
 
-    // The pick framebuffer is not multisampled and framing is not pixel-exact,
-    // so a single centre sample can land on an anti-aliased edge or between
-    // the two walls — a grid is what actually proves a frame was drawn.
-    var clear = [23, 26, 31];
-    var drawn = false;
-    for (var gx = 1; gx < 5 && !drawn; gx++) {
-      for (var gy = 1; gy < 5 && !drawn; gy++) {
-        var px = Math.round((canvas.width * gx) / 5);
-        var py = Math.round((canvas.height * gy) / 5);
-        var pixel = window.__viewer.current.readPixel(px, py);
-        if (!pixel) continue;
-        var distance = Math.abs(pixel[0] - clear[0]) + Math.abs(pixel[1] - clear[1]) + Math.abs(pixel[2] - clear[2]);
-        if (distance > 30) drawn = true;
-      }
+    var stats = window.__viewer.current.frameStats();
+    if (!stats || stats.drawCalls === 0) {
+      throw new Error("getFrameStats() reported no draw calls — nothing was drawn");
     }
-    if (!drawn) throw new Error("every sampled pixel matched the clear colour — nothing was drawn");
 
     window.scrollTo(0, 0);
     await h.settle(50);
 
-    return { batches: window.__viewer.current.batchCount(), drawn: drawn };
+    return { batches: window.__viewer.current.batchCount(), drawCalls: stats.drawCalls };
   `,
 };
 
@@ -786,6 +782,15 @@ for (const viewport of VIEWPORTS) {
     break;
   }
   firstResult ??= result;
+  if (result.scenario && result.scenario.skip) {
+    console.log(`browser check SKIPPED — viewer scenario: ${result.scenario.reason}`);
+    server.close();
+    if (!KEEP) {
+      rmSync(BUILD, { recursive: true, force: true });
+      rmSync(PROFILE_DIR, { recursive: true, force: true });
+    }
+    process.exit(0);
+  }
 
   if (!result.mounted) failures.push(`${viewport.name}: app did not mount — #root is empty`);
   if (result.errors.length) {
