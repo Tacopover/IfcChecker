@@ -1550,6 +1550,7 @@ caption {
   color: var(--fail);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 10.5px;
+  white-space: pre-wrap;
 }
 
 .failing-more {
