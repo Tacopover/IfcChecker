@@ -496,6 +496,16 @@ describe("adapter parity — unit scales", () => {
     expect(fromWebIfc.IFCLENGTHMEASURE).toBeCloseTo(1e-3, 12);
   });
 
+  // A degree is a conversion-based unit: a factor in radians, reached through an IfcMeasureWithUnit.
+  it("a conversion-based unit scales by its factor in the base unit", async () => {
+    const path = fixturePath("conversion-based-unit.ifc");
+    const fromIfcLite = (await new IfcLiteAdapter().parse(path)).unitScales;
+    const fromWebIfc = (await new WebIfcAdapter().parse(path)).unitScales;
+
+    expect(fromIfcLite.IFCPLANEANGLEMEASURE).toBeCloseTo(0.017453292519943278, 12);
+    expect(fromWebIfc.IFCPLANEANGLEMEASURE).toBeCloseTo(0.017453292519943278, 12);
+  });
+
   // Only measures that actually rescale are listed, so a map with no entry for a measure means
   // "already SI" rather than "not looked at" — the two must not be confused at the read site.
   it("records nothing for a measure the file states in SI", async () => {

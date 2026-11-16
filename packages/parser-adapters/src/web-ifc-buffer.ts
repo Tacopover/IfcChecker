@@ -25,7 +25,7 @@ type WebIfcLine = Record<string, any>;
  * exponents and is deliberately not resolved — returning `null` leaves the measure unscaled, which
  * matches what the engine can honestly claim to know.
  */
-function unitEntryScale(ifcApi: WebIFC.IfcAPI, modelID: number, unit: WebIfcLine): [string, number] | null {
+function unitEntryScale(unit: WebIfcLine): [string, number] | null {
   const unitType = stripEnumDots(unit.UnitType);
   if (unitType === null) return null;
 
@@ -37,11 +37,12 @@ function unitEntryScale(ifcApi: WebIFC.IfcAPI, modelID: number, unit: WebIfcLine
   }
 
   if (unit.type === WebIFC.IFCCONVERSIONBASEDUNIT) {
-    // The factor is an IfcMeasureWithUnit: a number, and the unit that number is itself in.
-    const factor = ifcApi.GetLine(modelID, unit.ConversionFactor?.value, true) as WebIfcLine | null;
+    // The factor is an IfcMeasureWithUnit: a number, and the unit that number is itself in. The
+    // assignment was read flattened, so it arrives already resolved rather than as a handle to look up.
+    const factor = unit.ConversionFactor as WebIfcLine | undefined;
     const component = normalizePropertyValue(factor?.ValueComponent);
     if (typeof component !== "number" || !factor?.UnitComponent) return null;
-    const base = unitEntryScale(ifcApi, modelID, factor.UnitComponent as WebIfcLine);
+    const base = unitEntryScale(factor.UnitComponent as WebIfcLine);
     return base === null ? null : [unitType, component * base[1]];
   }
 
@@ -55,7 +56,7 @@ function webIfcUnitScales(ifcApi: WebIFC.IfcAPI, modelID: number): (unitType: st
   for (let i = 0; i < assignmentIds.size(); i++) {
     const assignment = ifcApi.GetLine(modelID, assignmentIds.get(i), true) as WebIfcLine;
     for (const unit of assignment.Units ?? []) {
-      const resolved = unitEntryScale(ifcApi, modelID, unit as WebIfcLine);
+      const resolved = unitEntryScale(unit as WebIfcLine);
       if (resolved) byUnitType.set(resolved[0], resolved[1]);
     }
   }
@@ -178,12 +179,35 @@ export async function parseWebIfcBuffer(
   raw: Uint8Array,
   locateWasm?: (path: string, prefix: string) => string
 ): Promise<IfcParseResult> {
+  return parseWebIfcSource(
+    { byteLength: raw.byteLength, read: (offset, size) => raw.subarray(offset, offset + size) },
+    locateWasm
+  );
+}
+
+/**
+ * Where web-ifc's bytes come from. web-ifc already pulls its input through a chunk callback, so a
+ * source that reads on demand never needs the whole file as one JS buffer — which matters because
+ * a browser cannot hold a multi-GB file in a single ArrayBuffer (`File.arrayBuffer()` fails past
+ * ~2 GB) while web-ifc's own wasm heap reaches 4 GB.
+ */
+export interface WebIfcSource {
+  byteLength: number;
+  /** Up to `size` bytes starting at `offset`; fewer only at the end of the file. */
+  read(offset: number, size: number): Uint8Array;
+}
+
+export async function parseWebIfcSource(
+  source: WebIfcSource,
+  locateWasm?: (path: string, prefix: string) => string
+): Promise<IfcParseResult> {
   const start = performance.now();
-  assertWellFormedStepFile(raw);
+  // assertWellFormedStepFile inspects only the last bytes, so the tail is all it is handed.
+  assertWellFormedStepFile(source.read(Math.max(0, source.byteLength - 256), 256));
 
   const ifcApi = new WebIFC.IfcAPI();
   await ifcApi.Init(locateWasm, true);
-  const modelID = ifcApi.OpenModel(raw);
+  const modelID = ifcApi.OpenModelFromCallback((offset, size) => source.read(offset, size));
 
   try {
     const idsScope: NormalizedElement[] = [];
