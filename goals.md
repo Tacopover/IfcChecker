@@ -52,38 +52,10 @@ exact silent failure the allowlist removal was meant to end, surviving one layer
 
 ---
 
-## 3. Support the rest of the IDS specification
-
-**Why:** the builder covers entity applicability plus attribute/property requirements with
-exact/enum/pattern restrictions. IDS 1.0 has six facets, four restriction kinds, three
-cardinalities, and document metadata. Users hold national standards that use all of it, and can
-now import them — but the parts we cannot represent are carried through untouched rather than
-edited, which is a holding position, not the destination.
-
-**Scope, measured against `Schema/ids.xsd` 1.0.0 and the 3a corpus:**
-`.claude/plans/2026-08-07-full-ids-scope.md`. Read it before starting — it inverts the obvious
-order of work twice, and its "what stage 0 turned up" section is the reason the ordering matters.
-
-**Stage 0 is done** (2026-08-07): the multi-entity applicability export is valid, both readers
-handle entity-name enumerations, `idsSchemaViolations` guards every export, and a specification
-with no checkable requirement left is refused instead of passing. Stages 1–5 remain.
-
-**Done when:** every construct in `ids.xsd` can be authored, imported and edited; the corpus
-round-trip still reproduces 7,784/7,784 files; and the number of specifications needing
-pass-through has fallen to the prose we choose not to surface.
-
-**Size:** large — five stages, the first of which is parser work in both adapters, not UI.
-
----
-
 ## Smaller known gaps
 
 Not scheduled; each is self-contained.
 
-- **`dataType="IFCLABEL"` is still the default** for a property condition authored in the
-  builder (`packages/ids-validator/src/build-ids.ts`); an imported one now carries its own.
-  Numeric properties the user types here are mistyped in exported IDS. Folded into goal 3
-  stage 3, which cannot ship bounds without a data type the user chose.
 - **`idsSchemaViolations` is structural only** — element order and cardinality, required elements
   and attributes, enumerated attribute values. It does not check data types or the `xs:`
   restriction grammar, so it is a guard against our own output drifting, not a conformance claim.
