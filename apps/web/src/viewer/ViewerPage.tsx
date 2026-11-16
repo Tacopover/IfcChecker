@@ -24,6 +24,7 @@ import {
   GeometryLoadAbortedError,
   streamModelGeometry,
 } from "./geometryLoader.js";
+import { readModelFile } from "./readModelFile.js";
 import {
   boundsOfElements,
   elementBoundsList,
@@ -213,7 +214,7 @@ export function ViewerPage({ pendingFocus, onConsumeFocus }: ViewerPageProps) {
       try {
         const processor = await createGeometryProcessor();
         try {
-          const buffer = new Uint8Array(await model.file.arrayBuffer());
+          const buffer = await readModelFile(model.file);
           const summary = await streamModelGeometry(
             processor,
             buffer,
