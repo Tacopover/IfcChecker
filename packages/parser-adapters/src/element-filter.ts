@@ -13,8 +13,8 @@ import {
  *   relationships, the spatial backbone, materials, actors, presentation
  *   resources. An IDS applicability may name any of these, and a rule whose
  *   target never became an element used to report the model clean.
- * - `ignored` — geometry, and only geometry. See `IFC_UNPARSED_SUBTREE_ROOT`
- *   for why that one subtree pays for itself and nothing else does.
+ * - `ignored` — geometry and property definitions, and nothing else. See
+ *   `IFC_UNPARSED_SUBTREE_ROOTS` for why those subtrees do not pay for themselves.
  * - `unrecognized` — a type no schema this build carries declares. It may well
  *   be a real element from a newer schema or a vendor extension, so it must be
  *   reported rather than silently dropped: a hand-written allowlist swallowed

@@ -65,7 +65,8 @@ describe("classifyEntityType", () => {
       "IFCCLASSIFICATION",
       "IFCRELCONNECTSPATHELEMENTS",
       "IFCRELAGGREGATES",
-      "IFCPROPERTYSET",
+      "IFCELEMENTQUANTITY",
+      "IFCQUANTITYCOUNT",
       "IFCSIUNIT",
       "IFCOWNERHISTORY",
       "IFCSURFACESTYLEREFRACTION",
@@ -77,25 +78,30 @@ describe("classifyEntityType", () => {
   });
 
   // Geometry is 96% of a real file by instance count and normalizing it took
-  // the 37 MB reference model from 1.6 s to 20.5 s. It is the only subtree
-  // whose cost is not worth paying, so it is the only thing still dropped.
-  it("ignores geometry, and nothing but geometry", () => {
+  // the 37 MB reference model from 1.6 s to 20.5 s. Property definitions are the
+  // other cost: 64-87% of what is left in a real MEP model, each already carried
+  // on its element. Those two subtrees are the only things still dropped.
+  it("ignores geometry and property definitions, and nothing else", () => {
     for (const type of ["IFCCARTESIANPOINT", "IFCPOLYLOOP", "IFCFACE", "IFCSTYLEDITEM", "IFCEXTRUDEDAREASOLID"]) {
       expect(classifyEntityType(type)).toBe("ignored");
     }
+    for (const type of ["IFCPROPERTYSET", "IFCPROPERTYSINGLEVALUE", "IFCCOMPLEXPROPERTY", "IFCRELDEFINESBYPROPERTIES"]) {
+      expect(classifyEntityType(type)).toBe("ignored");
+    }
 
+    const droppedRoots = ["IfcRepresentationItem", "IfcProperty", "IfcPropertySet", "IfcRelDefinesByProperties"];
     const ignored = Object.keys(IFC_ENTITY_PARENTS).filter(
       (name) => classifyEntityType(name) === "ignored"
     );
-    const outsideGeometry = ignored.filter((name) => {
+    const outsideDroppedSubtrees = ignored.filter((name) => {
       let cursor: string | null | undefined = name;
       while (cursor) {
-        if (cursor === "IfcRepresentationItem") return false;
+        if (droppedRoots.includes(cursor)) return false;
         cursor = IFC_ENTITY_PARENTS[cursor];
       }
       return true;
     });
-    expect(outsideGeometry).toEqual([]);
+    expect(outsideDroppedSubtrees).toEqual([]);
   });
 
   it("reports a type no schema in this build declares as unrecognized", () => {

@@ -1,19 +1,35 @@
 import { IFC_ENTITY_PARENTS } from "./ifc-entity-table.generated.js";
 
 /**
- * The one part of the schema no parse ever turns into elements.
+ * The parts of the schema no parse ever turns into elements.
  *
  * Geometry is 96% of a real IFC file by instance count — 662,632 of 691,277 in
  * the 37 MB reference model — and normalizing it took that model's parse from
- * 1.6 s to 20.5 s. Everything else in the schema is affordable: relationships,
- * type objects, materials, actors and presentation resources together come to
- * ~28k instances there, and cost ~1 s.
+ * 1.6 s to 20.5 s.
+ *
+ * Property definitions are the other one, for a different reason: every
+ * property is already carried on the element it describes, so normalizing the
+ * set, its properties and the relationship that attaches them only duplicates
+ * it. They are 64-87% of everything else in the real MEP models measured (4.16M
+ * of a 1 GB sprinkler model's entities), and that bulk made the parse result
+ * too large for the worker to clone back to the page. Quantities are not
+ * dropped: they are not carried on the element, and a conformance case targets
+ * one.
+ *
+ * Everything else in the schema is affordable: relationships, type objects,
+ * materials, actors and presentation resources together come to ~28k instances
+ * in the 37 MB model, and cost ~1 s.
  *
  * So this is a cost boundary, not a statement about what IDS may ask for. An
  * applicability naming something under here is refused rather than evaluated,
  * because a rule that silently matches nothing reports the model clean.
  */
-export const IFC_UNPARSED_SUBTREE_ROOT = "IFCREPRESENTATIONITEM";
+export const IFC_UNPARSED_SUBTREE_ROOTS = [
+  "IFCREPRESENTATIONITEM",
+  "IFCPROPERTY",
+  "IFCPROPERTYSET",
+  "IFCRELDEFINESBYPROPERTIES",
+] as const;
 
 const PARENT_BY_UPPER = new Map<string, string | null>();
 for (const [name, parent] of Object.entries(IFC_ENTITY_PARENTS)) {
@@ -33,15 +49,15 @@ function isUnder(upper: string, rootUpper: string): boolean {
 // check ask this per entity, so it has to be a single Map hit.
 const NORMALIZABLE_BY_UPPER = new Map<string, boolean>();
 for (const upper of PARENT_BY_UPPER.keys()) {
-  NORMALIZABLE_BY_UPPER.set(upper, !isUnder(upper, IFC_UNPARSED_SUBTREE_ROOT));
+  NORMALIZABLE_BY_UPPER.set(upper, !IFC_UNPARSED_SUBTREE_ROOTS.some((root) => isUnder(upper, root)));
 }
 
 /**
  * Whether a parse will ever produce something for this entity type.
  *
  * A type outside both schemas answers `true`: it may well be a real entity from
- * a newer schema, and `unrecognizedTypes` is what reports it. Only the geometry
- * subtree is a definite no.
+ * a newer schema, and `unrecognizedTypes` is what reports it. Only the subtrees
+ * under `IFC_UNPARSED_SUBTREE_ROOTS` are a definite no.
  */
 export function isNormalizableEntityType(typeName: string): boolean {
   return NORMALIZABLE_BY_UPPER.get(typeName.trim().toUpperCase()) ?? true;

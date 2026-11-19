@@ -639,15 +639,15 @@ function readApplicability(
     }
     entityNames = [...(entityNames ?? []), ...names];
 
-    // Geometry is the one part of the schema a parse never normalizes, so a
-    // rule aimed at it would select nothing and report every model clean. Said
-    // out loud instead: refusing is honest, a silent pass is not.
+    // Geometry and property definitions are the parts of the schema a parse never
+    // normalizes, so a rule aimed at one would select nothing and report every
+    // model clean. Said out loud instead: refusing is honest, a silent pass is not.
     const unparsed = names.filter((name) => !isNormalizableEntityType(name));
     if (unparsed.length > 0) {
       unsupported.push({
         section: "applicability",
         construct: "entity/name",
-        description: `Selects <${unparsed.join(", ")}>, geometry this build does not read.`,
+        description: `Selects <${unparsed.join(", ")}>, which this build does not read (geometry and property definitions). Properties are checked with a property facet on the elements themselves.`,
       });
     }
 

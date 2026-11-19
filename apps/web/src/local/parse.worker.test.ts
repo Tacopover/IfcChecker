@@ -39,6 +39,32 @@ describe("parse.worker", () => {
     expect(postMessage).toHaveBeenCalledWith({ type: "error", requestId: "2", message: "out of memory" });
   });
 
+  it("says the result is too large when the browser cannot clone it back, with what was parsed", async () => {
+    const element = { globalId: "g", ifcType: "IFCWALL" };
+    runParse.mockResolvedValueOnce({
+      elements: [element],
+      idsScope: [element, element, element],
+      unitScales: {},
+      parseMs: 3,
+      modelStructure: null,
+    });
+    const postMessage = vi.spyOn(self, "postMessage").mockImplementation((message: unknown) => {
+      if ((message as { type: string }).type === "success") {
+        throw new DOMException("Data cannot be cloned, out of memory.", "DataCloneError");
+      }
+    });
+
+    await self.onmessage?.({
+      data: { type: "parse", requestId: "4", engine: "ifc-lite", file: makeFile("big.ifc") },
+    } as MessageEvent);
+
+    expect(postMessage).toHaveBeenLastCalledWith({
+      type: "error",
+      requestId: "4",
+      message: expect.stringMatching(/big\.ifc.*1 element.*3 entities.*too large/s),
+    });
+  });
+
   it("posts a progress message for each onProgress call, tagged with the request id", async () => {
     runParse.mockImplementationOnce(async (_file, _engine, onProgress) => {
       onProgress?.("scan", 42);

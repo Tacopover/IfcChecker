@@ -17,6 +17,16 @@ describe("allIfcTypeNames", () => {
     expect(names).toContain("IfcCurtainWall");
   });
 
+  it("excludes entities a parse never reads, which a rule could only be refused for naming", () => {
+    const names = allIfcTypeNames();
+
+    expect(names).not.toContain("IfcCartesianPoint");
+    expect(names).not.toContain("IfcPropertySet");
+    expect(names).not.toContain("IfcPropertySingleValue");
+    expect(names).not.toContain("IfcRelDefinesByProperties");
+    expect(names).toContain("IfcElementQuantity");
+  });
+
   it("excludes abstract entities, which no element can carry directly", () => {
     const names = allIfcTypeNames();
 

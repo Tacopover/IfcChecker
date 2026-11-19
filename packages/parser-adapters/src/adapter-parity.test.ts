@@ -201,9 +201,23 @@ describe("adapter parity", () => {
       expect(relationship).toBeDefined();
       expect(relationship!.attributes).not.toHaveProperty("RelatingObject");
       expect(relationship!.attributes).not.toHaveProperty("RelatedObjects");
+    }
+  });
 
-      const propertySet = result.idsScope.find((entity) => entity.ifcType === "IFCPROPERTYSET");
-      expect(propertySet!.attributes).not.toHaveProperty("HasProperties");
+  // In a real MEP model the property entities are 64-87% of everything normalized, and the result
+  // they inflate is what the worker has to clone back. Dropping them from the scope must leave the
+  // properties themselves on the element they describe.
+  it("keeps property definitions out of the scope while elements still carry their properties", async () => {
+    const path = fixturePath("multi-valued-properties.ifc");
+
+    for (const result of [await new WebIfcAdapter().parse(path), await new IfcLiteAdapter().parse(path)]) {
+      const scopeTypes = new Set(result.idsScope.map((entity) => entity.ifcType));
+      for (const type of ["IFCPROPERTYSET", "IFCPROPERTYSINGLEVALUE", "IFCPROPERTYBOUNDEDVALUE", "IFCRELDEFINESBYPROPERTIES"]) {
+        expect(scopeTypes.has(type)).toBe(false);
+      }
+
+      const wall = result.elements.find((element) => element.name === "W-MV");
+      expect(wall!.propertySets.Pset_Mixed.Thickness).toBeDefined();
     }
   });
 

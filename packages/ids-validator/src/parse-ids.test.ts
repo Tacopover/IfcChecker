@@ -284,6 +284,23 @@ describe("parseIdsXml", () => {
     expect(isEvaluable(spec)).toBe(false);
   });
 
+  // A parse never normalizes geometry or property definitions, so a rule aimed at either would
+  // select nothing and report every model clean. Refused instead, and the message says where to look.
+  it("refuses an applicability aimed at an entity a parse does not read", () => {
+    for (const unread of ["IFCCARTESIANPOINT", "IFCPROPERTYSET", "IFCPROPERTYSINGLEVALUE", "IFCRELDEFINESBYPROPERTIES"]) {
+      const [spec] = parseIdsXml(SAMPLE_IDS.replace("<simpleValue>IFCWALL</simpleValue>", `<simpleValue>${unread}</simpleValue>`));
+
+      expect(spec.unsupported).toContainEqual(
+        expect.objectContaining({
+          section: "applicability",
+          construct: "entity/name",
+          description: expect.stringContaining(unread),
+        })
+      );
+      expect(isEvaluable(spec)).toBe(false);
+    }
+  });
+
   // A facet from some later revision of IDS. The five `ids.xsd` allows beside <entity> are all read
   // now, so a future one is what is left to test the dispatch's refusing arm with — and the claim it
   // pins is unchanged: "walls that are also X" is not "walls", so the kept entity name is not the
