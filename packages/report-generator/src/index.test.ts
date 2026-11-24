@@ -44,8 +44,9 @@ describe("@ifc-qa/report-generator public API", () => {
 
   it("generates a non-empty Excel buffer via the package barrel", async () => {
     const excel = await generateExcelReport(fixture);
-    expect(Buffer.isBuffer(excel)).toBe(true);
     expect(excel.length).toBeGreaterThan(0);
+    expect(excel[0]).toBe(0x50); // zip local-file-header magic "PK\x03\x04"
+    expect(excel[1]).toBe(0x4b);
   });
 
   it("generates a non-empty BCF zip via the package barrel", () => {

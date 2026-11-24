@@ -52,12 +52,12 @@ describe("generateExcelReport", () => {
   it("returns a buffer that round-trips through exceljs with sorted rows", async () => {
     const result = await generateExcelReport(fixture);
 
-    expect(Buffer.isBuffer(result)).toBe(true);
     expect(result.length).toBeGreaterThan(0);
 
     const workbook = new Workbook();
-    // see the cast note in excel-report.ts: exceljs's own .d.ts shadows the real Buffer type
-    await workbook.xlsx.load(result as unknown as ArrayBuffer);
+    // exceljs's own .d.ts declares a top-level `Buffer extends ArrayBuffer {}` that shadows Node's
+    // real Buffer, so load()'s parameter type rejects a plain Uint8Array without this cast.
+    await workbook.xlsx.load(Buffer.from(result) as unknown as ArrayBuffer);
 
     const resultsSheet = workbook.getWorksheet("Results");
     if (!resultsSheet) throw new Error("Results worksheet missing");
@@ -83,5 +83,61 @@ describe("generateExcelReport", () => {
     const row4 = resultsSheet.getRow(4);
     expect(row4.getCell(1).value).toBe("model-b.ifc");
     expect(row4.getCell(7).value).toBe("error");
+  });
+
+  it("writes the run details and violation count on the Summary sheet", async () => {
+    const workbook = new Workbook();
+    await workbook.xlsx.load(Buffer.from(await generateExcelReport(fixture)) as unknown as ArrayBuffer);
+
+    const summary = workbook.getWorksheet("Summary");
+    if (!summary) throw new Error("Summary worksheet missing");
+    const values = new Map<unknown, unknown>();
+    summary.eachRow((row) => values.set(row.getCell(1).value, row.getCell(2).value));
+
+    expect(values.get("Rule Set")).toBe("Company Naming Standard v3");
+    expect(values.get("Violations")).toBe("3");
+    expect(values.get("Result Sheets")).toBe("1");
+  });
+
+  it("continues on further Results sheets, header repeated, once a sheet is full", async () => {
+    const workbook = new Workbook();
+    const result = await generateExcelReport(fixture, { maxRowsPerSheet: 2 });
+    await workbook.xlsx.load(Buffer.from(result) as unknown as ArrayBuffer);
+
+    const first = workbook.getWorksheet("Results");
+    const second = workbook.getWorksheet("Results 2");
+    if (!first || !second) throw new Error("Results sheets missing");
+
+    expect(first.rowCount).toBe(3); // header + 2 rows
+    expect(second.rowCount).toBe(2); // header + the 1 remaining row
+    expect(second.getRow(1).getCell(1).value).toBe("File");
+    expect(second.getRow(2).getCell(1).value).toBe("model-b.ifc"); // third in sort order
+  });
+
+  it("keeps characters that need escaping, drops ones XML cannot carry", async () => {
+    const tricky: RunReportData = {
+      ...fixture,
+      results: [
+        {
+          ...(fixture.results[0] as RunReportData["results"][number]),
+          elementName: ' A & <B> "C" \u0001\u0000x ',
+          message: "m".repeat(40_000),
+        },
+      ],
+    };
+    const workbook = new Workbook();
+    await workbook.xlsx.load(Buffer.from(await generateExcelReport(tricky)) as unknown as ArrayBuffer);
+
+    const row = workbook.getWorksheet("Results")?.getRow(2);
+    expect(row?.getCell(2).value).toBe(' A & <B> "C" x ');
+    expect((row?.getCell(8).value as string).length).toBe(32_767);
+  });
+
+  it("writes a header-only Results sheet when there are no violations", async () => {
+    const workbook = new Workbook();
+    const empty = await generateExcelReport({ ...fixture, results: [] });
+    await workbook.xlsx.load(Buffer.from(empty) as unknown as ArrayBuffer);
+
+    expect(workbook.getWorksheet("Results")?.rowCount).toBe(1);
   });
 });

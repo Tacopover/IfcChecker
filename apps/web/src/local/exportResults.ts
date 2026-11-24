@@ -96,13 +96,11 @@ export async function exportResultsAsExcel(
   engine: EngineId
 ): Promise<void> {
   const data = buildRunReportData(summaries, ruleSetName, engine);
-  // Loaded on demand: exceljs is a large dependency, and bundling it into the main chunk would
-  // cost every visitor its weight even if they never export.
+  // Loaded on demand: the writer is dead weight in the main chunk for a visitor who never exports.
   const { generateExcelReport } = await import("@ifc-qa/report-generator/browser");
   const workbook = await generateExcelReport(data);
-  // generateExcelReport's declared return type is Node's Buffer, whose ArrayBufferLike backing
-  // store isn't assignable to the DOM Blob constructor's stricter BlobPart — wrapping it in a
-  // plain Uint8Array satisfies that without copying anything but a view.
+  // A Uint8Array<ArrayBufferLike> isn't assignable to the DOM Blob constructor's stricter
+  // BlobPart — wrapping it in a plain Uint8Array satisfies that without copying anything but a view.
   downloadBlob(
     new Blob([new Uint8Array(workbook)], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
